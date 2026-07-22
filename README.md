@@ -128,6 +128,16 @@ docs/       研究与设计文档
 dist/       本地安装包输出，不提交到 Git
 ```
 
+### 同步到本地 Vault
+
+复制 `.local-install-targets.example.json` 为 `.local-install-targets.json`，填写需要同步的 Obsidian 插件目录。真实路径文件已被 Git 忽略。
+
+```bash
+npm run release:local
+```
+
+该命令会完成构建、测试、安装包校验，并把 `main.js`、`manifest.json`、`styles.css` 同步到所有配置目标。覆盖前会备份旧插件目录，已有的 `data.json` 不会被删除。
+
 核心代码：
 
 ```text
