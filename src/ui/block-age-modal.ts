@@ -1,0 +1,152 @@
+import { App, Modal, TFile, setIcon } from "obsidian";
+import type GitNoteHistoryPlugin from "../main";
+import {
+  extractMarkdownBlocks,
+  findBestMatchingBlock,
+  type MarkdownBlock
+} from "../history/markdown-blocks";
+import type { GitCommitVersion } from "../models";
+
+interface AgedBlock {
+  block: MarkdownBlock;
+  firstSeen?: GitCommitVersion;
+  lastChanged?: GitCommitVersion;
+  uncommitted: boolean;
+}
+
+function formatDate(value?: string): string {
+  if (!value) return "未知";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function signature(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+export class BlockAgeModal extends Modal {
+  constructor(
+    app: App,
+    private readonly plugin: GitNoteHistoryPlugin,
+    private readonly file: TFile
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("git-note-history-block-age-modal");
+    this.setTitle(`内容年龄镜头 · ${this.file.basename}`);
+    const intro = this.contentEl.createDiv({ cls: "git-note-history-block-age-intro" });
+    setIcon(intro.createSpan(), "scan-eye");
+    intro.createSpan({ text: "按标题和段落估算首次出现与最近内容变化；关闭弹窗后不会在编辑器留下装饰。" });
+    const loading = this.contentEl.createDiv({
+      cls: "git-note-history-loading",
+      text: "正在沿 Git 历史追踪 Markdown 区块…"
+    });
+    void this.load(loading);
+  }
+
+  private async load(loading: HTMLElement): Promise<void> {
+    try {
+      const [history, currentContent] = await Promise.all([
+        this.plugin.gitClient.loadFileHistory(this.file),
+        this.app.vault.read(this.file)
+      ]);
+      const commits = history.commits.slice(0, 48);
+      const contents = new Map<string, string>();
+      for (let index = 0; index < commits.length; index += 8) {
+        const batch = commits.slice(index, index + 8);
+        const loaded = await Promise.all(batch.map(async (commit) => {
+          try {
+            return await this.plugin.gitClient.getFileContent(
+              history.context.repositoryRoot,
+              commit.hash,
+              commit.historicalPath
+            );
+          } catch {
+            return null;
+          }
+        }));
+        batch.forEach((commit, offset) => {
+          const content = loaded[offset];
+          if (content !== null && content !== undefined) contents.set(commit.hash, content);
+        });
+      }
+
+      const blocks = extractMarkdownBlocks(currentContent)
+        .filter((block) => block.kind !== "frontmatter")
+        .slice(0, 36);
+      const aged = blocks.map((block): AgedBlock => {
+        const versions = commits.map((commit) => {
+          const content = contents.get(commit.hash);
+          const match = content ? findBestMatchingBlock(block, content) : null;
+          return { commit, match: match && match.score >= 0.58 ? match : null };
+        });
+        const matching = versions.filter((version) => version.match);
+        const firstSeen = matching.at(-1)?.commit;
+        let lastChanged: GitCommitVersion | undefined;
+        let previous = "";
+        for (const version of [...matching].reverse()) {
+          const next = signature(version.match!.block.content);
+          if (previous && next !== previous) lastChanged = version.commit;
+          previous = next;
+        }
+        const newest = matching[0]?.match?.block.content;
+        return {
+          block,
+          uncommitted: newest === undefined || signature(newest) !== signature(block.content),
+          ...(firstSeen ? { firstSeen } : {}),
+          ...(lastChanged ?? matching[0]?.commit
+            ? { lastChanged: lastChanged ?? matching[0]!.commit }
+            : {})
+        };
+      });
+
+      loading.remove();
+      if (aged.length === 0) {
+        this.contentEl.createDiv({ cls: "git-note-history-empty", text: "没有可追踪的 Markdown 内容区块。" });
+        return;
+      }
+      const list = this.contentEl.createDiv({ cls: "git-note-history-block-age-list" });
+      for (const item of aged) this.renderBlock(list, item);
+      if (extractMarkdownBlocks(currentContent).length > aged.length) {
+        this.contentEl.createDiv({
+          cls: "git-note-history-block-age-limit",
+          text: `为保持响应速度，本次显示前 ${aged.length} 个内容区块。`
+        });
+      }
+    } catch (error) {
+      loading.remove();
+      this.contentEl.createEl("pre", {
+        cls: "git-note-history-error",
+        text: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private renderBlock(container: HTMLElement, item: AgedBlock): void {
+    const row = container.createEl("button", { cls: "git-note-history-block-age-row" });
+    const icon = row.createSpan({ cls: "git-note-history-block-age-icon" });
+    setIcon(icon, item.block.kind === "heading" ? "heading" : item.block.kind === "list" ? "list" : "pilcrow");
+    const body = row.createSpan({ cls: "git-note-history-block-age-body" });
+    const title = item.block.kind === "heading"
+      ? item.block.content.replace(/^#{1,6}\s+/, "")
+      : item.block.content.replace(/\s+/g, " ").slice(0, 110);
+    body.createSpan({ cls: "git-note-history-block-age-title", text: title || "（空区块）" });
+    const path = item.block.headingPath.join(" › ");
+    if (path && item.block.kind !== "heading") body.createSpan({ cls: "git-note-history-block-age-path", text: path });
+    const meta = body.createSpan({ cls: "git-note-history-block-age-meta" });
+    meta.createSpan({ text: `首次出现 ${formatDate(item.firstSeen?.authoredAt)}` });
+    meta.createSpan({ text: item.uncommitted ? "当前工作区有新修改" : `最近变化 ${formatDate(item.lastChanged?.authoredAt)}` });
+    row.addEventListener("click", async () => {
+      this.close();
+      await this.plugin.openFileAtLine(this.file, item.block.startLine);
+    });
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}

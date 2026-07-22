@@ -1,0 +1,25 @@
+{
+  "name": "git-note-history",
+  "version": "0.4.1",
+  "private": true,
+  "description": "Git-backed note history viewer for Obsidian",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "check": "npm run build && npm test",
+    "package:release": "npm run build && node scripts/package-release.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "release:check": "npm run check && npm run verify:release"
+  },
+  "dependencies": {
+    "diff": "^8.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "esbuild": "^0.25.5",
+    "obsidian": "^1.8.7",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
