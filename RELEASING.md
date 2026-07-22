@@ -20,6 +20,14 @@ Every iteration keeps the source, documentation, build output, install archive, 
    ```
 
 6. Commit and push the entire iteration together. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
+7. Create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
+
+   - `git-note-history-<version>.zip`
+   - `main.js`
+   - `manifest.json`
+   - `styles.css`
+
+8. Download the published assets and verify that their SHA-256 hashes match the local release files.
 
 ## Release contents
 
