@@ -19,6 +19,7 @@ import {
   parseSingleNumStat,
   parseWorkspaceStatus
 } from "./parse-log";
+import { limitHistory } from "../history/timeline-window";
 
 const LOG_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%B%x1d";
 const MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024;
@@ -51,7 +52,7 @@ export class GitClient {
         "log",
         "--follow",
         "--find-renames",
-        `--max-count=${maxCommits}`,
+        `--max-count=${maxCommits + 1}`,
         `--format=${LOG_FORMAT}`,
         "--name-status",
         "--",
@@ -68,7 +69,7 @@ export class GitClient {
         "log",
         "--follow",
         "--find-renames",
-        `--max-count=${maxCommits}`,
+        `--max-count=${maxCommits + 1}`,
         "--format=%x1e%H",
         "--numstat",
         "--",
@@ -89,7 +90,8 @@ export class GitClient {
       this.getBranch(context.repositoryRoot)
     ]);
 
-    const commits = parseGitLog(logOutput, context.repositoryRelativePath);
+    const limitedHistory = limitHistory(parseGitLog(logOutput, context.repositoryRelativePath), maxCommits);
+    const commits = limitedHistory.items;
     const stats = parseNumStatLog(numStatOutput);
     for (const commit of commits) {
       const commitStats = stats.get(commit.hash);
@@ -106,6 +108,7 @@ export class GitClient {
       branch: branchOutput.trim() || "HEAD",
       status,
       commits,
+      hasMoreHistory: limitedHistory.hasMore,
       workingTreeStats
     };
   }

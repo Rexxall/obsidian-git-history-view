@@ -1524,6 +1524,104 @@ button.git-note-history-impact-row:hover { background: var(--background-modifier
   }
 }
 
+/* v0.4.2 long-history and state polish */
+.git-note-history-header-actions .is-loading svg,
+.git-note-history-loading-state .git-note-history-state-icon svg {
+  animation: git-note-history-spin 0.9s linear infinite;
+}
+
+@keyframes git-note-history-spin {
+  to { transform: rotate(360deg); }
+}
+
+.git-note-history-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-note-history-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  margin: 16px 4px;
+  padding: 24px 14px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-secondary) 54%, transparent);
+  text-align: center;
+}
+
+.git-note-history-state .git-note-history-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}
+
+.git-note-history-state h5,
+.git-note-history-state p {
+  margin: 0;
+}
+
+.git-note-history-state h5 {
+  font-size: var(--font-ui-small);
+}
+
+.git-note-history-state p {
+  max-width: 30em;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+}
+
+.git-note-history-state-details {
+  width: 100%;
+  max-height: 120px;
+  margin: 4px 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 7px;
+  color: var(--text-error);
+  background: var(--background-primary-alt);
+  text-align: left;
+  white-space: pre-wrap;
+  font-size: 10px;
+}
+
+.git-note-history-state button,
+.git-note-history-timeline-footer button {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: var(--font-ui-smaller);
+}
+
+.git-note-history-timeline-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 2px 4px 25px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-note-history-header-actions .is-loading svg,
+  .git-note-history-loading-state .git-note-history-state-icon svg {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .git-note-history-skeleton-row {
     animation: none;

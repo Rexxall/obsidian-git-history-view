@@ -22,6 +22,11 @@ import {
   groupEffectiveVersions,
   groupsSinceCheckpoint
 } from "../history/version-groups";
+import {
+  DEFAULT_TIMELINE_BATCH_SIZE,
+  buildTimelineWindow,
+  expandTimelineLimit
+} from "../history/timeline-window";
 
 export const GIT_NOTE_HISTORY_VIEW_TYPE = "git-note-history-view";
 
@@ -96,6 +101,7 @@ export class GitNoteHistoryView extends ItemView {
   private showRawCommits = false;
   private currentFingerprint = "";
   private refiningGroups = false;
+  private visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: GitNoteHistoryPlugin) {
     super(leaf);
@@ -155,12 +161,14 @@ export class GitNoteHistoryView extends ItemView {
     if (file.extension !== "md") return;
     this.stopTimeMachinePlayback(false);
     this.targetFile = file;
+    this.history = null;
     this.compareSelection.clear();
     this.commitContents.clear();
     this.effectiveGroups = [];
     this.expandedGroups.clear();
     this.selectedIndex = 0;
     this.timeMachinePosition = -1;
+    this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
     await this.refresh();
   }
 
@@ -217,7 +225,7 @@ export class GitNoteHistoryView extends ItemView {
     this.renderHeader(container);
 
     if (!this.targetFile) {
-      container.createDiv({ cls: "git-note-history-empty", text: "请先打开一篇 Markdown 笔记。" });
+      this.renderState(container, "file-text", "打开一篇 Markdown 笔记", "版本历史会跟随当前笔记显示。");
       return;
     }
     if (this.loading) {
@@ -225,7 +233,7 @@ export class GitNoteHistoryView extends ItemView {
       return;
     }
     if (this.error) {
-      container.createEl("pre", { cls: "git-note-history-error", text: this.error });
+      this.renderState(container, "triangle-alert", "无法读取版本历史", "请检查 Git 仓库设置后重试。", "重新加载", () => void this.refresh(), this.error);
       return;
     }
     if (!this.history) return;
@@ -241,17 +249,36 @@ export class GitNoteHistoryView extends ItemView {
 
     const commits = this.history.commits.filter((commit) => matchesSearch(commit, this.query, state));
     if (commits.length === 0) {
-      container.createDiv({
-        cls: "git-note-history-empty",
-        text: this.history.status.untracked ? "这篇笔记尚未被 Git 跟踪。" : "没有匹配的历史版本。"
-      });
+      if (this.query) {
+        this.renderState(
+          container,
+          "search-x",
+          "没有匹配的版本",
+          `没有找到“${this.query}”。`,
+          "清除搜索",
+          () => {
+            this.query = "";
+            this.selectedIndex = 0;
+            this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
+            this.render();
+          }
+        );
+      } else {
+        this.renderState(
+          container,
+          "git-commit-horizontal",
+          "还没有 Git 版本",
+          this.history.status.untracked ? "这篇笔记尚未被 Git 跟踪，首次提交后会出现在这里。" : "提交一次笔记后即可开始浏览版本。"
+        );
+      }
       return;
     }
 
     const timeline = container.createDiv({ cls: "git-note-history-timeline" });
     if (this.showRawCommits) {
+      const window = buildTimelineWindow(commits, this.visibleTimelineCount);
       let previousGroup = "";
-      commits.forEach((commit, index) => {
+      window.items.forEach((commit, index) => {
         const group = dateGroup(commit.authoredAt);
         if (group !== previousGroup) {
           timeline.createDiv({ cls: "git-note-history-date-group", text: group });
@@ -259,14 +286,16 @@ export class GitNoteHistoryView extends ItemView {
         }
         this.renderCommitRow(timeline, commit, index, state);
       });
+      this.renderTimelineFooter(timeline, window.visible, window.total);
       return;
     }
 
     const groups = this.effectiveGroups.filter((group) =>
       group.commits.some((commit) => matchesSearch(commit, this.query, state))
     );
+    const window = buildTimelineWindow(groups, this.visibleTimelineCount);
     let previousGroup = "";
-    groups.forEach((group, index) => {
+    window.items.forEach((group, index) => {
       const date = dateGroup(group.representative.authoredAt);
       if (date !== previousGroup) {
         timeline.createDiv({ cls: "git-note-history-date-group", text: date });
@@ -274,6 +303,7 @@ export class GitNoteHistoryView extends ItemView {
       }
       this.renderEffectiveGroupRow(timeline, group, index, groups, state);
     });
+    this.renderTimelineFooter(timeline, window.visible, window.total);
   }
 
   private timelineCommits(): GitCommitVersion[] {
@@ -432,6 +462,7 @@ export class GitNoteHistoryView extends ItemView {
       this.showRawCommits = !this.showRawCommits;
       this.timeMachinePosition = this.timelineCommits().length;
       this.selectedIndex = 0;
+      this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
       this.render();
     });
   }
@@ -596,8 +627,12 @@ export class GitNoteHistoryView extends ItemView {
       this.render();
     });
 
-    const refresh = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "刷新" } });
-    setIcon(refresh, "refresh-cw");
+    const refresh = controls.createEl("button", {
+      cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
+      attr: { "aria-label": this.loading ? "正在刷新" : "刷新", "aria-busy": String(this.loading) }
+    });
+    refresh.disabled = this.loading;
+    setIcon(refresh, this.loading ? "loader-circle" : "refresh-cw");
     refresh.addEventListener("click", () => void this.refresh());
 
     if (this.targetFile && this.leaf.getRoot() !== this.app.workspace.rootSplit) {
@@ -615,6 +650,8 @@ export class GitNoteHistoryView extends ItemView {
     const search = new SearchComponent(searchRow);
     search.setPlaceholder("搜索版本").setValue(this.query).onChange((value) => {
       this.query = value.trim();
+      this.selectedIndex = 0;
+      this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
       this.render();
     });
   }
@@ -1018,6 +1055,9 @@ export class GitNoteHistoryView extends ItemView {
     if (event.key.toLowerCase() === "j" || event.key === "ArrowDown") {
       event.preventDefault();
       this.selectedIndex = Math.min(filtered.length - 1, this.selectedIndex + 1);
+      if (this.selectedIndex >= this.visibleTimelineCount) {
+        this.visibleTimelineCount = expandTimelineLimit(this.visibleTimelineCount, filtered.length);
+      }
       this.render();
     } else if (event.key.toLowerCase() === "k" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -1032,7 +1072,55 @@ export class GitNoteHistoryView extends ItemView {
   }
 
   private renderSkeleton(container: HTMLElement): void {
+    const status = container.createDiv({
+      cls: "git-note-history-loading-state",
+      attr: { role: "status", "aria-live": "polite" }
+    });
+    const icon = status.createSpan({ cls: "git-note-history-state-icon" });
+    setIcon(icon, "loader-circle");
+    status.createSpan({ text: "正在读取 Git 历史…" });
     const skeleton = container.createDiv({ cls: "git-note-history-skeleton" });
-    for (let index = 0; index < 5; index += 1) skeleton.createDiv({ cls: "git-note-history-skeleton-row" });
+    for (let index = 0; index < 3; index += 1) skeleton.createDiv({ cls: "git-note-history-skeleton-row" });
+  }
+
+  private renderTimelineFooter(container: HTMLElement, visible: number, total: number): void {
+    if (!this.history) return;
+    const hasHiddenRows = visible < total;
+    if (!hasHiddenRows && !this.history.hasMoreHistory) return;
+    const footer = container.createDiv({
+      cls: "git-note-history-timeline-footer",
+      attr: { role: "status", "aria-live": "polite" }
+    });
+    const summary = hasHiddenRows ? `已显示 ${visible} / ${total}` : `已显示 ${visible} 个版本`;
+    footer.createSpan({ text: this.history.hasMoreHistory ? `${summary} · 已达读取上限` : summary });
+    if (hasHiddenRows) {
+      const nextCount = Math.min(DEFAULT_TIMELINE_BATCH_SIZE, total - visible);
+      const more = footer.createEl("button", { text: `再显示 ${nextCount} 个` });
+      more.addEventListener("click", () => {
+        this.visibleTimelineCount = expandTimelineLimit(this.visibleTimelineCount, total);
+        this.render();
+      });
+    }
+  }
+
+  private renderState(
+    container: HTMLElement,
+    iconName: string,
+    title: string,
+    description: string,
+    actionLabel?: string,
+    action?: () => void,
+    details?: string
+  ): void {
+    const state = container.createDiv({ cls: "git-note-history-state" });
+    const icon = state.createSpan({ cls: "git-note-history-state-icon" });
+    setIcon(icon, iconName);
+    state.createEl("h5", { text: title });
+    state.createEl("p", { text: description });
+    if (details) state.createEl("pre", { cls: "git-note-history-state-details", text: details });
+    if (actionLabel && action) {
+      const button = state.createEl("button", { text: actionLabel });
+      button.addEventListener("click", action);
+    }
   }
 }

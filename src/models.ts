@@ -31,6 +31,7 @@ export interface GitFileHistory {
   branch: string;
   status: GitFileStatus;
   commits: GitCommitVersion[];
+  hasMoreHistory: boolean;
   workingTreeStats: GitLineStats;
 }
 
