@@ -13,6 +13,11 @@ import {
   groupEffectiveVersions,
   groupsSinceCheckpoint
 } from "../src/history/version-groups";
+import {
+  buildTimelineWindow,
+  expandTimelineLimit,
+  limitHistory
+} from "../src/history/timeline-window";
 import { buildChangeMap } from "../src/diff/change-map";
 import type { GitCommitVersion } from "../src/models";
 
@@ -185,5 +190,23 @@ describe("Markdown change map", () => {
     expect(map[0]).toMatchObject({ title: "Project", kind: "changed" });
     expect(map[1]).toMatchObject({ title: "Method", kind: "changed" });
     expect(map[1]!.addedLines).toBeGreaterThan(0);
+  });
+});
+
+describe("timeline window", () => {
+  it("renders long histories in predictable batches", () => {
+    const history = Array.from({ length: 125 }, (_, index) => index);
+    const first = buildTimelineWindow(history, 40);
+    expect(first.items).toHaveLength(40);
+    expect(first.remaining).toBe(85);
+    expect(expandTimelineLimit(first.visible, first.total)).toBe(80);
+    expect(expandTimelineLimit(120, first.total)).toBe(125);
+  });
+
+  it("detects when Git history exceeds the configured limit", () => {
+    const limited = limitHistory([1, 2, 3, 4], 3);
+    expect(limited.items).toEqual([1, 2, 3]);
+    expect(limited.hasMore).toBe(true);
+    expect(limitHistory([1, 2, 3], 3).hasMore).toBe(false);
   });
 });
