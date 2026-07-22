@@ -7,7 +7,7 @@ Every iteration keeps the source, documentation, build output, install archive, 
 1. Update the implementation and tests.
 2. Update `README.md`, `ROADMAP.md`, and `CHANGELOG.md` when behavior or planning changes.
 3. Keep the version aligned in `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
-4. Build the plugin and create the matching `git-note-history-<version>.zip` archive:
+4. Build the plugin and create the matching `dist/git-note-history-<version>.zip` archive:
 
    ```bash
    npm run package:release
@@ -22,7 +22,7 @@ Every iteration keeps the source, documentation, build output, install archive, 
 6. Commit and push the entire iteration together. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
 7. Create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
 
-   - `git-note-history-<version>.zip`
+   - `dist/git-note-history-<version>.zip`
    - `main.js`
    - `manifest.json`
    - `styles.css`
@@ -37,4 +37,4 @@ The install archive must contain exactly:
 - `manifest.json`
 - `styles.css`
 
-`node_modules`, test caches, editor state, and operating-system metadata are not release content.
+`dist`, `node_modules`, test caches, editor state, and operating-system metadata are local build content and are not committed to the source repository. Published packages live in GitHub Releases.

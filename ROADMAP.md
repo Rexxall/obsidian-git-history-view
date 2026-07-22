@@ -6,7 +6,7 @@
 
 第二轮竞品研究、交互架构、完整新创意池和验收目标见：
 
-- [Git Note History 交互研究与第二轮头脑风暴](UX_RESEARCH_BRAINSTORM_2026-07-21.md)
+- [Git Note History 交互研究与第二轮头脑风暴](docs/UX_RESEARCH_BRAINSTORM_2026-07-21.md)
 
 ## v0.4 交互优化四项
 

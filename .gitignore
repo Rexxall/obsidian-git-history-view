@@ -1,4 +1,6 @@
 node_modules/
+dist/
+git-note-history-*.zip
 *.log
 .DS_Store
 coverage/

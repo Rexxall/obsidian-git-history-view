@@ -27,7 +27,7 @@ if (versions[version] !== manifest.minAppVersion) {
   throw new Error(`versions.json must map ${version} to ${manifest.minAppVersion}`);
 }
 
-const archive = resolve(root, `git-note-history-${version}.zip`);
+const archive = resolve(root, "dist", `git-note-history-${version}.zip`);
 if (!existsSync(archive)) {
   throw new Error(`Missing release archive: ${archive}`);
 }
