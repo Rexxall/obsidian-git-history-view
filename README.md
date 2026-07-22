@@ -112,6 +112,22 @@ npm test
 npm run check
 ```
 
+项目文档：
+
+- [产品路线图](ROADMAP.md)
+- [交互研究与头脑风暴](docs/UX_RESEARCH_BRAINSTORM_2026-07-21.md)
+- [发布流程](RELEASING.md)
+
+仓库结构：
+
+```text
+src/        插件源码
+tests/      自动化测试
+scripts/    构建与发布校验工具
+docs/       研究与设计文档
+dist/       本地安装包输出，不提交到 Git
+```
+
 核心代码：
 
 ```text

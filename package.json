@@ -10,7 +10,7 @@
     "check": "npm run build && npm test",
     "package:release": "npm run build && node scripts/package-release.mjs",
     "verify:release": "node scripts/verify-release.mjs",
-    "release:check": "npm run check && npm run verify:release"
+    "release:check": "npm run check && node scripts/package-release.mjs && npm run verify:release"
   },
   "dependencies": {
     "diff": "^8.0.2"
