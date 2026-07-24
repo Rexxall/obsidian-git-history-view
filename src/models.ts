@@ -56,7 +56,7 @@ export interface GitWorkspaceReview {
   changes: GitWorkspaceChange[];
 }
 
-export type DetailMode = "unified" | "side-by-side" | "preview" | "semantic" | "impact";
+export type DetailMode = "unified" | "side-by-side" | "rendered" | "preview" | "semantic" | "impact";
 export type DensityMode = "compact" | "comfortable";
 
 export interface GitConflictVersions {

@@ -25,6 +25,7 @@ import {
   versionReferencePosition
 } from "../src/history/version-navigation";
 import { buildChangeMap } from "../src/diff/change-map";
+import { buildRenderedDiff, stripFrontmatter } from "../src/diff/rendered-diff";
 import {
   groupWorkspaceChanges,
   workspaceChangePresentation,
@@ -66,6 +67,35 @@ describe("Markdown semantic diff", () => {
       expect.objectContaining({ group: "链接", kind: "removed", label: "Paper A" }),
       expect.objectContaining({ group: "链接", kind: "added", label: "Paper B" })
     ]));
+  });
+});
+
+describe("reading diff", () => {
+  it("pairs rewritten Markdown blocks while preserving surrounding content", () => {
+    const before = "# Note\n\nStable paragraph.\n\nOld explanation.\n";
+    const after = "# Note\n\nStable paragraph.\n\nNew explanation with context.\n";
+    const sections = buildRenderedDiff(before, after);
+
+    expect(sections).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "unchanged" }),
+      expect.objectContaining({
+        kind: "changed",
+        before: [expect.objectContaining({ content: "Old explanation." })],
+        after: [expect.objectContaining({ content: "New explanation with context." })]
+      })
+    ]));
+  });
+
+  it("can ignore frontmatter and whitespace-only edits", () => {
+    const before = "---\nupdated: old\n---\n\n# Note\n\nSame   words\n";
+    const after = "---\nupdated: new\n---\n\n# Note\n\nSame words\n";
+    const sections = buildRenderedDiff(before, after, {
+      ignoreFrontmatter: true,
+      ignoreWhitespace: true
+    });
+
+    expect(sections.every((section) => section.kind === "unchanged")).toBe(true);
+    expect(stripFrontmatter(before)).toBe("# Note\n\nSame   words\n");
   });
 });
 
