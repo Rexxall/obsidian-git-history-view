@@ -1,7 +1,7 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "minAppVersion": "1.8.0",
   "description": "A review inbox, meaningful Git timeline, Markdown change map, and safe multi-step restore workspace for Obsidian notes.",
   "author": "Rexxall",

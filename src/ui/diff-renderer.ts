@@ -244,6 +244,10 @@ export interface SideRow {
   changeIndex?: number;
 }
 
+export type FocusedSideItem =
+  | { kind: "row"; row: SideRow }
+  | { kind: "omitted"; count: number };
+
 interface SourceLine {
   lineNumber: number;
   text: string;
@@ -348,6 +352,24 @@ export function buildSideRows(
   return rows;
 }
 
+export function buildFocusedSideItems(rows: SideRow[]): FocusedSideItem[] {
+  const items: FocusedSideItem[] = [];
+  for (let index = 0; index < rows.length;) {
+    if (rows[index]?.kind !== "same") {
+      items.push({ kind: "row", row: rows[index]! });
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (end < rows.length && rows[end]?.kind === "same") end += 1;
+    if (index > 0 && end < rows.length) {
+      items.push({ kind: "omitted", count: end - index });
+    }
+    index = end;
+  }
+  return items;
+}
+
 export function renderSideBySideDiff(
   container: HTMLElement,
   oldText: string,
@@ -364,10 +386,20 @@ export function renderSideBySideDiff(
   const renderedAnchors = new Set<number>();
 
   const renderRow = (row: SideRow) => {
-    grid.createDiv({ cls: `git-note-history-line-number is-${row.kind}`, text: row.oldLineNumber?.toString() ?? "" });
-    const oldCell = grid.createDiv({ cls: `git-note-history-side-line is-${row.kind}` });
-    grid.createDiv({ cls: `git-note-history-line-number is-${row.kind}`, text: row.newLineNumber?.toString() ?? "" });
-    const newCell = grid.createDiv({ cls: `git-note-history-side-line is-${row.kind}` });
+    grid.createDiv({
+      cls: `git-note-history-line-number is-${row.kind} is-base-side`,
+      text: row.oldLineNumber?.toString() ?? ""
+    });
+    const oldCell = grid.createDiv({
+      cls: `git-note-history-side-line is-${row.kind} is-base-side`
+    });
+    grid.createDiv({
+      cls: `git-note-history-line-number is-${row.kind} is-target-side`,
+      text: row.newLineNumber?.toString() ?? ""
+    });
+    const newCell = grid.createDiv({
+      cls: `git-note-history-side-line is-${row.kind} is-target-side`
+    });
     if (row.changeIndex !== undefined && !renderedAnchors.has(row.changeIndex)) {
       renderedAnchors.add(row.changeIndex);
       oldCell.addClass("git-note-history-change-anchor");
@@ -387,13 +419,20 @@ export function renderSideBySideDiff(
   const renderOmitted = (count: number): void => {
     grid.createDiv({
       cls: "git-note-history-side-omitted",
-      text: `已隐藏 ${count} 行相同内容`
+      text: `⋯ ${count} 行未变`
     });
   };
 
   const renderRows = (collapseUnchanged: boolean) => {
     grid.empty();
     renderedAnchors.clear();
+    if (options.changesOnly) {
+      for (const item of buildFocusedSideItems(rows)) {
+        if (item.kind === "omitted") renderOmitted(item.count);
+        else renderRow(item.row);
+      }
+      return;
+    }
     for (let index = 0; index < rows.length;) {
       if (!collapseUnchanged || rows[index]?.kind !== "same") {
         renderRow(rows[index]!);
@@ -403,15 +442,16 @@ export function renderSideBySideDiff(
       let end = index;
       while (end < rows.length && rows[end]?.kind === "same") end += 1;
       const runLength = end - index;
-      if (options.changesOnly) {
-        renderOmitted(runLength);
-      } else if (runLength <= COLLAPSE_THRESHOLD) {
+      if (runLength <= COLLAPSE_THRESHOLD) {
         for (let cursor = index; cursor < end; cursor += 1) renderRow(rows[cursor]!);
       } else {
         for (let cursor = index; cursor < index + CONTEXT_LINE_COUNT; cursor += 1) renderRow(rows[cursor]!);
         const reveal = grid.createEl("button", {
           cls: "git-note-history-side-reveal",
-          text: `展开 ${runLength - CONTEXT_LINE_COUNT * 2} 行未修改内容`
+          text: `⋯ ${runLength - CONTEXT_LINE_COUNT * 2} 行未变`,
+          attr: {
+            "aria-label": `展开 ${runLength - CONTEXT_LINE_COUNT * 2} 行未修改内容`
+          }
         });
         reveal.addEventListener("click", () => renderRows(false));
         for (let cursor = end - CONTEXT_LINE_COUNT; cursor < end; cursor += 1) renderRow(rows[cursor]!);

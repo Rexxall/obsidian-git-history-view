@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildSemanticDiff } from "../src/diff/semantic-diff";
 import {
   buildHunkRestoreTargets,
+  buildFocusedSideItems,
   buildSideRows,
   withoutBlankLines
 } from "../src/ui/diff-renderer";
@@ -143,6 +144,24 @@ describe("focused side-by-side diff", () => {
 
   it("removes whitespace-only lines without flattening meaningful indentation", () => {
     expect(withoutBlankLines("title\n   \n  nested\n\n")).toBe("title\n  nested\n");
+  });
+
+  it("drops unchanged leading and trailing content and compresses only internal gaps", () => {
+    const rows = buildSideRows(
+      "intro\nold one\nstable middle\nold two\noutro\n",
+      "intro\nnew one\nstable middle\nnew two\noutro\n",
+      { ignoreWhitespace: false, ignoreBlankLines: true }
+    );
+    const items = buildFocusedSideItems(rows);
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "row",
+      "omitted",
+      "row"
+    ]);
+    expect(items[1]).toEqual({ kind: "omitted", count: 1 });
+    expect(items.some((item) => item.kind === "row" && item.row.oldText === "intro")).toBe(false);
+    expect(items.some((item) => item.kind === "row" && item.row.oldText === "outro")).toBe(false);
   });
 });
 
