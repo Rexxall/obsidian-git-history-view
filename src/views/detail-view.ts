@@ -1,4 +1,6 @@
 import {
+  App,
+  FuzzySuggestModal,
   ItemView,
   MarkdownRenderer,
   Menu,
@@ -9,7 +11,12 @@ import {
   setIcon
 } from "obsidian";
 import type GitNoteHistoryPlugin from "../main";
-import type { DetailMode, DetailRequest, VersionReference } from "../models";
+import type {
+  DetailMode,
+  DetailRequest,
+  GitCommitVersion,
+  VersionReference
+} from "../models";
 import { buildSemanticDiff, renderSemanticDiff } from "../diff/semantic-diff";
 import {
   buildLinkImpact,
@@ -21,6 +28,14 @@ import { buildChangeMap, type ChangeMapItem } from "../diff/change-map";
 import { RestorePreviewModal } from "../ui/restore-preview-modal";
 import { RestoreHistoryModal } from "../ui/restore-history-modal";
 import { BlockAgeModal } from "../ui/block-age-modal";
+import {
+  adjacentDistinctVersionReference,
+  adjacentVersionReference,
+  buildVersionSequence,
+  versionReferenceKey,
+  versionReferencePosition,
+  type VersionDirection
+} from "../history/version-navigation";
 
 export const GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE = "git-note-history-detail-view";
 
@@ -29,8 +44,59 @@ function versionLabel(reference: VersionReference): string {
   return `${reference.commit.shortHash} · ${reference.commit.subject || "无提交说明"}`;
 }
 
+function versionTitle(reference: VersionReference): string {
+  return reference.kind === "working"
+    ? reference.label
+    : reference.commit.subject || "无提交说明";
+}
+
+function versionMeta(reference: VersionReference): string {
+  if (reference.kind === "working") return "尚未提交的最新内容";
+  const date = new Date(reference.commit.authoredAt);
+  const timestamp = Number.isNaN(date.getTime())
+    ? reference.commit.authoredAt
+    : new Intl.DateTimeFormat("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).format(date);
+  const stats = [
+    reference.commit.addedLines > 0 ? `+${reference.commit.addedLines}` : "",
+    reference.commit.deletedLines > 0 ? `−${reference.commit.deletedLines}` : ""
+  ].filter(Boolean).join(" ");
+  return `${reference.commit.shortHash} · ${timestamp}${stats ? ` · ${stats}` : ""}`;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
+  constructor(
+    app: App,
+    private readonly choices: VersionReference[],
+    sideLabel: string,
+    private readonly selectedKey: string,
+    private readonly onChoose: (reference: VersionReference) => void
+  ) {
+    super(app);
+    this.setPlaceholder(`搜索并选择${sideLabel}…`);
+  }
+
+  getItems(): VersionReference[] {
+    return this.choices;
+  }
+
+  getItemText(reference: VersionReference): string {
+    const selected = versionReferenceKey(reference) === this.selectedKey ? "✓ " : "";
+    return `${selected}${versionTitle(reference)} · ${versionMeta(reference)}`;
+  }
+
+  onChooseItem(reference: VersionReference): void {
+    this.onChoose(reference);
+  }
 }
 
 export class GitHistoryDetailView extends ItemView {
@@ -49,6 +115,9 @@ export class GitHistoryDetailView extends ItemView {
   private currentChangeIndex = 0;
   private narrowLayout = false;
   private resizeObserver: ResizeObserver | null = null;
+  private historyCommits: GitCommitVersion[] = [];
+  private historyLoadedFor = "";
+  private activeVersionSide: "base" | "target" = "target";
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: GitNoteHistoryPlugin) {
     super(leaf);
@@ -67,6 +136,10 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   async setRequest(request: DetailRequest): Promise<void> {
+    if (this.request?.filePath !== request.filePath) {
+      this.historyCommits = [];
+      this.historyLoadedFor = "";
+    }
     this.request = request;
     this.mode = request.initialMode ?? this.plugin.settings.defaultDetailMode;
     await this.loadComparison();
@@ -113,11 +186,19 @@ export class GitHistoryDetailView extends ItemView {
     this.error = "";
     this.render();
     try {
-      const [baseContent, targetContent] = await Promise.all([
+      const historyPromise = this.historyLoadedFor === file.path
+        ? Promise.resolve(null)
+        : this.plugin.gitClient.loadFileHistory(file).catch(() => null);
+      const [baseContent, targetContent, history] = await Promise.all([
         this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.base),
-        this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.target)
+        this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.target),
+        historyPromise
       ]);
       if (generation !== this.generation) return;
+      if (history) {
+        this.historyCommits = history.commits;
+        this.historyLoadedFor = file.path;
+      }
       this.baseContent = baseContent;
       this.targetContent = targetContent;
       this.changeMap = buildChangeMap(baseContent, targetContent);
@@ -162,13 +243,7 @@ export class GitHistoryDetailView extends ItemView {
       this.setFocusMode(!this.focusMode);
     });
 
-    const versions = header.createDiv({ cls: "git-note-history-version-pair" });
-    versions.createDiv({ cls: "git-note-history-version-chip is-base", text: versionLabel(this.request.base) });
-    const arrow = versions.createSpan({ cls: "git-note-history-version-arrow" });
-    setIcon(arrow, "arrow-right");
-    versions.createDiv({ cls: "git-note-history-version-chip is-target", text: versionLabel(this.request.target) });
-
-    if (!this.loading && this.changeMap.length > 0) this.renderChangeNavigator(header);
+    this.renderVersionWorkbench(header);
 
     const controls = header.createDiv({ cls: "git-note-history-detail-controls" });
     const modes = controls.createDiv({ cls: "git-note-history-detail-mode-group" });
@@ -178,7 +253,23 @@ export class GitHistoryDetailView extends ItemView {
     const viewOptions = modes.createEl("button", { attr: { "aria-label": "视图选项" } });
     setIcon(viewOptions.createSpan(), "ellipsis");
     viewOptions.addEventListener("click", (event) => this.openViewOptions(event));
+    if (!this.loading && this.changeMap.length > 0) this.renderChangeNavigator(controls);
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
+
+    const whitespace = actions.createEl("button", {
+      cls: this.plugin.settings.ignoreWhitespace ? "is-active" : "",
+      attr: {
+        "aria-label": "忽略空格变化",
+        "aria-pressed": String(this.plugin.settings.ignoreWhitespace)
+      }
+    });
+    setIcon(whitespace.createSpan(), "space");
+    whitespace.createSpan({ text: "忽略空格" });
+    whitespace.addEventListener("click", async () => {
+      this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
+      await this.plugin.savePluginData();
+      this.render();
+    });
 
     const moreActions = actions.createEl("button", {
       attr: { "aria-label": "更多操作" }
@@ -228,6 +319,204 @@ export class GitHistoryDetailView extends ItemView {
     } else if (effectiveMode === "preview") this.renderPreview(body);
     else if (effectiveMode === "semantic") renderSemanticDiff(body, buildSemanticDiff(this.baseContent, this.targetContent));
     else this.renderLinkImpact(body, buildLinkImpact(this.baseContent, this.targetContent));
+  }
+
+  private renderVersionWorkbench(container: HTMLElement): void {
+    if (!this.request) return;
+    const workbench = container.createDiv({ cls: "git-note-history-version-workbench" });
+    this.renderVersionCard(workbench, "base", "左侧版本", "基准");
+    const bridge = workbench.createDiv({ cls: "git-note-history-version-bridge" });
+    const direction = bridge.createSpan({ cls: "git-note-history-version-direction" });
+    setIcon(direction, "arrow-right");
+    const swap = bridge.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": "交换左右版本（X）" }
+    });
+    swap.disabled = this.loading
+      || versionReferenceKey(this.request.base) === versionReferenceKey(this.request.target);
+    setIcon(swap, "arrow-left-right");
+    swap.addEventListener("click", () => this.swapVersions());
+    const previous = this.previousToTarget();
+    const alreadyAdjacent = previous !== null
+      && versionReferenceKey(previous) === versionReferenceKey(this.request.base);
+    const adjacent = bridge.createEl("button", {
+      cls: "git-note-history-adjacent-button",
+      attr: { "aria-label": "自动选择右侧版本的前一个版本" },
+      text: alreadyAdjacent ? "已相邻" : "相邻"
+    });
+    adjacent.disabled = this.loading || previous === null || alreadyAdjacent;
+    adjacent.addEventListener("click", () => this.compareAdjacentVersions());
+    this.renderVersionCard(workbench, "target", "右侧版本", "对比");
+  }
+
+  private renderVersionCard(
+    container: HTMLElement,
+    side: "base" | "target",
+    label: string,
+    role: string
+  ): void {
+    if (!this.request) return;
+    const reference = this.request[side];
+    const other = this.request[side === "base" ? "target" : "base"];
+    const older = adjacentDistinctVersionReference(
+      this.historyCommits,
+      reference,
+      -1,
+      other
+    );
+    const newer = adjacentDistinctVersionReference(
+      this.historyCommits,
+      reference,
+      1,
+      other
+    );
+    const position = versionReferencePosition(this.historyCommits, reference, [other]);
+    const card = container.createDiv({
+      cls: `git-note-history-version-card is-${side} ${this.activeVersionSide === side ? "is-active" : ""}`
+    });
+    const cardTop = card.createDiv({ cls: "git-note-history-version-card-top" });
+    const cardLabel = cardTop.createDiv({ cls: "git-note-history-version-card-label" });
+    cardLabel.createSpan({ text: label });
+    cardLabel.createSpan({ cls: "git-note-history-version-role", text: role });
+    const cardActions = cardTop.createDiv({ cls: "git-note-history-version-card-actions" });
+    if (reference.kind !== "working") {
+      const working = cardActions.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": `${label}改为当前工作区` }
+      });
+      working.disabled = this.loading || other.kind === "working";
+      setIcon(working, "file-pen-line");
+      working.addEventListener("click", () => this.setVersionReference(side, {
+        kind: "working",
+        label: "当前工作区"
+      }));
+    }
+    const copy = cardActions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": `复制${label}内容` }
+    });
+    copy.disabled = this.loading;
+    setIcon(copy, "copy");
+    copy.addEventListener("click", () => void this.copyVersionContent(side));
+
+    const navigator = card.createDiv({ cls: "git-note-history-version-navigator" });
+    const earlier = navigator.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": `${label}切换到更早版本` }
+    });
+    earlier.disabled = this.loading || older === null;
+    setIcon(earlier, "chevron-left");
+    earlier.addEventListener("click", () => this.moveVersion(side, -1));
+
+    const chooser = navigator.createEl("button", {
+      cls: "git-note-history-version-chooser",
+      attr: {
+        "aria-label": `选择${label}，当前为 ${versionTitle(reference)}`,
+        "aria-pressed": String(this.activeVersionSide === side)
+      }
+    });
+    chooser.disabled = this.loading;
+    const chooserText = chooser.createSpan({ cls: "git-note-history-version-chooser-text" });
+    chooserText.createSpan({ cls: "git-note-history-version-title", text: versionTitle(reference) });
+    chooserText.createSpan({ cls: "git-note-history-version-meta", text: versionMeta(reference) });
+    const chooserIcon = chooser.createSpan({ cls: "git-note-history-version-chooser-icon" });
+    setIcon(chooserIcon, "chevrons-up-down");
+    chooser.addEventListener("click", () => this.openVersionPicker(side));
+
+    const newerButton = navigator.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": `${label}切换到更新版本` }
+    });
+    newerButton.disabled = this.loading || newer === null;
+    setIcon(newerButton, "chevron-right");
+    newerButton.addEventListener("click", () => this.moveVersion(side, 1));
+    card.createDiv({
+      cls: "git-note-history-version-position",
+      text: `${position.current} / ${position.total}`
+    });
+  }
+
+  private openVersionPicker(side: "base" | "target"): void {
+    if (!this.request) return;
+    this.activeVersionSide = side;
+    const current = this.request[side];
+    const occupiedKey = versionReferenceKey(
+      this.request[side === "base" ? "target" : "base"]
+    );
+    const choices = buildVersionSequence(this.historyCommits, [
+      this.request.base,
+      this.request.target
+    ]).filter((reference) => versionReferenceKey(reference) !== occupiedKey).reverse();
+    new VersionPickerModal(
+      this.app,
+      choices,
+      side === "base" ? "左侧版本" : "右侧版本",
+      versionReferenceKey(current),
+      (reference) => this.setVersionReference(side, reference)
+    ).open();
+    this.render();
+  }
+
+  private setVersionReference(side: "base" | "target", reference: VersionReference): void {
+    if (!this.request || versionReferenceKey(this.request[side]) === versionReferenceKey(reference)) return;
+    const other = this.request[side === "base" ? "target" : "base"];
+    if (versionReferenceKey(other) === versionReferenceKey(reference)) {
+      new Notice("左右两侧需要选择不同版本。");
+      return;
+    }
+    this.activeVersionSide = side;
+    this.request = { ...this.request, [side]: reference };
+    this.currentChangeIndex = 0;
+    void this.loadComparison();
+  }
+
+  private moveVersion(side: "base" | "target", direction: VersionDirection): void {
+    if (!this.request) return;
+    const other = this.request[side === "base" ? "target" : "base"];
+    const reference = adjacentDistinctVersionReference(
+      this.historyCommits,
+      this.request[side],
+      direction,
+      other
+    );
+    if (reference) this.setVersionReference(side, reference);
+  }
+
+  private swapVersions(): void {
+    if (!this.request || this.loading) return;
+    this.request = {
+      ...this.request,
+      base: this.request.target,
+      target: this.request.base
+    };
+    this.activeVersionSide = this.activeVersionSide === "base" ? "target" : "base";
+    this.currentChangeIndex = 0;
+    void this.loadComparison();
+  }
+
+  private previousToTarget(): VersionReference | null {
+    if (!this.request) return null;
+    return adjacentVersionReference(
+      this.historyCommits,
+      this.request.target,
+      -1,
+      [this.request.base]
+    );
+  }
+
+  private compareAdjacentVersions(): void {
+    if (!this.request) return;
+    const previous = this.previousToTarget();
+    if (!previous) return;
+    this.request = { ...this.request, base: previous };
+    this.activeVersionSide = "target";
+    this.currentChangeIndex = 0;
+    void this.loadComparison();
+  }
+
+  private async copyVersionContent(side: "base" | "target"): Promise<void> {
+    await navigator.clipboard.writeText(side === "base" ? this.baseContent : this.targetContent);
+    new Notice(`已复制${side === "base" ? "左侧" : "右侧"}版本内容。`);
   }
 
   private addTaskButton(
@@ -288,15 +577,6 @@ export class GitHistoryDetailView extends ItemView {
 
   private openActionOptions(event: MouseEvent): void {
     const menu = new Menu();
-    menu.addItem((item) => item
-      .setTitle("忽略空格变化")
-      .setIcon("space")
-      .setChecked(this.plugin.settings.ignoreWhitespace)
-      .onClick(async () => {
-        this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
-        await this.plugin.savePluginData();
-        this.render();
-      }));
     if (this.request?.base.kind === "commit") {
       menu.addItem((item) => item
         .setTitle("复制基准版本内容")
@@ -703,6 +983,16 @@ export class GitHistoryDetailView extends ItemView {
     if (event.key === "[") {
       event.preventDefault();
       this.moveChange(-1);
+      return;
+    }
+    if (event.key.toLowerCase() === "x") {
+      event.preventDefault();
+      this.swapVersions();
+      return;
+    }
+    if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      event.preventDefault();
+      this.moveVersion(this.activeVersionSide, event.key === "ArrowLeft" ? -1 : 1);
       return;
     }
     const modeByKey: Record<string, DetailMode> = {
