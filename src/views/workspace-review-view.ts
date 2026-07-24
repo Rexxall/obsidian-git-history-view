@@ -2,18 +2,13 @@ import { ItemView, Notice, SearchComponent, TFile, WorkspaceLeaf, normalizePath,
 import type GitNoteHistoryPlugin from "../main";
 import type { GitWorkspaceChange, GitWorkspaceReview } from "../models";
 import { ConfirmActionModal } from "../ui/confirm-modal";
+import {
+  groupWorkspaceChanges,
+  workspaceChangePresentation,
+  workspaceNoteLabel
+} from "../workspace/change-presentation";
 
 export const GIT_WORKSPACE_REVIEW_VIEW_TYPE = "git-workspace-review-view";
-
-function statusText(change: GitWorkspaceChange): string {
-  if (change.conflicted) return "冲突";
-  if (change.untracked) return "新增";
-  if (change.indexStatus === "R") return "重命名";
-  if (change.indexStatus === "D" || change.workTreeStatus === "D") return "删除";
-  if (change.indexStatus !== " " && change.workTreeStatus !== " ") return "暂存 + 修改";
-  if (change.indexStatus !== " ") return "已暂存";
-  return "未暂存";
-}
 
 export class GitWorkspaceReviewView extends ItemView {
   private review: GitWorkspaceReview | null = null;
@@ -30,7 +25,7 @@ export class GitWorkspaceReviewView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Git workspace review";
+    return "未提交笔记";
   }
 
   getIcon(): string {
@@ -63,19 +58,26 @@ export class GitWorkspaceReviewView extends ItemView {
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
 
     const header = container.createDiv({ cls: "git-note-history-title-row" });
-    header.createEl("h4", { text: "工作区改动" });
-    const refresh = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "刷新" } });
-    setIcon(refresh, "refresh-cw");
+    header.createEl("h4", { text: "未提交笔记" });
+    const refresh = header.createEl("button", {
+      cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
+      attr: {
+        "aria-label": this.loading ? "正在检查工作区" : "刷新",
+        "aria-busy": String(this.loading)
+      }
+    });
+    refresh.disabled = this.loading;
+    setIcon(refresh, this.loading ? "loader-circle" : "refresh-cw");
     refresh.addEventListener("click", () => void this.refresh());
 
-    const search = new SearchComponent(container.createDiv({ cls: "git-note-history-search" }));
-    search.setPlaceholder("筛选修改的笔记").setValue(this.query).onChange((value) => {
-      this.query = value.trim().toLocaleLowerCase();
-      this.render();
-    });
-
     if (this.loading) {
-      container.createDiv({ cls: "git-note-history-loading", text: "正在检查 Git 工作区…" });
+      const loading = container.createDiv({
+        cls: "git-workspace-review-loading",
+        attr: { role: "status", "aria-live": "polite" }
+      });
+      const icon = loading.createSpan();
+      setIcon(icon, "loader-circle");
+      loading.createSpan({ text: "正在检查未提交笔记…" });
       return;
     }
     if (this.error) {
@@ -85,34 +87,94 @@ export class GitWorkspaceReviewView extends ItemView {
     if (!this.review) return;
 
     const summary = container.createDiv({ cls: "git-workspace-review-summary" });
-    summary.createSpan({ text: `分支：${this.review.branch}` });
-    summary.createSpan({ text: `${this.review.changes.length} 篇 Markdown 有改动` });
+    const branch = summary.createSpan({ cls: "git-workspace-review-branch" });
+    const branchIcon = branch.createSpan();
+    setIcon(branchIcon, "git-branch");
+    branch.createSpan({ text: this.review.branch });
+    summary.createSpan({
+      cls: "git-workspace-review-count",
+      text: `${this.review.changes.length} 篇待处理`
+    });
+
+    if (this.review.changes.length > 5 || this.query) {
+      const search = new SearchComponent(container.createDiv({ cls: "git-note-history-search" }));
+      search.setPlaceholder("按笔记名或目录筛选").setValue(this.query).onChange((value) => {
+        this.query = value.trim().toLocaleLowerCase();
+        this.render();
+      });
+    }
 
     const changes = this.review.changes.filter((change) =>
       change.path.toLocaleLowerCase().includes(this.query)
     );
     if (changes.length === 0) {
-      container.createDiv({ cls: "git-note-history-empty", text: this.query ? "没有匹配的笔记。" : "Markdown 工作区目前没有未提交改动。" });
+      const empty = container.createDiv({ cls: "git-workspace-review-empty" });
+      const emptyIcon = empty.createSpan({ cls: "git-workspace-review-empty-icon" });
+      setIcon(emptyIcon, this.query ? "search-x" : "circle-check");
+      empty.createEl("h5", { text: this.query ? "没有匹配的笔记" : "没有待处理的笔记" });
+      empty.createEl("p", {
+        text: this.query ? `没有找到“${this.query}”。` : "所有 Markdown 笔记改动都已提交。"
+      });
+      if (this.query) {
+        const clear = empty.createEl("button", { text: "清除筛选" });
+        clear.addEventListener("click", () => {
+          this.query = "";
+          this.render();
+        });
+      }
       return;
     }
 
     const list = container.createDiv({ cls: "git-workspace-review-list" });
-    for (const change of changes) this.renderChange(list, change);
+    for (const group of groupWorkspaceChanges(changes)) {
+      const section = list.createDiv({ cls: `git-workspace-review-group is-${group.presentation.key}` });
+      const groupHeader = section.createDiv({ cls: "git-workspace-review-group-header" });
+      const groupTitle = groupHeader.createDiv({ cls: "git-workspace-review-group-title" });
+      const groupIcon = groupTitle.createSpan();
+      setIcon(groupIcon, group.presentation.icon);
+      groupTitle.createSpan({ text: group.presentation.label });
+      groupTitle.createSpan({ cls: "git-workspace-review-group-count", text: String(group.changes.length) });
+      groupHeader.createSpan({
+        cls: "git-workspace-review-group-description",
+        text: group.presentation.description
+      });
+      const rows = section.createDiv({ cls: "git-workspace-review-group-rows" });
+      for (const change of group.changes) this.renderChange(rows, change);
+    }
   }
 
   private renderChange(container: HTMLElement, change: GitWorkspaceChange): void {
     if (!this.review) return;
-    const row = container.createEl("button", { cls: "git-workspace-review-row" });
+    const presentation = workspaceChangePresentation(change);
+    const note = workspaceNoteLabel(change.path);
+    const row = container.createEl("button", {
+      cls: `git-workspace-review-row is-${presentation.key}`,
+      attr: {
+        "aria-label": `${note.title}，${presentation.label}`,
+        title: change.path,
+        type: "button"
+      }
+    });
     const icon = row.createSpan({ cls: "git-workspace-review-icon" });
-    setIcon(icon, change.conflicted ? "triangle-alert" : change.untracked ? "file-plus-2" : "file-diff");
+    setIcon(icon, presentation.icon);
     const body = row.createSpan({ cls: "git-workspace-review-content" });
-    body.createSpan({ cls: "git-workspace-review-path", text: change.path });
-    if (change.originalPath) body.createSpan({ cls: "git-workspace-review-original", text: `来自 ${change.originalPath}` });
+    body.createSpan({ cls: "git-workspace-review-name", text: note.title });
+    body.createSpan({ cls: "git-workspace-review-path", text: note.folder });
+    if (change.originalPath) {
+      const original = workspaceNoteLabel(change.originalPath);
+      body.createSpan({ cls: "git-workspace-review-original", text: `原位置：${original.folder} / ${original.title}` });
+    }
 
-    const meta = row.createSpan({ cls: "git-workspace-review-meta" });
-    meta.createSpan({ cls: change.conflicted ? "is-conflicted" : "", text: statusText(change) });
-    meta.createSpan({ cls: "is-added", text: `+${change.addedLines}` });
-    meta.createSpan({ cls: "is-removed", text: `−${change.deletedLines}` });
+    const trailing = row.createSpan({ cls: "git-workspace-review-trailing" });
+    const stats = trailing.createSpan({ cls: "git-workspace-review-stats" });
+    if (change.binary) {
+      stats.createSpan({ cls: "is-neutral", text: "二进制" });
+    } else {
+      if (change.addedLines > 0) stats.createSpan({ cls: "is-added", text: `+${change.addedLines}` });
+      if (change.deletedLines > 0) stats.createSpan({ cls: "is-removed", text: `−${change.deletedLines}` });
+    }
+    const chevron = trailing.createSpan({ cls: "git-workspace-review-chevron" });
+    setIcon(chevron, "chevron-right");
 
     row.addEventListener("click", () => void this.openChange(change));
   }

@@ -689,7 +689,7 @@ export class GitNoteHistoryView extends ItemView {
       const review = actions.createEl("button", { text: baseline ? "与基线比较" : "查看当前改动" });
       review.addEventListener("click", () => void this.openAgainstWorking(defaultBase));
     }
-    const workspace = actions.createEl("button", { text: "全部改动" });
+    const workspace = actions.createEl("button", { text: "未提交笔记" });
     workspace.addEventListener("click", () => void this.plugin.activateWorkspaceReview());
     if (this.history.status.conflicted) {
       const resolve = actions.createEl("button", { cls: "mod-warning", text: "解决冲突" });

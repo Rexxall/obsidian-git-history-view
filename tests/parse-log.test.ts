@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseGitLog,
   parseGitStatus,
+  parseNumStatByPath,
   parseNumStatLog,
   parseWorkspaceStatus
 } from "../src/git/parse-log";
@@ -70,6 +71,14 @@ describe("Git statistics", () => {
     const stats = parseNumStatLog(`${RS}abc123\n10\t2\tNotes/a.md\n${RS}def456\n3\t4\tNotes/a.md\n`);
     expect(stats.get("abc123")).toMatchObject({ addedLines: 10, deletedLines: 2 });
     expect(stats.get("def456")).toMatchObject({ addedLines: 3, deletedLines: 4 });
+  });
+
+  it("keeps Unicode workspace paths aligned with Git status output", () => {
+    const stats = parseNumStatByPath("35\t1\t10 - Projects/日本医学博士申请/最新进展.md\n");
+    expect(stats.get("10 - Projects/日本医学博士申请/最新进展.md")).toMatchObject({
+      addedLines: 35,
+      deletedLines: 1
+    });
   });
 
   it("parses zero-delimited workspace status including rename", () => {

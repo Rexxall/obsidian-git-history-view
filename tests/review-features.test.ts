@@ -19,7 +19,12 @@ import {
   limitHistory
 } from "../src/history/timeline-window";
 import { buildChangeMap } from "../src/diff/change-map";
-import type { GitCommitVersion } from "../src/models";
+import {
+  groupWorkspaceChanges,
+  workspaceChangePresentation,
+  workspaceNoteLabel
+} from "../src/workspace/change-presentation";
+import type { GitCommitVersion, GitWorkspaceChange } from "../src/models";
 
 function commit(
   hash: string,
@@ -208,5 +213,39 @@ describe("timeline window", () => {
     expect(limited.items).toEqual([1, 2, 3]);
     expect(limited.hasMore).toBe(true);
     expect(limitHistory([1, 2, 3], 3).hasMore).toBe(false);
+  });
+});
+
+describe("workspace change presentation", () => {
+  const modified: GitWorkspaceChange = {
+    path: "10 - Projects/日本医学博士申请/00_总控台/07_最新进展与跨窗口同步.md",
+    indexStatus: " ",
+    workTreeStatus: "M",
+    untracked: false,
+    conflicted: false,
+    addedLines: 35,
+    deletedLines: 1
+  };
+
+  it("puts the note name first and shortens the folder context", () => {
+    expect(workspaceNoteLabel(modified.path)).toEqual({
+      title: "07_最新进展与跨窗口同步",
+      folder: "日本医学博士申请 / 00_总控台"
+    });
+  });
+
+  it("uses human-facing states and stable group ordering", () => {
+    const newNote = {
+      ...modified,
+      path: "Inbox/新笔记.md",
+      indexStatus: "?",
+      workTreeStatus: "?",
+      untracked: true
+    };
+    expect(workspaceChangePresentation(modified).label).toBe("已修改");
+    expect(groupWorkspaceChanges([newNote, modified]).map((group) => group.presentation.key)).toEqual([
+      "modified",
+      "new"
+    ]);
   });
 });

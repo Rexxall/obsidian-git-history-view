@@ -843,68 +843,320 @@
 /* Workspace review and modals */
 
 .git-workspace-review-view {
-  padding: var(--size-4-3);
+  container-type: inline-size;
+  padding: 12px;
   overflow-y: auto;
+}
+
+.git-workspace-review-view .git-note-history-title-row {
+  min-height: 32px;
+}
+
+.git-workspace-review-view .git-note-history-title-row h4 {
+  color: var(--text-normal);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.git-workspace-review-view .git-note-history-title-row .is-loading svg,
+.git-workspace-review-loading svg {
+  animation: git-note-history-spin 0.9s linear infinite;
+}
+
+.git-workspace-review-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 96px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-workspace-review-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-height: 116px;
+  padding: 22px 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.git-workspace-review-empty-icon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}
+
+.git-workspace-review-empty-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.git-workspace-review-empty h5,
+.git-workspace-review-empty p {
+  margin: 0;
+}
+
+.git-workspace-review-empty h5 {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.git-workspace-review-empty p {
+  font-size: var(--font-ui-smaller);
 }
 
 .git-workspace-review-summary {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--size-4-2);
-  padding: var(--size-4-2);
-  margin: var(--size-4-3) 0;
-  border-radius: var(--radius-s);
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 10px 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
   color: var(--text-muted);
-  background: var(--background-secondary);
+  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
   font-size: var(--font-ui-smaller);
+}
+
+.git-workspace-review-branch {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+}
+
+.git-workspace-review-branch svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-workspace-review-count {
+  color: var(--text-normal);
+  font-weight: 600;
+}
+
+.git-workspace-review-view .git-note-history-search {
+  margin: 0 0 12px;
 }
 
 .git-workspace-review-list {
   display: flex;
   flex-direction: column;
-  gap: var(--size-4-1);
+  gap: 14px;
 }
 
-.git-workspace-review-row {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--size-4-2);
-  width: 100%;
-  padding: var(--size-4-2);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-normal);
-  text-align: left;
-}
-
-.git-workspace-review-row:hover {
-  border-color: var(--background-modifier-border);
-  background: var(--background-modifier-hover);
-}
-
-.git-workspace-review-content,
-.git-workspace-review-meta,
-.git-note-history-line-commit > span:last-child {
-  display: flex;
-  flex-direction: column;
+.git-workspace-review-group {
   min-width: 0;
 }
 
-.git-workspace-review-path {
+.git-workspace-review-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 2px 5px;
+}
+
+.git-workspace-review-group-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 650;
+}
+
+.git-workspace-review-group-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+.git-workspace-review-group.is-conflict .git-workspace-review-group-title svg,
+.git-workspace-review-row.is-conflict .git-workspace-review-icon {
+  color: var(--text-error);
+}
+
+.git-workspace-review-group-count {
+  display: inline-grid;
+  min-width: 19px;
+  height: 19px;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.git-workspace-review-group-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.git-workspace-review-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+button.git-workspace-review-row {
+  position: relative;
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto !important;
+  min-height: 58px;
+  margin: 0;
+  padding: 9px 10px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  appearance: none;
+  background: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-normal);
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  white-space: normal;
+}
+
+button.git-workspace-review-row:hover {
+  border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
+  background: var(--background-modifier-hover);
+}
+
+.git-workspace-review-icon {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}
+
+.git-workspace-review-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.git-workspace-review-content,
+.git-note-history-line-commit > span:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.git-workspace-review-name,
+.git-workspace-review-path,
+.git-workspace-review-original {
+  display: block;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.git-workspace-review-original,
-.git-workspace-review-meta {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+.git-workspace-review-name {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 620;
 }
 
-.git-workspace-review-meta {
-  align-items: flex-end;
+.git-workspace-review-path,
+.git-workspace-review-original {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.git-workspace-review-original {
+  color: var(--text-faint);
+}
+
+.git-workspace-review-trailing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 28px;
+}
+
+.git-workspace-review-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-workspace-review-stats > span {
+  padding: 2px 4px;
+  border-radius: 5px;
+  background: var(--background-secondary);
+}
+
+.git-workspace-review-stats .is-added {
+  color: var(--text-success);
+}
+
+.git-workspace-review-stats .is-removed {
+  color: var(--text-error);
+}
+
+.git-workspace-review-stats .is-neutral {
+  color: var(--text-muted);
+}
+
+.git-workspace-review-chevron {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+
+.git-workspace-review-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+@container (max-width: 360px) {
+  button.git-workspace-review-row {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 7px;
+    padding: 8px;
+  }
+
+  .git-workspace-review-group-description {
+    display: none;
+  }
+
+  .git-workspace-review-stats {
+    flex-direction: column;
+    gap: 2px;
+  }
 }
 
 .git-note-history-label-presets {
@@ -1616,6 +1868,8 @@ button.git-note-history-impact-row:hover { background: var(--background-modifier
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .git-workspace-review-view .git-note-history-title-row .is-loading svg,
+  .git-workspace-review-loading svg,
   .git-note-history-header-actions .is-loading svg,
   .git-note-history-loading-state .git-note-history-state-icon svg {
     animation: none;
