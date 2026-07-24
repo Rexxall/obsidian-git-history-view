@@ -3269,3 +3269,339 @@ button.git-note-history-adjacent-button {
   background: var(--background-modifier-border);
   content: "";
 }
+
+/* v0.4.7 review surface */
+.git-note-history-detail-toolbar {
+  padding: 12px 18px 10px;
+  border-bottom-color: color-mix(in srgb, var(--background-modifier-border) 72%, transparent);
+  background: color-mix(in srgb, var(--background-primary) 97%, transparent);
+}
+
+.git-note-history-detail-heading h3 {
+  color: var(--text-normal);
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+.git-note-history-detail-heading .git-note-history-file-path {
+  margin-top: 3px;
+  font-size: 10px;
+}
+
+.git-note-history-version-workbench {
+  grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr);
+  gap: 7px;
+  margin: 10px 0 8px;
+}
+
+.git-note-history-version-card {
+  padding: 7px 8px;
+  border-color: color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-secondary) 56%, transparent);
+  box-shadow: none;
+}
+
+.git-note-history-version-card.is-active {
+  border-color: color-mix(in srgb, var(--interactive-accent) 32%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 3%, var(--background-primary));
+  box-shadow: none;
+}
+
+.git-note-history-version-card.is-base,
+.git-note-history-version-card.is-target {
+  border-left-width: 1px;
+}
+
+.git-note-history-version-card.is-base::before,
+.git-note-history-version-card.is-target::before {
+  position: absolute;
+  top: 12px;
+  left: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  content: "";
+}
+
+.git-note-history-version-card.is-base::before {
+  background: color-mix(in srgb, var(--color-red) 72%, var(--text-muted));
+}
+
+.git-note-history-version-card.is-target::before {
+  background: color-mix(in srgb, var(--color-green) 72%, var(--text-muted));
+}
+
+.git-note-history-version-card-top {
+  min-height: 18px;
+  margin: 0 0 4px 12px;
+}
+
+.git-note-history-version-card-label {
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.git-note-history-version-role {
+  padding: 0 5px;
+  background: transparent;
+  font-size: 9px;
+}
+
+.git-note-history-version-position {
+  padding: 0;
+  font-size: 9px;
+  text-align: left;
+}
+
+.git-note-history-version-card-actions .clickable-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.git-note-history-version-navigator {
+  grid-template-columns: 26px minmax(0, 1fr) 26px;
+  gap: 4px;
+}
+
+.git-note-history-version-navigator > .clickable-icon {
+  width: 26px;
+  min-height: 39px;
+}
+
+button.git-note-history-version-chooser {
+  min-height: 39px;
+  padding: 5px 8px;
+  border-color: color-mix(in srgb, var(--background-modifier-border) 74%, transparent);
+  background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+}
+
+.git-note-history-version-chooser-text {
+  gap: 1px;
+}
+
+.git-note-history-version-title {
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.git-note-history-version-meta {
+  font-size: 9px;
+}
+
+.git-note-history-version-bridge {
+  gap: 2px;
+}
+
+.git-note-history-version-bridge .clickable-icon {
+  width: 27px;
+  height: 26px;
+  border-color: transparent;
+  background: transparent;
+}
+
+button.git-note-history-adjacent-button {
+  min-height: 18px;
+  padding: 1px 4px;
+}
+
+.git-note-history-detail-controls {
+  gap: 6px 10px;
+}
+
+.git-note-history-detail-view-controls {
+  gap: 6px;
+}
+
+.git-note-history-detail-mode-group {
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+  background: color-mix(in srgb, var(--background-secondary) 65%, transparent);
+}
+
+.git-note-history-detail-mode-group button {
+  min-height: 27px;
+  padding: 3px 9px;
+}
+
+.git-note-history-detail-mode-group button.is-active {
+  color: var(--text-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-primary));
+  box-shadow: none;
+}
+
+.git-note-history-detail-context-group {
+  gap: 1px;
+  padding-left: 6px;
+}
+
+.git-note-history-detail-context-group button {
+  min-height: 27px;
+  padding: 3px 8px;
+  color: var(--text-muted);
+}
+
+.git-note-history-detail-context-group button.is-active {
+  color: var(--text-normal);
+  background: color-mix(in srgb, var(--background-modifier-hover) 74%, transparent);
+}
+
+.git-note-history-detail-context-group .git-note-history-filter-button.is-active {
+  color: var(--text-accent);
+  background: transparent;
+}
+
+.git-note-history-filter-count {
+  display: inline-grid;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-note-history-review-shell.is-map-hidden {
+  padding: 10px 18px 20px;
+}
+
+.git-note-history-review-body {
+  margin: 0;
+  border-color: color-mix(in srgb, var(--background-modifier-border) 68%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--background-primary) 98%, var(--background-secondary));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 3%);
+}
+
+.git-note-history-side-grid {
+  grid-template-columns: 44px minmax(340px, 1fr) 44px minmax(340px, 1fr);
+  min-width: 780px;
+  color: var(--text-normal);
+  font-family: var(--font-text);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.git-note-history-line-number,
+.git-note-history-side-line {
+  min-height: 33px;
+  padding: 6px 10px;
+  border-bottom: 0;
+}
+
+.git-note-history-line-number {
+  padding-right: 8px;
+  color: var(--text-faint);
+  background: transparent;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 21px;
+}
+
+.git-note-history-side-line {
+  overflow: visible;
+  border-left: 2px solid transparent;
+  text-overflow: clip;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.git-note-history-side-line.is-base-side {
+  border-right: 1px solid color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+}
+
+.git-note-history-side-line.is-old,
+.git-note-history-side-line.is-changed.is-base-side,
+.git-note-history-line-number.is-old,
+.git-note-history-line-number.is-changed.is-base-side {
+  background: transparent;
+}
+
+.git-note-history-side-line.is-new,
+.git-note-history-side-line.is-changed.is-target-side,
+.git-note-history-line-number.is-new,
+.git-note-history-line-number.is-changed.is-target-side {
+  background: transparent;
+}
+
+.git-note-history-side-line.is-old,
+.git-note-history-side-line.is-changed.is-base-side {
+  border-left-color: color-mix(in srgb, var(--color-red) 55%, transparent);
+}
+
+.git-note-history-side-line.is-new,
+.git-note-history-side-line.is-changed.is-target-side {
+  border-left-color: color-mix(in srgb, var(--color-green) 55%, transparent);
+}
+
+.git-note-history-line-number.is-old,
+.git-note-history-line-number.is-changed.is-base-side {
+  color: color-mix(in srgb, var(--color-red) 64%, var(--text-faint));
+}
+
+.git-note-history-line-number.is-new,
+.git-note-history-line-number.is-changed.is-target-side {
+  color: color-mix(in srgb, var(--color-green) 64%, var(--text-faint));
+}
+
+.is-word-removed,
+.is-word-added {
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.is-word-removed {
+  background: color-mix(in srgb, var(--color-red) 18%, transparent);
+}
+
+.is-word-added {
+  background: color-mix(in srgb, var(--color-green) 20%, transparent);
+}
+
+.git-note-history-side-omitted {
+  gap: 8px;
+  min-height: 20px;
+  padding: 1px 14px;
+  color: var(--text-faint);
+  background: transparent;
+  font-size: 9px;
+  letter-spacing: 0.01em;
+}
+
+.git-note-history-side-omitted::before,
+.git-note-history-side-omitted::after {
+  background: color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+}
+
+.git-note-history-side-reveal {
+  min-height: 22px;
+  border: 0;
+  color: var(--text-faint);
+  background: transparent;
+  font-size: 9px;
+}
+
+.git-note-history-side-reveal:hover {
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}
+
+@container (max-width: 900px) {
+  .git-note-history-detail-view-controls {
+    flex-wrap: nowrap;
+  }
+
+  .git-note-history-detail-context-group {
+    flex: 0 0 auto;
+    padding: 0 0 0 6px;
+    border-top: 0;
+    border-left: 1px solid var(--background-modifier-border);
+  }
+}

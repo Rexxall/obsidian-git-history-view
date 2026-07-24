@@ -152,6 +152,7 @@ export class GitHistoryDetailView extends ItemView {
       this.historyLoadedFor = "";
     }
     this.request = request;
+    this.changesOnly = true;
     this.mode = request.initialMode ?? this.plugin.settings.defaultDetailMode;
     if (this.mode === "side-by-side" || this.mode === "unified") this.lastTextDiffMode = this.mode;
     if (this.mode === "semantic" || this.mode === "impact") this.lastImpactMode = this.mode;
@@ -395,6 +396,10 @@ export class GitHistoryDetailView extends ItemView {
     const cardLabel = cardTop.createDiv({ cls: "git-note-history-version-card-label" });
     cardLabel.createSpan({ text: label });
     cardLabel.createSpan({ cls: "git-note-history-version-role", text: role });
+    cardLabel.createSpan({
+      cls: "git-note-history-version-position",
+      text: `${position.current} / ${position.total}`
+    });
     const cardActions = cardTop.createDiv({ cls: "git-note-history-version-card-actions" });
     if (reference.kind !== "working") {
       const working = cardActions.createEl("button", {
@@ -447,10 +452,6 @@ export class GitHistoryDetailView extends ItemView {
     newerButton.disabled = this.loading || newer === null;
     setIcon(newerButton, "chevron-right");
     newerButton.addEventListener("click", () => this.moveVersion(side, 1));
-    card.createDiv({
-      cls: "git-note-history-version-position",
-      text: `${position.current} / ${position.total}`
-    });
   }
 
   private openVersionPicker(side: "base" | "target"): void {
@@ -580,57 +581,13 @@ export class GitHistoryDetailView extends ItemView {
       attr: { "aria-label": "当前视图选项" }
     });
     if (this.mode === "side-by-side" || this.mode === "unified") {
-      this.addModeButton(context, "side-by-side", "并排", "columns-2");
+      this.addModeButton(context, "side-by-side", "双栏", "columns-2");
       this.addModeButton(context, "unified", "单栏", "rows-3");
-      if (this.mode === "side-by-side") {
-        this.addToggleButton(
-          context,
-          "仅改动",
-          "list-filter",
-          this.changesOnly,
-          () => {
-            this.changesOnly = !this.changesOnly;
-            this.render();
-          }
-        );
-      }
-      this.addToggleButton(
-        context,
-        "忽略空行",
-        "list-minus",
-        this.ignoreBlankLines,
-        () => {
-          this.ignoreBlankLines = !this.ignoreBlankLines;
-          this.render();
-        }
-      );
-      this.addToggleButton(
-        context,
-        "忽略空格",
-        "space",
-        this.plugin.settings.ignoreWhitespace,
-        async () => {
-          this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
-          await this.plugin.savePluginData();
-          this.render();
-        }
-      );
-      this.addFrontmatterToggle(context);
+      this.renderDiffFilterButton(context);
       return;
     }
     if (this.mode === "rendered") {
-      this.addToggleButton(
-        context,
-        "忽略空格",
-        "space",
-        this.plugin.settings.ignoreWhitespace,
-        async () => {
-          this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
-          await this.plugin.savePluginData();
-          this.render();
-        }
-      );
-      this.addFrontmatterToggle(context);
+      this.renderDiffFilterButton(context);
       return;
     }
     if (this.mode === "preview") {
@@ -650,17 +607,53 @@ export class GitHistoryDetailView extends ItemView {
     this.addModeButton(context, "impact", "链接", "git-fork");
   }
 
-  private addFrontmatterToggle(container: HTMLElement): void {
-    this.addToggleButton(
-      container,
-      "忽略属性",
-      "braces",
-      this.ignoreFrontmatter,
-      () => {
+  private renderDiffFilterButton(container: HTMLElement): void {
+    const activeCount = [
+      this.ignoreBlankLines,
+      this.plugin.settings.ignoreWhitespace,
+      this.ignoreFrontmatter
+    ].filter(Boolean).length;
+    const button = container.createEl("button", {
+      cls: activeCount > 0 ? "git-note-history-filter-button is-active" : "git-note-history-filter-button",
+      attr: {
+        "aria-label": `内容过滤，已启用 ${activeCount} 项`,
+        "aria-haspopup": "menu"
+      }
+    });
+    setIcon(button.createSpan(), "list-filter");
+    button.createSpan({ text: "过滤" });
+    button.createSpan({ cls: "git-note-history-filter-count", text: String(activeCount) });
+    button.addEventListener("click", (event) => this.openDiffFilterOptions(event));
+  }
+
+  private openDiffFilterOptions(event: MouseEvent): void {
+    const menu = new Menu();
+    menu.addItem((item) => item
+      .setTitle("忽略空行")
+      .setIcon("list-minus")
+      .setChecked(this.ignoreBlankLines)
+      .onClick(() => {
+        this.ignoreBlankLines = !this.ignoreBlankLines;
+        this.render();
+      }));
+    menu.addItem((item) => item
+      .setTitle("忽略空格变化")
+      .setIcon("space")
+      .setChecked(this.plugin.settings.ignoreWhitespace)
+      .onClick(async () => {
+        this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
+        await this.plugin.savePluginData();
+        this.render();
+      }));
+    menu.addItem((item) => item
+      .setTitle("忽略笔记属性")
+      .setIcon("braces")
+      .setChecked(this.ignoreFrontmatter)
+      .onClick(() => {
         this.ignoreFrontmatter = !this.ignoreFrontmatter;
         this.render();
-      }
-    );
+      }));
+    menu.showAtMouseEvent(event);
   }
 
   private addToggleButton(
@@ -684,6 +677,17 @@ export class GitHistoryDetailView extends ItemView {
 
   private openActionOptions(event: MouseEvent): void {
     const menu = new Menu();
+    if (this.mode === "side-by-side") {
+      menu.addItem((item) => item
+        .setTitle("显示未修改上下文")
+        .setIcon("text-select")
+        .setChecked(!this.changesOnly)
+        .onClick(() => {
+          this.changesOnly = !this.changesOnly;
+          this.render();
+        }));
+      menu.addSeparator();
+    }
     if (this.request?.base.kind === "commit") {
       menu.addItem((item) => item
         .setTitle("复制基准版本内容")

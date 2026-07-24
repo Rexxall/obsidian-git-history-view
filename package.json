@@ -1,6 +1,6 @@
 {
   "name": "git-note-history",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": true,
   "description": "Git-backed note history viewer for Obsidian",
   "scripts": {
