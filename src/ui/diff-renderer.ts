@@ -1,12 +1,19 @@
-import { applyPatch, diffLines, diffWordsWithSpace, structuredPatch } from "diff";
+import { applyPatch, diffArrays, diffLines, diffWordsWithSpace, structuredPatch } from "diff";
 
 const CONTEXT_LINE_COUNT = 3;
 const COLLAPSE_THRESHOLD = 14;
 
 export interface UnifiedDiffOptions {
   ignoreWhitespace: boolean;
+  ignoreBlankLines?: boolean;
   onRestoreHunk?: (targetContent: string, hunkNumber: number) => void | Promise<void>;
   onLocateLine?: (line: number) => void | Promise<void>;
+}
+
+export interface SideBySideDiffOptions {
+  ignoreWhitespace: boolean;
+  ignoreBlankLines: boolean;
+  changesOnly: boolean;
 }
 
 export interface HunkRestoreTarget {
@@ -73,19 +80,35 @@ function appendTextBlock(
   block.setText(value);
 }
 
-function renderNoChanges(container: HTMLElement, ignoreWhitespace = false): void {
+function renderNoChanges(
+  container: HTMLElement,
+  options: { ignoreWhitespace?: boolean; ignoreBlankLines?: boolean } = {}
+): void {
   const empty = container.createDiv({ cls: "git-note-history-no-changes" });
   empty.createDiv({ cls: "git-note-history-no-changes-icon", text: "✓" });
   empty.createEl("h4", { text: "两个版本内容一致" });
+  const ignored = [
+    options.ignoreWhitespace ? "空格" : "",
+    options.ignoreBlankLines ? "空行" : ""
+  ].filter(Boolean).join("和");
   empty.createEl("p", {
-    text: ignoreWhitespace
-      ? "忽略空格后没有检测到文本变化。可以切换到“预览”查看完整内容。"
-      : "没有需要审阅的文本变化。可以切换到“预览”查看完整内容。"
+    text: ignored
+      ? `忽略${ignored}后没有检测到文本变化。可以切换到“双预览”查看完整内容。`
+      : "没有需要审阅的文本变化。可以切换到“双预览”查看完整内容。"
   });
 }
 
 function comparableText(value: string, ignoreWhitespace: boolean): string {
   return ignoreWhitespace ? value.replace(/\s+/g, " ").trim() : value;
+}
+
+export function withoutBlankLines(value: string): string {
+  const newline = value.includes("\r\n") ? "\r\n" : "\n";
+  const trailingNewline = /\r?\n$/.test(value);
+  const lines = value.replace(/\r\n/g, "\n").split("\n");
+  if (trailingNewline) lines.pop();
+  const filtered = lines.filter((line) => line.trim() !== "");
+  return `${filtered.join(newline)}${trailingNewline && filtered.length > 0 ? newline : ""}`;
 }
 
 function renderUnchangedBlock(container: HTMLElement, value: string): void {
@@ -160,8 +183,10 @@ export function renderUnifiedDiff(
   options: UnifiedDiffOptions
 ): void {
   container.empty();
-  if (comparableText(historicalText, options.ignoreWhitespace) === comparableText(currentText, options.ignoreWhitespace)) {
-    renderNoChanges(container, options.ignoreWhitespace);
+  const historicalDisplay = options.ignoreBlankLines ? withoutBlankLines(historicalText) : historicalText;
+  const currentDisplay = options.ignoreBlankLines ? withoutBlankLines(currentText) : currentText;
+  if (comparableText(historicalDisplay, options.ignoreWhitespace) === comparableText(currentDisplay, options.ignoreWhitespace)) {
+    renderNoChanges(container, options);
     return;
   }
   container.createDiv({
@@ -171,7 +196,7 @@ export function renderUnifiedDiff(
 
   let changeIndex = 0;
   let insideChange = false;
-  for (const part of diffLines(historicalText, currentText, {
+  for (const part of diffLines(historicalDisplay, currentDisplay, {
     ignoreWhitespace: options.ignoreWhitespace
   })) {
     if (part.added || part.removed) {
@@ -190,7 +215,9 @@ export function renderUnifiedDiff(
     }
   }
 
-  renderHunkActions(container, historicalText, currentText, options);
+  if (!options.ignoreBlankLines) {
+    renderHunkActions(container, historicalText, currentText, options);
+  }
 }
 
 function renderWordLine(
@@ -208,7 +235,7 @@ function renderWordLine(
   }
 }
 
-interface SideRow {
+export interface SideRow {
   oldLineNumber: number | null;
   oldText: string;
   newLineNumber: number | null;
@@ -217,54 +244,106 @@ interface SideRow {
   changeIndex?: number;
 }
 
-function buildSideRows(oldText: string, newText: string, ignoreWhitespace: boolean): SideRow[] {
-  const parts = diffLines(oldText, newText, { ignoreWhitespace });
+interface SourceLine {
+  lineNumber: number;
+  text: string;
+}
+
+function sourceLines(value: string, ignoreBlankLines: boolean): SourceLine[] {
+  return splitDisplayLines(value)
+    .map((text, index) => ({ lineNumber: index + 1, text }))
+    .filter((line) => !ignoreBlankLines || line.text.trim() !== "");
+}
+
+export function buildSideRows(
+  oldText: string,
+  newText: string,
+  options: Pick<SideBySideDiffOptions, "ignoreWhitespace" | "ignoreBlankLines">
+): SideRow[] {
+  const oldLines = sourceLines(oldText, options.ignoreBlankLines);
+  const newLines = sourceLines(newText, options.ignoreBlankLines);
+  const parts = diffArrays(
+    oldLines,
+    newLines,
+    {
+      comparator: (oldLine, newLine) =>
+        comparableText(oldLine.text, options.ignoreWhitespace)
+          === comparableText(newLine.text, options.ignoreWhitespace)
+    }
+  );
   const rows: SideRow[] = [];
-  let oldLine = 1;
-  let newLine = 1;
   let changeIndex = 0;
+  let oldOffset = 0;
+  let newOffset = 0;
 
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index];
     if (!part) continue;
     if (!part.added && !part.removed) {
-      for (const line of splitDisplayLines(part.value)) {
-        rows.push({ oldLineNumber: oldLine++, oldText: line, newLineNumber: newLine++, newText: line, kind: "same" });
+      for (let lineIndex = 0; lineIndex < part.value.length; lineIndex += 1) {
+        const oldLine = oldLines[oldOffset + lineIndex]!;
+        const newLine = newLines[newOffset + lineIndex]!;
+        rows.push({
+          oldLineNumber: oldLine.lineNumber,
+          oldText: oldLine.text,
+          newLineNumber: newLine.lineNumber,
+          newText: newLine.text,
+          kind: "same"
+        });
       }
+      oldOffset += part.value.length;
+      newOffset += part.value.length;
       continue;
     }
 
     if (part.removed && parts[index + 1]?.added) {
       changeIndex += 1;
-      const oldLines = splitDisplayLines(part.value);
+      const oldLines = part.value;
       const addedPart = parts[index + 1];
-      const newLines = splitDisplayLines(addedPart?.value ?? "");
+      const newLines = addedPart?.value ?? [];
       const count = Math.max(oldLines.length, newLines.length);
       for (let rowIndex = 0; rowIndex < count; rowIndex += 1) {
         const oldValue = oldLines[rowIndex];
         const newValue = newLines[rowIndex];
         rows.push({
-          oldLineNumber: oldValue === undefined ? null : oldLine++,
-          oldText: oldValue ?? "",
-          newLineNumber: newValue === undefined ? null : newLine++,
-          newText: newValue ?? "",
+          oldLineNumber: oldValue?.lineNumber ?? null,
+          oldText: oldValue?.text ?? "",
+          newLineNumber: newValue?.lineNumber ?? null,
+          newText: newValue?.text ?? "",
           kind: "changed",
           changeIndex
         });
       }
+      oldOffset += oldLines.length;
+      newOffset += newLines.length;
       index += 1;
       continue;
     }
 
-    const lines = splitDisplayLines(part.value);
     changeIndex += 1;
-    for (const line of lines) {
+    for (const line of part.value) {
       if (part.removed) {
-        rows.push({ oldLineNumber: oldLine++, oldText: line, newLineNumber: null, newText: "", kind: "old", changeIndex });
+        rows.push({
+          oldLineNumber: line.lineNumber,
+          oldText: line.text,
+          newLineNumber: null,
+          newText: "",
+          kind: "old",
+          changeIndex
+        });
       } else {
-        rows.push({ oldLineNumber: null, oldText: "", newLineNumber: newLine++, newText: line, kind: "new", changeIndex });
+        rows.push({
+          oldLineNumber: null,
+          oldText: "",
+          newLineNumber: line.lineNumber,
+          newText: line.text,
+          kind: "new",
+          changeIndex
+        });
       }
     }
+    if (part.removed) oldOffset += part.value.length;
+    else newOffset += part.value.length;
   }
   return rows;
 }
@@ -273,15 +352,15 @@ export function renderSideBySideDiff(
   container: HTMLElement,
   oldText: string,
   newText: string,
-  ignoreWhitespace: boolean
+  options: SideBySideDiffOptions
 ): void {
   container.empty();
-  if (comparableText(oldText, ignoreWhitespace) === comparableText(newText, ignoreWhitespace)) {
-    renderNoChanges(container, ignoreWhitespace);
+  const rows = buildSideRows(oldText, newText, options);
+  if (rows.every((row) => row.kind === "same")) {
+    renderNoChanges(container, options);
     return;
   }
   const grid = container.createDiv({ cls: "git-note-history-side-grid" });
-  const rows = buildSideRows(oldText, newText, ignoreWhitespace);
   const renderedAnchors = new Set<number>();
 
   const renderRow = (row: SideRow) => {
@@ -305,6 +384,13 @@ export function renderSideBySideDiff(
     }
   };
 
+  const renderOmitted = (count: number): void => {
+    grid.createDiv({
+      cls: "git-note-history-side-omitted",
+      text: `已隐藏 ${count} 行相同内容`
+    });
+  };
+
   const renderRows = (collapseUnchanged: boolean) => {
     grid.empty();
     renderedAnchors.clear();
@@ -317,7 +403,9 @@ export function renderSideBySideDiff(
       let end = index;
       while (end < rows.length && rows[end]?.kind === "same") end += 1;
       const runLength = end - index;
-      if (runLength <= COLLAPSE_THRESHOLD) {
+      if (options.changesOnly) {
+        renderOmitted(runLength);
+      } else if (runLength <= COLLAPSE_THRESHOLD) {
         for (let cursor = index; cursor < end; cursor += 1) renderRow(rows[cursor]!);
       } else {
         for (let cursor = index; cursor < index + CONTEXT_LINE_COUNT; cursor += 1) renderRow(rows[cursor]!);

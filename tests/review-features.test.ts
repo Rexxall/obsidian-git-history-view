@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildSemanticDiff } from "../src/diff/semantic-diff";
-import { buildHunkRestoreTargets } from "../src/ui/diff-renderer";
+import {
+  buildHunkRestoreTargets,
+  buildSideRows,
+  withoutBlankLines
+} from "../src/ui/diff-renderer";
 import {
   extractMarkdownBlocks,
   findBestMatchingBlock,
@@ -111,6 +115,34 @@ describe("partial hunk restore", () => {
     expect(targets[0]?.targetContent).toContain("new second");
     expect(targets[1]?.targetContent).toContain("new first");
     expect(targets[1]?.targetContent).toContain("old second");
+  });
+});
+
+describe("focused side-by-side diff", () => {
+  it("ignores blank lines while preserving original line numbers", () => {
+    const before = "same\n\nold\n\nstable\n";
+    const after = "same\n\nnew\nstable\n";
+    const rows = buildSideRows(before, after, {
+      ignoreWhitespace: false,
+      ignoreBlankLines: true
+    });
+
+    expect(rows.some((row) => row.oldText === "" || row.newText === "")).toBe(false);
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: "same", oldLineNumber: 1, newLineNumber: 1 }),
+      expect.objectContaining({
+        kind: "changed",
+        oldLineNumber: 3,
+        oldText: "old",
+        newLineNumber: 3,
+        newText: "new"
+      }),
+      expect.objectContaining({ kind: "same", oldLineNumber: 5, newLineNumber: 4 })
+    ]);
+  });
+
+  it("removes whitespace-only lines without flattening meaningful indentation", () => {
+    expect(withoutBlankLines("title\n   \n  nested\n\n")).toBe("title\n  nested\n");
   });
 });
 

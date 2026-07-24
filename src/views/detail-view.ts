@@ -113,6 +113,8 @@ export class GitHistoryDetailView extends ItemView {
   private lastTextDiffMode: Extract<DetailMode, "side-by-side" | "unified"> = "side-by-side";
   private lastImpactMode: Extract<DetailMode, "semantic" | "impact"> = "semantic";
   private ignoreFrontmatter = false;
+  private ignoreBlankLines = true;
+  private changesOnly = true;
   private syncPreviewScroll = true;
   private loading = false;
   private error = "";
@@ -268,7 +270,13 @@ export class GitHistoryDetailView extends ItemView {
     this.addTaskButton(modes, ["semantic", "impact"], this.lastImpactMode, "影响", "list-tree");
     this.renderContextControls(viewControls);
     const isRawDiffMode = this.mode === "side-by-side" || this.mode === "unified";
-    if (!this.loading && isRawDiffMode && !this.ignoreFrontmatter && this.changeMap.length > 0) {
+    if (
+      !this.loading
+      && isRawDiffMode
+      && !this.ignoreFrontmatter
+      && !this.ignoreBlankLines
+      && this.changeMap.length > 0
+    ) {
       this.renderChangeNavigator(controls);
     }
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
@@ -308,6 +316,7 @@ export class GitHistoryDetailView extends ItemView {
     const showChangeMap = isTextDiff
       && this.changeMapExpanded
       && this.changeMap.length > 1
+      && !this.ignoreBlankLines
       && !this.narrowLayout;
     const shell = isTextDiff
       ? container.createDiv({
@@ -318,7 +327,11 @@ export class GitHistoryDetailView extends ItemView {
     const body = shell.createDiv({ cls: `git-note-history-review-body mode-${effectiveMode}` });
     if (effectiveMode === "unified") this.renderUnified(body, comparison.base, comparison.target);
     else if (effectiveMode === "side-by-side") {
-      renderSideBySideDiff(body, comparison.base, comparison.target, this.plugin.settings.ignoreWhitespace);
+      renderSideBySideDiff(body, comparison.base, comparison.target, {
+        ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
+        ignoreBlankLines: this.ignoreBlankLines,
+        changesOnly: this.changesOnly
+      });
     } else if (effectiveMode === "rendered") this.renderRenderedDiff(body);
     else if (effectiveMode === "preview") this.renderPreview(body);
     else if (effectiveMode === "semantic") renderSemanticDiff(body, buildSemanticDiff(this.baseContent, this.targetContent));
@@ -569,6 +582,28 @@ export class GitHistoryDetailView extends ItemView {
     if (this.mode === "side-by-side" || this.mode === "unified") {
       this.addModeButton(context, "side-by-side", "并排", "columns-2");
       this.addModeButton(context, "unified", "单栏", "rows-3");
+      if (this.mode === "side-by-side") {
+        this.addToggleButton(
+          context,
+          "仅改动",
+          "list-filter",
+          this.changesOnly,
+          () => {
+            this.changesOnly = !this.changesOnly;
+            this.render();
+          }
+        );
+      }
+      this.addToggleButton(
+        context,
+        "忽略空行",
+        "list-minus",
+        this.ignoreBlankLines,
+        () => {
+          this.ignoreBlankLines = !this.ignoreBlankLines;
+          this.render();
+        }
+      );
       this.addToggleButton(
         context,
         "忽略空格",
@@ -773,10 +808,12 @@ export class GitHistoryDetailView extends ItemView {
 
   private renderUnified(container: HTMLElement, baseContent: string, targetContent: string): void {
     const canRestoreHunk = !this.ignoreFrontmatter
+      && !this.ignoreBlankLines
       && this.request?.target.kind === "working"
       && this.file !== null;
     renderUnifiedDiff(container, baseContent, targetContent, {
       ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
+      ignoreBlankLines: this.ignoreBlankLines,
       ...(canRestoreHunk
         ? {
             onRestoreHunk: async (targetContent: string, hunkNumber: number) => {
