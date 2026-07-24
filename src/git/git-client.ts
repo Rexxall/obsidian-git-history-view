@@ -165,7 +165,14 @@ export class GitClient {
         "-z",
         "--untracked-files=all"
       ]),
-      this.runGit(repositoryRoot, ["diff", "HEAD", "--numstat", "--"]).catch(
+      this.runGit(repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "HEAD",
+        "--numstat",
+        "--"
+      ]).catch(
         (error: unknown) => {
           if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) return "";
           throw error;

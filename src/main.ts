@@ -79,7 +79,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
       void this.activateHistoryView(this.app.workspace.getActiveFile());
     });
-    this.addRibbonIcon("list-checks", "审阅全部 Git 工作区改动", () => {
+    this.addRibbonIcon("list-checks", "查看未提交笔记", () => {
       void this.activateWorkspaceReview();
     });
 
@@ -96,7 +96,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "open-git-workspace-review",
-      name: "打开 Git 工作区改动审阅",
+      name: "打开未提交笔记面板",
       callback: () => void this.activateWorkspaceReview()
     });
 
