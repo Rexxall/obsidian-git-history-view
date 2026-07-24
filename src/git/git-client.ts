@@ -2,26 +2,35 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { App, FileSystemAdapter, TFile } from "obsidian";
 import type {
+  GitCommittedChange,
   GitCommitVersion,
   GitConflictVersions,
   GitFileHistory,
   GitLineStats,
   GitNoteHistorySettings,
   GitRepositoryContext,
+  ReviewInboxSnapshot,
   GitWorkspaceReview,
   VersionReference
 } from "../models";
 import {
+  parseCommittedNameStatus,
   parseGitLog,
   parseGitStatus,
+  parseLatestCommitByPath,
   parseNumStatByPath,
   parseNumStatLog,
   parseSingleNumStat,
   parseWorkspaceStatus
 } from "./parse-log";
 import { limitHistory } from "../history/timeline-window";
+import {
+  isReviewPathExcluded,
+  mergeReviewInboxItems
+} from "../review/review-inbox";
 
 const LOG_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%B%x1d";
+const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
 const MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024;
 
 export class GitCommandError extends Error {
@@ -218,6 +227,117 @@ export class GitClient {
     };
   }
 
+  async loadReviewInbox(
+    baselineHash: string | undefined,
+    excludedPaths: string[]
+  ): Promise<ReviewInboxSnapshot> {
+    const workspace = await this.loadWorkspaceReview();
+    const { vaultRoot, repositoryRoot } = workspace.context;
+    const headHash = (await this.runGit(repositoryRoot, ["rev-parse", "HEAD"]).catch(
+      (error: unknown) => {
+        if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) return "";
+        throw error;
+      }
+    )).trim();
+
+    let baselineValid = true;
+    let committedChanges: GitCommittedChange[] = [];
+    if (baselineHash && headHash) {
+      if (!/^[0-9a-f]{7,64}$/i.test(baselineHash)) {
+        baselineValid = false;
+      } else {
+        try {
+          const [nameStatusOutput, statsOutput, logOutput] = await Promise.all([
+            this.runGit(repositoryRoot, [
+              "-c",
+              "core.quotePath=false",
+              "diff",
+              "--find-renames",
+              "--name-status",
+              "-z",
+              baselineHash,
+              headHash,
+              "--",
+              "*.md"
+            ]),
+            this.runGit(repositoryRoot, [
+              "-c",
+              "core.quotePath=false",
+              "diff",
+              baselineHash,
+              headHash,
+              "--numstat",
+              "--",
+              "*.md"
+            ]),
+            this.runGit(repositoryRoot, [
+              "-c",
+              "core.quotePath=false",
+              "log",
+              `${baselineHash}..${headHash}`,
+              `--format=${REVIEW_LOG_FORMAT}`,
+              "--name-status",
+              "--",
+              "*.md"
+            ])
+          ]);
+          const statsByPath = parseNumStatByPath(statsOutput);
+          const latestByPath = parseLatestCommitByPath(logOutput);
+          committedChanges = parseCommittedNameStatus(nameStatusOutput).filter((change) => {
+            if (!change.path.toLocaleLowerCase().endsWith(".md")) return false;
+            const context: GitRepositoryContext = {
+              vaultRoot,
+              repositoryRoot,
+              repositoryRelativePath: change.path
+            };
+            const vaultPath = this.repositoryPathToVaultPath(context, change.path);
+            return vaultPath !== ".."
+              && !vaultPath.startsWith("../")
+              && !path.isAbsolute(vaultPath)
+              && !isReviewPathExcluded(vaultPath, excludedPaths);
+          });
+          for (const change of committedChanges) {
+            const stats = statsByPath.get(change.path);
+            if (stats) {
+              change.addedLines = stats.addedLines;
+              change.deletedLines = stats.deletedLines;
+              if (stats.binary !== undefined) change.binary = stats.binary;
+            }
+            const latestCommit = latestByPath.get(change.path);
+            if (latestCommit) change.latestCommit = latestCommit;
+          }
+        } catch {
+          baselineValid = false;
+          committedChanges = [];
+        }
+      }
+    }
+
+    const context: GitRepositoryContext = {
+      vaultRoot,
+      repositoryRoot,
+      repositoryRelativePath: ""
+    };
+    const workspaceChanges = workspace.changes.filter((change) => {
+      const vaultPath = this.repositoryPathToVaultPath(context, change.path);
+      return !isReviewPathExcluded(vaultPath, excludedPaths);
+    });
+    const items = mergeReviewInboxItems(
+      committedChanges,
+      workspaceChanges,
+      (repositoryPath) => this.repositoryPathToVaultPath(context, repositoryPath)
+    );
+
+    return {
+      context: workspace.context,
+      branch: workspace.branch,
+      headHash,
+      ...(baselineHash ? { baselineHash } : {}),
+      baselineValid,
+      items
+    };
+  }
+
   repositoryPathToVaultPath(context: GitRepositoryContext, repositoryPath: string): string {
     const absolutePath = path.resolve(context.repositoryRoot, repositoryPath);
     return path.relative(context.vaultRoot, absolutePath).split(path.sep).join("/");
@@ -242,6 +362,10 @@ export class GitClient {
 
   async resolveFileContext(file: TFile): Promise<GitRepositoryContext> {
     return this.resolveContext(file);
+  }
+
+  async resolveRepositoryContext(): Promise<Omit<GitRepositoryContext, "repositoryRelativePath">> {
+    return this.resolveRepository();
   }
 
   async getConflictVersions(file: TFile): Promise<GitConflictVersions> {

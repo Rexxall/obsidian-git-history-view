@@ -36,7 +36,23 @@ import {
   workspaceChangePresentation,
   workspaceNoteLabel
 } from "../src/workspace/change-presentation";
-import type { GitCommitVersion, GitWorkspaceChange } from "../src/models";
+import {
+  groupReviewInboxItems,
+  isReviewPathExcluded,
+  mergeReviewInboxItems,
+  normalizeReviewExcludedPaths,
+  reviewInboxItemMatchesFilter
+} from "../src/review/review-inbox";
+import {
+  parseCommittedNameStatus,
+  parseLatestCommitByPath
+} from "../src/git/parse-log";
+import type {
+  GitCommitVersion,
+  GitCommittedChange,
+  ReviewInboxItem,
+  GitWorkspaceChange
+} from "../src/models";
 
 function commit(
   hash: string,
@@ -380,5 +396,108 @@ describe("workspace change presentation", () => {
       "modified",
       "new"
     ]);
+  });
+});
+
+describe("full-vault review inbox", () => {
+  const committed: GitCommittedChange = {
+    path: "Notes/Research.md",
+    changeType: "M",
+    addedLines: 8,
+    deletedLines: 2,
+    latestCommit: {
+      hash: "aaaaaaaa",
+      shortHash: "aaaaaaa",
+      authoredAt: "2026-07-24T09:30:00+09:00",
+      subject: "Refine research plan"
+    }
+  };
+  const working: GitWorkspaceChange = {
+    path: "Notes/Research.md",
+    indexStatus: " ",
+    workTreeStatus: "M",
+    untracked: false,
+    conflicted: false,
+    addedLines: 3,
+    deletedLines: 1
+  };
+
+  it("merges committed and working changes into one review item", () => {
+    const items = mergeReviewInboxItems([committed], [working], (path) => path);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      path: "Notes/Research.md",
+      vaultPath: "Notes/Research.md",
+      addedLines: 11,
+      deletedLines: 3,
+      committedChange: { changeType: "M" },
+      workspaceChange: { workTreeStatus: "M" }
+    });
+  });
+
+  it("excludes backup folders by normalized Vault-relative path", () => {
+    const exclusions = normalizeReviewExcludedPaths(["backup/\nBackups", ".trash"]);
+    expect(exclusions).toEqual(["backup", "backups", ".trash"]);
+    expect(isReviewPathExcluded("backup/2026/Note.md", exclusions)).toBe(true);
+    expect(isReviewPathExcluded("Projects/backup-plan.md", exclusions)).toBe(false);
+  });
+
+  it("groups attention, working, recent, and older changes in review order", () => {
+    const base = mergeReviewInboxItems([committed], [working], (path) => path)[0]!;
+    const conflict = {
+      ...base,
+      path: "Notes/Conflict.md",
+      workspaceChange: { ...working, path: "Notes/Conflict.md", conflicted: true }
+    };
+    const recent: ReviewInboxItem = {
+      ...base,
+      path: "Notes/Recent.md",
+      vaultPath: "Notes/Recent.md",
+      latestCommit: {
+        ...committed.latestCommit!,
+        authoredAt: "2026-07-22T09:30:00+09:00"
+      }
+    };
+    delete recent.workspaceChange;
+    const older: ReviewInboxItem = {
+      ...recent,
+      path: "Notes/Older.md",
+      vaultPath: "Notes/Older.md",
+      latestCommit: {
+        ...committed.latestCommit!,
+        authoredAt: "2026-06-01T09:30:00+09:00"
+      }
+    };
+    expect(
+      groupReviewInboxItems(
+        [older, recent, base, conflict],
+        new Date("2026-07-24T12:00:00+09:00")
+      ).map((group) => group.key)
+    ).toEqual(["attention", "working", "recent", "older"]);
+    expect(reviewInboxItemMatchesFilter(base, "working", false)).toBe(true);
+    expect(reviewInboxItemMatchesFilter(base, "pending", true)).toBe(false);
+    expect(reviewInboxItemMatchesFilter(base, "snoozed", true)).toBe(true);
+  });
+
+  it("parses rename-safe committed paths and latest commit metadata", () => {
+    const changes = parseCommittedNameStatus(
+      "M\0Notes/Current.md\0R100\0Notes/Old.md\0Notes/New.md\0"
+    );
+    expect(changes).toEqual([
+      expect.objectContaining({ path: "Notes/Current.md", changeType: "M" }),
+      expect.objectContaining({
+        path: "Notes/New.md",
+        originalPath: "Notes/Old.md",
+        changeType: "R"
+      })
+    ]);
+
+    const log = "\u001eaaaaaaaa\u001faaaaaaa\u001f2026-07-24T09:30:00+09:00\u001fUpdate note\u001d\nM\tNotes/Current.md\n";
+    expect(parseLatestCommitByPath(log).get("Notes/Current.md")).toEqual({
+      hash: "aaaaaaaa",
+      shortHash: "aaaaaaa",
+      authoredAt: "2026-07-24T09:30:00+09:00",
+      subject: "Update note"
+    });
   });
 });

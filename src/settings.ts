@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type GitNoteHistoryPlugin from "./main";
 import type { GitNoteHistorySettings } from "./models";
+import { normalizeReviewExcludedPaths } from "./review/review-inbox";
 
 export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
   gitExecutable: "git",
@@ -11,7 +12,8 @@ export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
   defaultDetailMode: "side-by-side",
   density: "comfortable",
   ignoreWhitespace: false,
-  showCommitStats: true
+  showCommitStats: true,
+  reviewExcludedPaths: ["backup", "backups", ".trash", ".obsidian", "node_modules"]
 };
 
 export class GitNoteHistorySettingTab extends PluginSettingTab {
@@ -46,6 +48,20 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.repositoryRoot = value.trim();
             await this.plugin.savePluginData();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("复查收件箱排除目录")
+      .setDesc("每行一个 Vault 相对目录；backup、插件配置和回收站等内容不会进入收件箱。")
+      .addTextArea((text) =>
+        text
+          .setPlaceholder("backup\n.trash")
+          .setValue(this.plugin.settings.reviewExcludedPaths.join("\n"))
+          .onChange(async (value) => {
+            this.plugin.settings.reviewExcludedPaths = normalizeReviewExcludedPaths([value]);
+            await this.plugin.savePluginData();
+            this.plugin.refreshOpenViews();
           })
       );
 
