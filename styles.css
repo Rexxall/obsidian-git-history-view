@@ -3246,3 +3246,26 @@ button.git-note-history-adjacent-button {
     height: min(60vh, 540px);
   }
 }
+
+/* v0.4.6 focused side-by-side changes */
+.git-note-history-side-omitted {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  padding: 3px 12px;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--background-secondary) 62%, transparent);
+  font-family: var(--font-interface);
+  font-size: 10px;
+  text-align: center;
+}
+
+.git-note-history-side-omitted::before,
+.git-note-history-side-omitted::after {
+  height: 1px;
+  flex: 1 1 auto;
+  background: var(--background-modifier-border);
+  content: "";
+}
