@@ -82,7 +82,8 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
         dropdown
           .addOption("side-by-side", "并排对比")
           .addOption("unified", "统一 Diff")
-          .addOption("preview", "Markdown 预览")
+          .addOption("rendered", "阅读式改动")
+          .addOption("preview", "Markdown 双预览")
           .addOption("semantic", "Markdown 语义摘要")
           .addOption("impact", "链接关系影响")
           .setValue(this.plugin.settings.defaultDetailMode)

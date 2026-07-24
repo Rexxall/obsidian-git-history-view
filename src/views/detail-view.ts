@@ -25,6 +25,11 @@ import {
 } from "../analysis/link-impact";
 import { renderSideBySideDiff, renderUnifiedDiff } from "../ui/diff-renderer";
 import { buildChangeMap, type ChangeMapItem } from "../diff/change-map";
+import {
+  buildRenderedDiff,
+  stripFrontmatter,
+  type RenderedDiffSection
+} from "../diff/rendered-diff";
 import { RestorePreviewModal } from "../ui/restore-preview-modal";
 import { RestoreHistoryModal } from "../ui/restore-history-modal";
 import { BlockAgeModal } from "../ui/block-age-modal";
@@ -105,6 +110,10 @@ export class GitHistoryDetailView extends ItemView {
   private baseContent = "";
   private targetContent = "";
   private mode: DetailMode = "side-by-side";
+  private lastTextDiffMode: Extract<DetailMode, "side-by-side" | "unified"> = "side-by-side";
+  private lastImpactMode: Extract<DetailMode, "semantic" | "impact"> = "semantic";
+  private ignoreFrontmatter = false;
+  private syncPreviewScroll = true;
   private loading = false;
   private error = "";
   private generation = 0;
@@ -142,6 +151,8 @@ export class GitHistoryDetailView extends ItemView {
     }
     this.request = request;
     this.mode = request.initialMode ?? this.plugin.settings.defaultDetailMode;
+    if (this.mode === "side-by-side" || this.mode === "unified") this.lastTextDiffMode = this.mode;
+    if (this.mode === "semantic" || this.mode === "impact") this.lastImpactMode = this.mode;
     await this.loadComparison();
   }
 
@@ -246,30 +257,21 @@ export class GitHistoryDetailView extends ItemView {
     this.renderVersionWorkbench(header);
 
     const controls = header.createDiv({ cls: "git-note-history-detail-controls" });
-    const modes = controls.createDiv({ cls: "git-note-history-detail-mode-group" });
-    this.addTaskButton(modes, ["side-by-side", "unified"], "side-by-side", "读变化", "file-diff");
-    this.addModeButton(modes, "preview", "预览", "book-open");
-    this.addTaskButton(modes, ["semantic", "impact"], "semantic", "看影响", "list-tree");
-    const viewOptions = modes.createEl("button", { attr: { "aria-label": "视图选项" } });
-    setIcon(viewOptions.createSpan(), "ellipsis");
-    viewOptions.addEventListener("click", (event) => this.openViewOptions(event));
-    if (!this.loading && this.changeMap.length > 0) this.renderChangeNavigator(controls);
+    const viewControls = controls.createDiv({ cls: "git-note-history-detail-view-controls" });
+    const modes = viewControls.createDiv({
+      cls: "git-note-history-detail-mode-group",
+      attr: { "aria-label": "查看方式" }
+    });
+    this.addTaskButton(modes, ["side-by-side", "unified"], this.lastTextDiffMode, "对比", "git-compare-arrows");
+    this.addModeButton(modes, "rendered", "阅读", "book-open");
+    this.addModeButton(modes, "preview", "双预览", "columns-2");
+    this.addTaskButton(modes, ["semantic", "impact"], this.lastImpactMode, "影响", "list-tree");
+    this.renderContextControls(viewControls);
+    const isRawDiffMode = this.mode === "side-by-side" || this.mode === "unified";
+    if (!this.loading && isRawDiffMode && !this.ignoreFrontmatter && this.changeMap.length > 0) {
+      this.renderChangeNavigator(controls);
+    }
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
-
-    const whitespace = actions.createEl("button", {
-      cls: this.plugin.settings.ignoreWhitespace ? "is-active" : "",
-      attr: {
-        "aria-label": "忽略空格变化",
-        "aria-pressed": String(this.plugin.settings.ignoreWhitespace)
-      }
-    });
-    setIcon(whitespace.createSpan(), "space");
-    whitespace.createSpan({ text: "忽略空格" });
-    whitespace.addEventListener("click", async () => {
-      this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
-      await this.plugin.savePluginData();
-      this.render();
-    });
 
     const moreActions = actions.createEl("button", {
       attr: { "aria-label": "更多操作" }
@@ -295,6 +297,7 @@ export class GitHistoryDetailView extends ItemView {
     }
 
     const effectiveMode: DetailMode = this.mode === "side-by-side" && this.narrowLayout ? "unified" : this.mode;
+    const comparison = this.comparisonContents();
     if (this.mode === "side-by-side" && this.narrowLayout) {
       container.createDiv({
         cls: "git-note-history-responsive-note",
@@ -313,10 +316,11 @@ export class GitHistoryDetailView extends ItemView {
       : container;
     if (showChangeMap) this.renderChangeMap(shell);
     const body = shell.createDiv({ cls: `git-note-history-review-body mode-${effectiveMode}` });
-    if (effectiveMode === "unified") this.renderUnified(body);
+    if (effectiveMode === "unified") this.renderUnified(body, comparison.base, comparison.target);
     else if (effectiveMode === "side-by-side") {
-      renderSideBySideDiff(body, this.baseContent, this.targetContent, this.plugin.settings.ignoreWhitespace);
-    } else if (effectiveMode === "preview") this.renderPreview(body);
+      renderSideBySideDiff(body, comparison.base, comparison.target, this.plugin.settings.ignoreWhitespace);
+    } else if (effectiveMode === "rendered") this.renderRenderedDiff(body);
+    else if (effectiveMode === "preview") this.renderPreview(body);
     else if (effectiveMode === "semantic") renderSemanticDiff(body, buildSemanticDiff(this.baseContent, this.targetContent));
     else this.renderLinkImpact(body, buildLinkImpact(this.baseContent, this.targetContent));
   }
@@ -533,9 +537,7 @@ export class GitHistoryDetailView extends ItemView {
     setIcon(button.createSpan(), icon);
     button.createSpan({ text: label });
     button.addEventListener("click", () => {
-      this.mode = targetMode;
-      if (this.file) void this.plugin.rememberDetailMode(this.file, targetMode);
-      this.render();
+      this.setDetailMode(targetMode);
     });
   }
 
@@ -547,32 +549,102 @@ export class GitHistoryDetailView extends ItemView {
     setIcon(button.createSpan(), icon);
     button.createSpan({ text: label });
     button.addEventListener("click", () => {
-      this.mode = mode;
-      if (this.file) void this.plugin.rememberDetailMode(this.file, mode);
-      this.render();
+      this.setDetailMode(mode);
     });
   }
 
-  private openViewOptions(event: MouseEvent): void {
-    const menu = new Menu();
-    for (const [mode, label, icon] of [
-      ["side-by-side", "并排词级 Diff", "columns-2"],
-      ["unified", "统一 Diff", "list-minus"],
-      ["preview", "Markdown 双预览", "book-open"],
-      ["semantic", "Markdown 语义影响", "list-tree"],
-      ["impact", "链接关系影响", "git-fork"]
-    ] as const) {
-      menu.addItem((item) => item
-        .setTitle(label)
-        .setIcon(icon)
-        .setChecked(this.mode === mode)
-        .onClick(() => {
-          this.mode = mode;
-          if (this.file) void this.plugin.rememberDetailMode(this.file, mode);
+  private setDetailMode(mode: DetailMode): void {
+    this.mode = mode;
+    if (mode === "side-by-side" || mode === "unified") this.lastTextDiffMode = mode;
+    if (mode === "semantic" || mode === "impact") this.lastImpactMode = mode;
+    if (this.file) void this.plugin.rememberDetailMode(this.file, mode);
+    this.render();
+  }
+
+  private renderContextControls(container: HTMLElement): void {
+    const context = container.createDiv({
+      cls: "git-note-history-detail-context-group",
+      attr: { "aria-label": "当前视图选项" }
+    });
+    if (this.mode === "side-by-side" || this.mode === "unified") {
+      this.addModeButton(context, "side-by-side", "并排", "columns-2");
+      this.addModeButton(context, "unified", "单栏", "rows-3");
+      this.addToggleButton(
+        context,
+        "忽略空格",
+        "space",
+        this.plugin.settings.ignoreWhitespace,
+        async () => {
+          this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
+          await this.plugin.savePluginData();
           this.render();
-        }));
+        }
+      );
+      this.addFrontmatterToggle(context);
+      return;
     }
-    menu.showAtMouseEvent(event);
+    if (this.mode === "rendered") {
+      this.addToggleButton(
+        context,
+        "忽略空格",
+        "space",
+        this.plugin.settings.ignoreWhitespace,
+        async () => {
+          this.plugin.settings.ignoreWhitespace = !this.plugin.settings.ignoreWhitespace;
+          await this.plugin.savePluginData();
+          this.render();
+        }
+      );
+      this.addFrontmatterToggle(context);
+      return;
+    }
+    if (this.mode === "preview") {
+      this.addToggleButton(
+        context,
+        "同步滚动",
+        "panel-top-open",
+        this.syncPreviewScroll,
+        () => {
+          this.syncPreviewScroll = !this.syncPreviewScroll;
+          this.render();
+        }
+      );
+      return;
+    }
+    this.addModeButton(context, "semantic", "结构", "list-tree");
+    this.addModeButton(context, "impact", "链接", "git-fork");
+  }
+
+  private addFrontmatterToggle(container: HTMLElement): void {
+    this.addToggleButton(
+      container,
+      "忽略属性",
+      "braces",
+      this.ignoreFrontmatter,
+      () => {
+        this.ignoreFrontmatter = !this.ignoreFrontmatter;
+        this.render();
+      }
+    );
+  }
+
+  private addToggleButton(
+    container: HTMLElement,
+    label: string,
+    icon: string,
+    active: boolean,
+    onClick: () => void | Promise<void>
+  ): void {
+    const button = container.createEl("button", {
+      cls: active ? "is-active" : "",
+      attr: {
+        "aria-label": label,
+        "aria-pressed": String(active)
+      }
+    });
+    setIcon(button.createSpan(), icon);
+    button.createSpan({ text: label });
+    button.addEventListener("click", () => void onClick());
   }
 
   private openActionOptions(event: MouseEvent): void {
@@ -689,9 +761,21 @@ export class GitHistoryDetailView extends ItemView {
     anchor.focus({ preventScroll: true });
   }
 
-  private renderUnified(container: HTMLElement): void {
-    const canRestoreHunk = this.request?.target.kind === "working" && this.file !== null;
-    renderUnifiedDiff(container, this.baseContent, this.targetContent, {
+  private comparisonContents(): { base: string; target: string } {
+    if (!this.ignoreFrontmatter) {
+      return { base: this.baseContent, target: this.targetContent };
+    }
+    return {
+      base: stripFrontmatter(this.baseContent),
+      target: stripFrontmatter(this.targetContent)
+    };
+  }
+
+  private renderUnified(container: HTMLElement, baseContent: string, targetContent: string): void {
+    const canRestoreHunk = !this.ignoreFrontmatter
+      && this.request?.target.kind === "working"
+      && this.file !== null;
+    renderUnifiedDiff(container, baseContent, targetContent, {
       ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
       ...(canRestoreHunk
         ? {
@@ -705,18 +789,124 @@ export class GitHistoryDetailView extends ItemView {
     });
   }
 
+  private renderRenderedDiff(container: HTMLElement): void {
+    if (!this.file) return;
+    const reader = container.createDiv({ cls: "git-note-history-reader" });
+    const intro = reader.createDiv({ cls: "git-note-history-reader-intro" });
+    const legend = intro.createDiv({ cls: "git-note-history-reader-legend" });
+    legend.createSpan({ cls: "is-added", text: "新增" });
+    legend.createSpan({ cls: "is-removed", text: "删除" });
+    intro.createSpan({
+      cls: "git-note-history-reader-hint",
+      text: "按排版后的内容阅读改动；代码细节请切换到「对比」。"
+    });
+
+    const sections = buildRenderedDiff(this.baseContent, this.targetContent, {
+      ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
+      ignoreFrontmatter: this.ignoreFrontmatter
+    });
+    if (sections.every((section) => section.kind === "unchanged")) {
+      const empty = reader.createDiv({ cls: "git-note-history-reader-empty" });
+      setIcon(empty.createSpan(), "circle-check-big");
+      empty.createSpan({ text: "两个版本的可读内容一致" });
+      return;
+    }
+
+    const document = reader.createDiv({
+      cls: "git-note-history-reader-document markdown-preview-view"
+    });
+    for (const section of sections) this.renderRenderedSection(document, section);
+  }
+
+  private renderRenderedSection(container: HTMLElement, section: RenderedDiffSection): void {
+    if (section.kind === "unchanged") {
+      this.renderMarkdownBlocks(
+        container.createDiv({ cls: "git-note-history-reader-unchanged" }),
+        section.after
+      );
+      return;
+    }
+    const change = container.createEl("section", {
+      cls: `git-note-history-reader-change is-${section.kind}`
+    });
+    if (section.kind === "changed" || section.kind === "removed") {
+      const before = change.createDiv({ cls: "git-note-history-reader-version is-before" });
+      before.createDiv({
+        cls: "git-note-history-reader-change-label",
+        text: section.kind === "changed" ? "修改前" : "已删除"
+      });
+      this.renderMarkdownBlocks(before, section.before);
+    }
+    if (section.kind === "changed" || section.kind === "added") {
+      const after = change.createDiv({ cls: "git-note-history-reader-version is-after" });
+      after.createDiv({
+        cls: "git-note-history-reader-change-label",
+        text: section.kind === "changed" ? "修改后" : "新增"
+      });
+      this.renderMarkdownBlocks(after, section.after);
+    }
+  }
+
+  private renderMarkdownBlocks(container: HTMLElement, blocks: RenderedDiffSection["after"]): void {
+    if (!this.file || blocks.length === 0) return;
+    const content = blocks.map((block) => block.content).join("\n\n");
+    const body = container.createDiv({ cls: "git-note-history-rendered-markdown" });
+    void MarkdownRenderer.render(this.app, content, body, this.file.path, this);
+  }
+
   private renderPreview(container: HTMLElement): void {
     if (!this.file || !this.request) return;
     const preview = container.createDiv({ cls: "git-note-history-preview-pair" });
-    const left = preview.createDiv({ cls: "git-note-history-preview-column markdown-preview-view" });
-    left.createDiv({ cls: "git-note-history-preview-label", text: versionLabel(this.request.base) });
-    const leftBody = left.createDiv();
-    void MarkdownRenderer.render(this.app, this.baseContent, leftBody, this.file.path, this);
+    const leftBody = this.renderPreviewPane(
+      preview,
+      "base",
+      "基准版本",
+      this.request.base,
+      this.baseContent
+    );
+    const rightBody = this.renderPreviewPane(
+      preview,
+      "target",
+      "对比版本",
+      this.request.target,
+      this.targetContent
+    );
+    let syncing = false;
+    const synchronize = (source: HTMLElement, target: HTMLElement): void => {
+      if (!this.syncPreviewScroll || syncing) return;
+      const sourceRange = source.scrollHeight - source.clientHeight;
+      const targetRange = target.scrollHeight - target.clientHeight;
+      if (sourceRange <= 0 || targetRange <= 0) return;
+      syncing = true;
+      target.scrollTop = (source.scrollTop / sourceRange) * targetRange;
+      window.requestAnimationFrame(() => {
+        syncing = false;
+      });
+    };
+    leftBody.addEventListener("scroll", () => synchronize(leftBody, rightBody));
+    rightBody.addEventListener("scroll", () => synchronize(rightBody, leftBody));
+  }
 
-    const right = preview.createDiv({ cls: "git-note-history-preview-column markdown-preview-view" });
-    right.createDiv({ cls: "git-note-history-preview-label", text: versionLabel(this.request.target) });
-    const rightBody = right.createDiv();
-    void MarkdownRenderer.render(this.app, this.targetContent, rightBody, this.file.path, this);
+  private renderPreviewPane(
+    container: HTMLElement,
+    side: "base" | "target",
+    role: string,
+    reference: VersionReference,
+    content: string
+  ): HTMLElement {
+    const pane = container.createEl("section", {
+      cls: `git-note-history-preview-pane is-${side}`
+    });
+    const header = pane.createDiv({ cls: "git-note-history-preview-header" });
+    header.createSpan({ cls: "git-note-history-preview-role", text: role });
+    const identity = header.createDiv({ cls: "git-note-history-preview-identity" });
+    identity.createSpan({ cls: "git-note-history-preview-title", text: versionTitle(reference) });
+    identity.createSpan({ cls: "git-note-history-preview-meta", text: versionMeta(reference) });
+    const body = pane.createDiv({
+      cls: "git-note-history-preview-document markdown-preview-view"
+    });
+    void MarkdownRenderer.render(this.app, content, body, this.file!.path, this);
+    return body;
   }
 
   private renderLinkImpact(container: HTMLElement, impact: LinkImpact): void {
@@ -996,17 +1186,15 @@ export class GitHistoryDetailView extends ItemView {
       return;
     }
     const modeByKey: Record<string, DetailMode> = {
-      "1": "side-by-side",
-      "2": "unified",
+      "1": this.lastTextDiffMode,
+      "2": "rendered",
       "3": "preview",
-      "4": "semantic",
-      "5": "impact"
+      "4": this.lastImpactMode
     };
     const mode = modeByKey[event.key];
     if (mode) {
       event.preventDefault();
-      this.mode = mode;
-      this.render();
+      this.setDetailMode(mode);
     }
   }
 
