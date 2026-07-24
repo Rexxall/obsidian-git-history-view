@@ -8,6 +8,8 @@ import type {
   GitNoteHistorySettings,
   GitRepositoryContext,
   PersistedPluginData,
+  ReviewCommitSummary,
+  ReviewInboxCheckpoint,
   RestoreReceipt,
   UndoSnapshot
 } from "./models";
@@ -41,6 +43,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private undoStack: UndoSnapshot[] = [];
   private restoreReceipts: RestoreReceipt[] = [];
   private fileReviewStates: Record<string, FileReviewState> = {};
+  private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
 
   async onload(): Promise<void> {
     await this.loadPluginData();
@@ -79,7 +82,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
       void this.activateHistoryView(this.app.workspace.getActiveFile());
     });
-    this.addRibbonIcon("list-checks", "查看未提交笔记", () => {
+    this.addRibbonIcon("list-checks", "打开复查收件箱", () => {
       void this.activateWorkspaceReview();
     });
 
@@ -96,7 +99,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "open-git-workspace-review",
-      name: "打开未提交笔记面板",
+      name: "打开复查收件箱",
       callback: () => void this.activateWorkspaceReview()
     });
 
@@ -383,6 +386,55 @@ export default class GitNoteHistoryPlugin extends Plugin {
     await this.savePluginData();
   }
 
+  getReviewInboxCheckpoint(repositoryRoot: string): ReviewInboxCheckpoint | undefined {
+    return this.reviewInboxCheckpoints[repositoryRoot];
+  }
+
+  async setReviewInboxCheckpoint(repositoryRoot: string, commitHash: string): Promise<void> {
+    if (commitHash) {
+      this.reviewInboxCheckpoints[repositoryRoot] = {
+        commitHash,
+        reviewedAt: new Date().toISOString()
+      };
+    } else {
+      delete this.reviewInboxCheckpoints[repositoryRoot];
+    }
+    await this.savePluginData();
+  }
+
+  async markInboxItemReviewed(
+    context: GitRepositoryContext,
+    latestCommit?: ReviewCommitSummary,
+    workingFingerprint?: string
+  ): Promise<void> {
+    this.updateInboxItemReviewed(context, latestCommit, workingFingerprint);
+    await this.savePluginData();
+  }
+
+  async markInboxItemsReviewed(
+    repositoryRoot: string,
+    headHash: string,
+    items: Array<{
+      context: GitRepositoryContext;
+      latestCommit?: ReviewCommitSummary;
+      workingFingerprint?: string;
+    }>
+  ): Promise<void> {
+    const reviewedAt = new Date().toISOString();
+    if (headHash) this.reviewInboxCheckpoints[repositoryRoot] = { commitHash: headHash, reviewedAt };
+    for (const item of items) {
+      this.updateInboxItemReviewed(item.context, item.latestCommit, item.workingFingerprint, reviewedAt);
+    }
+    await this.savePluginData();
+  }
+
+  async snoozeInboxItem(context: GitRepositoryContext, until: string | null): Promise<void> {
+    const state = this.getFileReviewState(context);
+    if (until) state.snoozedUntil = until;
+    else delete state.snoozedUntil;
+    await this.savePluginData();
+  }
+
   async clearReviewCheckpoint(context: GitRepositoryContext): Promise<void> {
     const state = this.getFileReviewState(context);
     delete state.reviewCheckpoint;
@@ -416,14 +468,22 @@ export default class GitNoteHistoryPlugin extends Plugin {
       settings: this.settings,
       undoStack: this.undoStack,
       restoreReceipts: this.restoreReceipts,
-      fileReviewStates: this.fileReviewStates
+      fileReviewStates: this.fileReviewStates,
+      reviewInboxCheckpoints: this.reviewInboxCheckpoints
     };
     await this.saveData(data);
   }
 
   private async loadPluginData(): Promise<void> {
     const data = (await this.loadData()) as PersistedPluginData | null;
-    this.settings = { ...DEFAULT_SETTINGS, ...(data?.settings ?? {}) };
+    const loadedSettings = data?.settings ?? {};
+    this.settings = {
+      ...DEFAULT_SETTINGS,
+      ...loadedSettings,
+      reviewExcludedPaths: Array.isArray(loadedSettings.reviewExcludedPaths)
+        ? loadedSettings.reviewExcludedPaths
+        : DEFAULT_SETTINGS.reviewExcludedPaths
+    };
     const legacy = data?.undoSnapshot;
     this.undoStack = (data?.undoStack ?? (legacy ? [legacy] : [])).map((snapshot, index) => ({
       ...snapshot,
@@ -432,9 +492,32 @@ export default class GitNoteHistoryPlugin extends Plugin {
     }));
     this.restoreReceipts = data?.restoreReceipts ?? [];
     this.fileReviewStates = data?.fileReviewStates ?? {};
+    this.reviewInboxCheckpoints = data?.reviewInboxCheckpoints ?? {};
   }
 
   private reviewStateKey(context: GitRepositoryContext): string {
     return `${context.repositoryRoot}\u001f${context.repositoryRelativePath}`;
+  }
+
+  private updateInboxItemReviewed(
+    context: GitRepositoryContext,
+    latestCommit?: ReviewCommitSummary,
+    workingFingerprint?: string,
+    reviewedAt = new Date().toISOString()
+  ): void {
+    const state = this.getFileReviewState(context);
+    if (latestCommit) {
+      state.reviewCheckpoint = {
+        commitHash: latestCommit.hash,
+        historicalPath: context.repositoryRelativePath,
+        reviewedAt,
+        ...(workingFingerprint ? { workingFingerprint } : {})
+      };
+    }
+    if (workingFingerprint) {
+      state.reviewedWorkingFingerprint = workingFingerprint;
+      state.reviewedWorkingAt = reviewedAt;
+    }
+    delete state.snoozedUntil;
   }
 }

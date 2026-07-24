@@ -56,6 +56,43 @@ export interface GitWorkspaceReview {
   changes: GitWorkspaceChange[];
 }
 
+export interface ReviewCommitSummary {
+  hash: string;
+  shortHash: string;
+  authoredAt: string;
+  subject: string;
+}
+
+export interface GitCommittedChange extends GitLineStats {
+  path: string;
+  originalPath?: string;
+  changeType: string;
+  latestCommit?: ReviewCommitSummary;
+}
+
+export interface ReviewInboxItem extends GitLineStats {
+  path: string;
+  vaultPath: string;
+  originalPath?: string;
+  committedChange?: GitCommittedChange;
+  workspaceChange?: GitWorkspaceChange;
+  latestCommit?: ReviewCommitSummary;
+}
+
+export interface ReviewInboxSnapshot {
+  context: Omit<GitRepositoryContext, "repositoryRelativePath">;
+  branch: string;
+  headHash: string;
+  baselineHash?: string;
+  baselineValid: boolean;
+  items: ReviewInboxItem[];
+}
+
+export interface ReviewInboxCheckpoint {
+  commitHash: string;
+  reviewedAt: string;
+}
+
 export type DetailMode = "unified" | "side-by-side" | "rendered" | "preview" | "semantic" | "impact";
 export type DensityMode = "compact" | "comfortable";
 
@@ -78,6 +115,9 @@ export interface FileReviewState {
   bookmarks: Record<string, VersionBookmark>;
   detailMode?: DetailMode;
   reviewCheckpoint?: ReviewCheckpoint;
+  reviewedWorkingFingerprint?: string;
+  reviewedWorkingAt?: string;
+  snoozedUntil?: string;
 }
 
 export interface ReviewCheckpoint {
@@ -110,6 +150,7 @@ export interface GitNoteHistorySettings {
   density: DensityMode;
   ignoreWhitespace: boolean;
   showCommitStats: boolean;
+  reviewExcludedPaths: string[];
 }
 
 export interface UndoSnapshot {
@@ -151,6 +192,7 @@ export interface PersistedPluginData {
   undoStack?: UndoSnapshot[];
   restoreReceipts?: RestoreReceipt[];
   fileReviewStates?: Record<string, FileReviewState>;
+  reviewInboxCheckpoints?: Record<string, ReviewInboxCheckpoint>;
 }
 
 export type VersionReference =

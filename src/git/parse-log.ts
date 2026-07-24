@@ -1,7 +1,9 @@
 import type {
+  GitCommittedChange,
   GitCommitVersion,
   GitFileStatus,
   GitLineStats,
+  ReviewCommitSummary,
   GitWorkspaceChange
 } from "../models";
 
@@ -217,4 +219,64 @@ export function parseWorkspaceStatus(raw: string): GitWorkspaceChange[] {
   }
 
   return changes;
+}
+
+export function parseCommittedNameStatus(raw: string): GitCommittedChange[] {
+  const records = raw.split("\0");
+  const changes: GitCommittedChange[] = [];
+
+  for (let index = 0; index < records.length; index += 1) {
+    const status = records[index]?.trim();
+    if (!status) continue;
+
+    if (status.startsWith("R") || status.startsWith("C")) {
+      const originalPath = records[index + 1];
+      const path = records[index + 2];
+      index += 2;
+      if (!originalPath || !path) continue;
+      changes.push({
+        path,
+        originalPath,
+        changeType: status.charAt(0),
+        addedLines: 0,
+        deletedLines: 0
+      });
+      continue;
+    }
+
+    const path = records[index + 1];
+    index += 1;
+    if (!path) continue;
+    changes.push({
+      path,
+      changeType: status.charAt(0),
+      addedLines: 0,
+      deletedLines: 0
+    });
+  }
+
+  return changes;
+}
+
+export function parseLatestCommitByPath(raw: string): Map<string, ReviewCommitSummary> {
+  const result = new Map<string, ReviewCommitSummary>();
+
+  for (const rawRecord of raw.split(RECORD_SEPARATOR)) {
+    const record = rawRecord.replace(/^\r?\n/, "").trimEnd();
+    if (!record) continue;
+    const bodySeparator = record.indexOf(BODY_SEPARATOR);
+    const header = bodySeparator >= 0 ? record.slice(0, bodySeparator) : record;
+    const body = bodySeparator >= 0 ? record.slice(bodySeparator + BODY_SEPARATOR.length) : "";
+    const [hash, shortHash, authoredAt, subject = ""] = header.split(FIELD_SEPARATOR);
+    if (!hash || !shortHash || !authoredAt) continue;
+    const summary: ReviewCommitSummary = { hash, shortHash, authoredAt, subject };
+
+    for (const line of body.replace(/^\r?\n/, "").split(/\r?\n/)) {
+      const entry = parseNameStatusLine(line);
+      if (!entry) continue;
+      if (!result.has(entry.path)) result.set(entry.path, summary);
+    }
+  }
+
+  return result;
 }
