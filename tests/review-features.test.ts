@@ -18,6 +18,12 @@ import {
   expandTimelineLimit,
   limitHistory
 } from "../src/history/timeline-window";
+import {
+  adjacentDistinctVersionReference,
+  adjacentVersionReference,
+  buildVersionSequence,
+  versionReferencePosition
+} from "../src/history/version-navigation";
 import { buildChangeMap } from "../src/diff/change-map";
 import {
   groupWorkspaceChanges,
@@ -213,6 +219,52 @@ describe("timeline window", () => {
     expect(limited.items).toEqual([1, 2, 3]);
     expect(limited.hasMore).toBe(true);
     expect(limitHistory([1, 2, 3], 3).hasMore).toBe(false);
+  });
+});
+
+describe("version navigation", () => {
+  const older = commit("11111111", "2026-07-20T10:00:00+09:00", "Older");
+  const newer = commit("22222222", "2026-07-21T10:00:00+09:00", "Newer");
+  const working = { kind: "working", label: "当前工作区" } as const;
+
+  it("orders commits from oldest to working tree", () => {
+    const sequence = buildVersionSequence([newer, older]);
+    expect(sequence.map((reference) => reference.kind === "working" ? "working" : reference.commit.hash)).toEqual([
+      older.hash,
+      newer.hash,
+      "working"
+    ]);
+  });
+
+  it("moves each side backward and forward without leaving the sequence", () => {
+    const current = { kind: "commit", commit: newer } as const;
+    expect(adjacentVersionReference([newer, older], current, -1)).toMatchObject({
+      kind: "commit",
+      commit: { hash: older.hash }
+    });
+    expect(adjacentVersionReference([newer, older], current, 1)).toEqual(working);
+    expect(adjacentVersionReference([newer, older], working, 1)).toBeNull();
+    expect(versionReferencePosition([newer, older], current)).toEqual({ current: 2, total: 3 });
+  });
+
+  it("skips the version already selected on the other side", () => {
+    const current = { kind: "commit", commit: newer } as const;
+    const occupied = { kind: "commit", commit: older } as const;
+    expect(adjacentDistinctVersionReference(
+      [newer, older],
+      current,
+      -1,
+      occupied
+    )).toBeNull();
+    expect(adjacentDistinctVersionReference(
+      [newer, older],
+      working,
+      -1,
+      current
+    )).toMatchObject({
+      kind: "commit",
+      commit: { hash: older.hash }
+    });
   });
 });
 
