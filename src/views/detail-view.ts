@@ -17,7 +17,11 @@ import type {
   GitCommitVersion,
   VersionReference
 } from "../models";
-import { buildSemanticDiff, renderSemanticDiff } from "../diff/semantic-diff";
+import {
+  buildSemanticDiff,
+  renderSemanticDiff,
+  renderSemanticOverview
+} from "../diff/semantic-diff";
 import {
   buildLinkImpact,
   type LinkImpact,
@@ -839,8 +843,13 @@ export class GitHistoryDetailView extends ItemView {
     legend.createSpan({ cls: "is-removed", text: "删除" });
     intro.createSpan({
       cls: "git-note-history-reader-hint",
-      text: "按排版后的内容阅读改动；代码细节请切换到「对比」。"
+      text: "按排版后的内容阅读改动；展开结构变化可检查属性、移动、任务和特殊区块。"
     });
+
+    const semanticChanges = buildSemanticDiff(this.baseContent, this.targetContent, {
+      ignoreFrontmatter: this.ignoreFrontmatter
+    });
+    renderSemanticOverview(reader, semanticChanges, true);
 
     const sections = buildRenderedDiff(this.baseContent, this.targetContent, {
       ignoreWhitespace: this.plugin.settings.ignoreWhitespace,

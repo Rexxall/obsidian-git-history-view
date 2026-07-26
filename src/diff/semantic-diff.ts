@@ -1,89 +1,140 @@
-export interface SemanticChange {
-  group: "Properties" | "结构" | "任务" | "链接";
-  kind: "added" | "removed" | "changed";
-  label: string;
-  before?: string;
-  after?: string;
-}
+import {
+  buildStructuredMarkdownDiff,
+  semanticGroupOrder,
+  type SemanticChange,
+  type SemanticChangeKind,
+  type SemanticDiffOptions
+} from "./structured-markdown";
 
-function parseFrontmatter(text: string): Map<string, string> {
-  const result = new Map<string, string>();
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!match?.[1]) return result;
-  for (const line of match[1].split(/\r?\n/)) {
-    const property = /^([^:#][^:]*):\s*(.*)$/.exec(line);
-    if (property?.[1]) result.set(property[1].trim(), property[2]?.trim() ?? "");
-  }
-  return result;
-}
+export type {
+  SemanticChange,
+  SemanticChangeDetail,
+  SemanticChangeKind,
+  SemanticDiffOptions,
+  SemanticGroup
+} from "./structured-markdown";
 
-function collect(text: string, pattern: RegExp, valueIndex = 1): Set<string> {
-  const result = new Set<string>();
-  for (const match of text.matchAll(pattern)) {
-    const value = match[valueIndex]?.trim();
-    if (value) result.add(value);
-  }
-  return result;
-}
+const KIND_LABELS: Record<SemanticChangeKind, string> = {
+  added: "新增",
+  removed: "删除",
+  changed: "修改",
+  moved: "移动"
+};
 
-function compareSets(
-  group: SemanticChange["group"],
-  before: Set<string>,
-  after: Set<string>
+const KIND_SYMBOLS: Record<SemanticChangeKind, string> = {
+  added: "+",
+  removed: "−",
+  changed: "↔",
+  moved: "↕"
+};
+
+export function buildSemanticDiff(
+  beforeText: string,
+  afterText: string,
+  options: SemanticDiffOptions = {}
 ): SemanticChange[] {
-  const changes: SemanticChange[] = [];
-  for (const value of before) if (!after.has(value)) changes.push({ group, kind: "removed", label: value });
-  for (const value of after) if (!before.has(value)) changes.push({ group, kind: "added", label: value });
-  return changes;
+  return buildStructuredMarkdownDiff(beforeText, afterText, options);
 }
 
-export function buildSemanticDiff(beforeText: string, afterText: string): SemanticChange[] {
-  const changes: SemanticChange[] = [];
-  const beforeProperties = parseFrontmatter(beforeText);
-  const afterProperties = parseFrontmatter(afterText);
-  const propertyNames = new Set([...beforeProperties.keys(), ...afterProperties.keys()]);
-  for (const name of propertyNames) {
-    const before = beforeProperties.get(name);
-    const after = afterProperties.get(name);
-    if (before === after) continue;
-    const change: SemanticChange = {
-      group: "Properties",
-      kind: before === undefined ? "added" : after === undefined ? "removed" : "changed",
-      label: name
-    };
-    if (before !== undefined) change.before = before;
-    if (after !== undefined) change.after = after;
-    changes.push(change);
+function renderLocation(container: HTMLElement, change: SemanticChange): void {
+  const location = container.createDiv({ cls: "git-note-history-semantic-location" });
+  if (change.kind === "moved") {
+    location.createSpan({
+      text: `${change.beforeContext ?? "原位置"} → ${change.afterContext ?? "新位置"}`
+    });
+    return;
   }
+  const line = change.afterLine ?? change.beforeLine;
+  const context = change.afterContext ?? change.beforeContext;
+  if (context) location.createSpan({ text: context });
+  if (line !== undefined) location.createSpan({ text: `第 ${line} 行` });
+}
 
-  changes.push(
-    ...compareSets("结构", collect(beforeText, /^#{1,6}\s+(.+)$/gm), collect(afterText, /^#{1,6}\s+(.+)$/gm)),
-    ...compareSets("任务", collect(beforeText, /^\s*[-*]\s+\[[ xX]\]\s+(.+)$/gm), collect(afterText, /^\s*[-*]\s+\[[ xX]\]\s+(.+)$/gm)),
-    ...compareSets("链接", collect(beforeText, /\[\[([^\]]+)\]\]/g), collect(afterText, /\[\[([^\]]+)\]\]/g))
-  );
+function renderValues(container: HTMLElement, change: SemanticChange): void {
+  if (change.kind === "moved") return;
+  if (change.before === undefined && change.after === undefined) return;
+  const values = container.createDiv({ cls: "git-note-history-semantic-values" });
+  if (change.before !== undefined) {
+    const before = values.createDiv({ cls: "git-note-history-semantic-value is-before" });
+    before.createSpan({ text: "之前" });
+    before.createDiv({ text: change.before });
+  }
+  if (change.after !== undefined) {
+    const after = values.createDiv({ cls: "git-note-history-semantic-value is-after" });
+    after.createSpan({ text: "之后" });
+    after.createDiv({ text: change.after });
+  }
+}
 
-  return changes;
+function renderDetails(container: HTMLElement, change: SemanticChange): void {
+  if (!change.details?.length) return;
+  const details = container.createEl("details", { cls: "git-note-history-semantic-details" });
+  details.createEl("summary", { text: `${change.details.length} 个单元格变化` });
+  const rows = details.createDiv();
+  for (const detail of change.details) {
+    const row = rows.createDiv({ cls: "git-note-history-semantic-detail" });
+    row.createSpan({ text: detail.label });
+    row.createSpan({ cls: "is-before", text: detail.before ?? "无" });
+    row.createSpan({ cls: "is-after", text: detail.after ?? "无" });
+  }
+}
+
+function renderGroups(container: HTMLElement, changes: SemanticChange[]): void {
+  const groups = container.createDiv({ cls: "git-note-history-semantic-groups" });
+  for (const group of semanticGroupOrder()) {
+    const grouped = changes.filter((change) => change.group === group);
+    if (grouped.length === 0) continue;
+    const section = groups.createEl("section", { cls: "git-note-history-semantic-group" });
+    const header = section.createDiv({ cls: "git-note-history-semantic-group-header" });
+    header.createEl("h5", { text: group });
+    header.createSpan({ text: String(grouped.length) });
+    const rows = section.createDiv({ cls: "git-note-history-semantic-rows" });
+    for (const change of grouped) {
+      const row = rows.createDiv({ cls: `git-note-history-semantic-row is-${change.kind}` });
+      const marker = row.createSpan({ cls: "git-note-history-semantic-symbol" });
+      marker.createSpan({ text: KIND_SYMBOLS[change.kind] });
+      marker.createSpan({ text: KIND_LABELS[change.kind] });
+      const content = row.createDiv({ cls: "git-note-history-semantic-content" });
+      content.createDiv({ cls: "git-note-history-semantic-label", text: change.label });
+      renderLocation(content, change);
+      renderValues(content, change);
+      renderDetails(content, change);
+    }
+  }
+}
+
+export function renderSemanticOverview(
+  container: HTMLElement,
+  changes: SemanticChange[],
+  compact = false
+): void {
+  if (changes.length === 0) return;
+  const shell = container.createEl(compact ? "details" : "section", {
+    cls: `git-note-history-semantic-overview ${compact ? "is-compact" : "is-full"}`
+  });
+  const summary = compact
+    ? shell.createEl("summary", { cls: "git-note-history-semantic-summary" })
+    : shell.createDiv({ cls: "git-note-history-semantic-summary" });
+  const title = summary.createDiv({ cls: "git-note-history-semantic-title" });
+  title.createSpan({ text: "结构变化" });
+  title.createSpan({ text: `${changes.length} 项` });
+  const metrics = summary.createDiv({ cls: "git-note-history-semantic-metrics" });
+  for (const kind of ["changed", "moved", "added", "removed"] as const) {
+    const count = changes.filter((change) => change.kind === kind).length;
+    if (count > 0) metrics.createSpan({ cls: `is-${kind}`, text: `${KIND_LABELS[kind]} ${count}` });
+  }
+  renderGroups(shell, changes);
 }
 
 export function renderSemanticDiff(container: HTMLElement, changes: SemanticChange[]): void {
   container.empty();
+  container.addClass("git-note-history-semantic-view");
   if (changes.length === 0) {
-    container.createDiv({ cls: "git-note-history-semantic-empty", text: "没有检测到属性、标题、任务或 Wiki 链接层面的变化。" });
+    container.createDiv({
+      cls: "git-note-history-semantic-empty",
+      text: "没有检测到属性、标题、段落、列表、表格或特殊区块的结构变化。"
+    });
     return;
   }
-
-  for (const group of ["Properties", "结构", "任务", "链接"] as const) {
-    const grouped = changes.filter((change) => change.group === group);
-    if (grouped.length === 0) continue;
-    const section = container.createDiv({ cls: "git-note-history-semantic-group" });
-    section.createEl("h5", { text: group });
-    for (const change of grouped) {
-      const row = section.createDiv({ cls: `git-note-history-semantic-row is-${change.kind}` });
-      row.createSpan({ cls: "git-note-history-semantic-symbol", text: change.kind === "added" ? "+" : change.kind === "removed" ? "−" : "↔" });
-      row.createSpan({ cls: "git-note-history-semantic-label", text: change.label });
-      if (change.kind === "changed") {
-        row.createSpan({ cls: "git-note-history-semantic-value", text: `${change.before ?? ""} → ${change.after ?? ""}` });
-      }
-    }
-  }
+  renderSemanticOverview(container, changes);
 }

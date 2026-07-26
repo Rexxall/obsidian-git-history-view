@@ -87,11 +87,119 @@ describe("Markdown semantic diff", () => {
     const after = `---\nstatus: reviewed\n---\n# New\n- [x] Read [[Paper B]]\n`;
     const changes = buildSemanticDiff(before, after);
     expect(changes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ group: "Properties", kind: "changed", label: "status" }),
-      expect.objectContaining({ group: "结构", kind: "removed", label: "Old" }),
-      expect.objectContaining({ group: "结构", kind: "added", label: "New" }),
+      expect.objectContaining({ group: "属性", kind: "changed", label: "status" }),
+      expect.objectContaining({ group: "标题", kind: "changed", label: "New" }),
+      expect.objectContaining({ group: "任务", kind: "changed", label: "Read [[Paper B]]" }),
       expect.objectContaining({ group: "链接", kind: "removed", label: "Paper A" }),
       expect.objectContaining({ group: "链接", kind: "added", label: "Paper B" })
+    ]));
+  });
+
+  it("compares multiline frontmatter fields without flattening the document", () => {
+    const before = "---\ntags:\n  - research\n  - draft\nstatus: active\n---\n# Note\n";
+    const after = "---\ntags:\n  - research\n  - reviewed\nstatus: active\n---\n# Note\n";
+    const changes = buildSemanticDiff(before, after);
+
+    expect(changes).toEqual([
+      expect.objectContaining({
+        group: "属性",
+        kind: "changed",
+        label: "tags",
+        before: expect.stringContaining("draft"),
+        after: expect.stringContaining("reviewed")
+      })
+    ]);
+    expect(buildSemanticDiff(before, after, { ignoreFrontmatter: true })).toEqual([]);
+  });
+
+  it("treats a renamed heading as one change without repeating its stable paragraph", () => {
+    const before = "# Research plan\n\nStable explanation of the method.\n";
+    const after = "# Study plan\n\nStable explanation of the method.\n";
+    const changes = buildSemanticDiff(before, after);
+
+    expect(changes).toEqual([
+      expect.objectContaining({
+        group: "标题",
+        kind: "changed",
+        before: "H1 · Research plan",
+        after: "H1 · Study plan"
+      })
+    ]);
+    expect(changes.some((change) => change.group === "段落")).toBe(false);
+  });
+
+  it("recognizes reordered list items and task-state evolution", () => {
+    const before = "# Plan\n\n- First step\n- Second step\n- [ ] Submit application\n";
+    const after = "# Plan\n\n- Second step\n- First step\n- [x] Submit application\n";
+    const changes = buildSemanticDiff(before, after);
+
+    expect(changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ group: "列表", kind: "moved" }),
+      expect.objectContaining({
+        group: "任务",
+        kind: "changed",
+        label: "Submit application",
+        before: "待办 · Submit application",
+        after: "已完成 · Submit application"
+      })
+    ]));
+  });
+
+  it("reports table edits at cell level", () => {
+    const before = "# Experiments\n\n| Name | State |\n| --- | --- |\n| A | draft |\n| B | ready |\n";
+    const after = "# Experiments\n\n| Name | State |\n| --- | --- |\n| A | reviewed |\n| B | ready |\n";
+    const changes = buildSemanticDiff(before, after);
+    const table = changes.find((change) => change.group === "表格");
+
+    expect(table).toMatchObject({
+      kind: "changed",
+      label: "表格 · Experiments",
+      details: [
+        {
+          label: "第 1 行 · State",
+          before: "draft",
+          after: "reviewed"
+        }
+      ]
+    });
+  });
+
+  it("separates Callout, code, Mermaid, and formula changes", () => {
+    const before = [
+      "> [!warning] Risk",
+      "> Old warning.",
+      "",
+      "```ts",
+      "const state = 'old';",
+      "```",
+      "",
+      "```mermaid",
+      "graph LR; A-->B;",
+      "```",
+      "",
+      "$$x = 1$$"
+    ].join("\n");
+    const after = [
+      "> [!warning] Risk",
+      "> New warning.",
+      "",
+      "```ts",
+      "const state = 'new';",
+      "```",
+      "",
+      "```mermaid",
+      "graph LR; A-->C;",
+      "```",
+      "",
+      "$$x = 2$$"
+    ].join("\n");
+    const changes = buildSemanticDiff(before, after);
+
+    expect(changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ group: "Callout", kind: "changed", label: "WARNING · Risk" }),
+      expect.objectContaining({ group: "代码", kind: "changed", label: "代码块 · ts" }),
+      expect.objectContaining({ group: "代码", kind: "changed", label: "Mermaid 图" }),
+      expect.objectContaining({ group: "公式", kind: "changed", label: "块级公式" })
     ]));
   });
 });
