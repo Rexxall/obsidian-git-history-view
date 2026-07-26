@@ -20,6 +20,7 @@ import { ConfirmActionModal } from "../ui/confirm-modal";
 import {
   groupReviewInboxItems,
   reviewInboxItemMatchesFilter,
+  reviewInboxPendingStatus,
   type ReviewInboxFilter
 } from "../review/review-inbox";
 import { workspaceNoteLabel } from "../workspace/change-presentation";
@@ -94,12 +95,6 @@ export class GitWorkspaceReviewView extends ItemView {
     for (const source of snapshot.items) {
       const context = this.itemContext(snapshot, source);
       const state = this.plugin.getFileReviewState(context);
-      const committedPending = Boolean(
-        source.committedChange
-          && state.reviewCheckpoint?.commitHash
-            !== (source.latestCommit?.hash ?? snapshot.headHash)
-      );
-      let workingPending = Boolean(source.workspaceChange);
       let workingFingerprint: string | undefined;
 
       if (source.workspaceChange) {
@@ -112,10 +107,14 @@ export class GitWorkspaceReviewView extends ItemView {
             `missing:${change.indexStatus}${change.workTreeStatus}:${source.vaultPath}`
           );
         }
-        workingPending = state.reviewedWorkingFingerprint !== workingFingerprint
-          && state.reviewCheckpoint?.workingFingerprint !== workingFingerprint;
       }
 
+      const { committedPending, workingPending, snoozed } = reviewInboxPendingStatus(
+        source,
+        state,
+        snapshot.headHash,
+        workingFingerprint
+      );
       if (!committedPending && !workingPending) continue;
       const item: ReviewInboxItem = { ...source };
       if (!committedPending) {
@@ -126,7 +125,6 @@ export class GitWorkspaceReviewView extends ItemView {
       const stats = [item.committedChange, item.workspaceChange].filter(Boolean);
       item.addedLines = stats.reduce((sum, change) => sum + (change?.addedLines ?? 0), 0);
       item.deletedLines = stats.reduce((sum, change) => sum + (change?.deletedLines ?? 0), 0);
-      const snoozed = Boolean(state.snoozedUntil && new Date(state.snoozedUntil) > new Date());
       pending.push({ item, ...(workingFingerprint ? { workingFingerprint } : {}), snoozed });
     }
     return pending;

@@ -41,8 +41,13 @@ import {
   isReviewPathExcluded,
   mergeReviewInboxItems,
   normalizeReviewExcludedPaths,
-  reviewInboxItemMatchesFilter
+  reviewInboxItemMatchesFilter,
+  reviewInboxPendingStatus
 } from "../src/review/review-inbox";
+import {
+  markReviewInboxItemState,
+  setReviewInboxItemSnoozed
+} from "../src/review/review-state";
 import {
   parseCommittedNameStatus,
   parseLatestCommitByPath
@@ -499,5 +504,52 @@ describe("full-vault review inbox", () => {
       authoredAt: "2026-07-24T09:30:00+09:00",
       subject: "Update note"
     });
+  });
+
+  it("keeps snooze and reviewed state stable across a plugin-data reload", () => {
+    const item = mergeReviewInboxItems([committed], [working], (path) => path)[0]!;
+    const workingFingerprint = contentFingerprint("working content");
+    const state = { bookmarks: {} };
+
+    setReviewInboxItemSnoozed(state, "2026-07-25T12:00:00+09:00");
+    const snoozedState = JSON.parse(JSON.stringify(state));
+    expect(reviewInboxPendingStatus(
+      item,
+      snoozedState,
+      committed.latestCommit!.hash,
+      workingFingerprint,
+      new Date("2026-07-24T12:00:00+09:00")
+    )).toMatchObject({
+      committedPending: true,
+      workingPending: true,
+      snoozed: true
+    });
+
+    markReviewInboxItemState(
+      snoozedState,
+      item.path,
+      committed.latestCommit,
+      workingFingerprint,
+      "2026-07-24T12:05:00+09:00"
+    );
+    const reloadedState = JSON.parse(JSON.stringify(snoozedState));
+    expect(reviewInboxPendingStatus(
+      item,
+      reloadedState,
+      committed.latestCommit!.hash,
+      workingFingerprint,
+      new Date("2026-07-24T12:06:00+09:00")
+    )).toEqual({
+      committedPending: false,
+      workingPending: false,
+      snoozed: false
+    });
+    expect(reviewInboxPendingStatus(
+      item,
+      reloadedState,
+      committed.latestCommit!.hash,
+      contentFingerprint("new working content"),
+      new Date("2026-07-24T12:07:00+09:00")
+    ).workingPending).toBe(true);
   });
 });

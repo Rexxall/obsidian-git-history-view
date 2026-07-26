@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { App, FileSystemAdapter, TFile } from "obsidian";
 import type {
@@ -426,13 +427,24 @@ export class GitClient {
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new GitCommandError("当前 Vault 不是桌面文件系统，无法调用本机 Git。");
     }
-    const vaultRoot = path.resolve(adapter.getBasePath());
+    const unresolvedVaultRoot = path.resolve(adapter.getBasePath());
+    const vaultRoot = await this.resolveRealPath(unresolvedVaultRoot);
     const configuredRoot = this.getSettings().repositoryRoot.trim();
-    const repositoryRoot = configuredRoot
+    const unresolvedRepositoryRoot = configuredRoot
       ? path.resolve(configuredRoot)
-      : (await this.runGit(vaultRoot, ["rev-parse", "--show-toplevel"])).trim();
+      : (await this.runGit(unresolvedVaultRoot, ["rev-parse", "--show-toplevel"])).trim();
+    const repositoryRoot = await this.resolveRealPath(unresolvedRepositoryRoot);
     if (!repositoryRoot) throw new GitCommandError("没有找到 Git 仓库根目录。");
     return { vaultRoot, repositoryRoot };
+  }
+
+  private async resolveRealPath(value: string): Promise<string> {
+    if (!value) return "";
+    try {
+      return await realpath(value);
+    } catch {
+      return path.resolve(value);
+    }
   }
 
   private async getWorkingTreeStats(

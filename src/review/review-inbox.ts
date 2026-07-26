@@ -1,4 +1,5 @@
 import type {
+  FileReviewState,
   GitCommittedChange,
   GitWorkspaceChange,
   ReviewInboxItem
@@ -13,6 +14,12 @@ export interface ReviewInboxGroup {
   description: string;
   icon: string;
   items: ReviewInboxItem[];
+}
+
+export interface ReviewInboxPendingStatus {
+  committedPending: boolean;
+  workingPending: boolean;
+  snoozed: boolean;
 }
 
 const GROUP_ORDER: ReviewInboxGroupKey[] = [
@@ -136,6 +143,29 @@ export function reviewInboxItemMatchesFilter(
   if (filter === "committed") return Boolean(item.committedChange);
   if (filter === "working") return Boolean(item.workspaceChange);
   return true;
+}
+
+export function reviewInboxPendingStatus(
+  item: ReviewInboxItem,
+  state: FileReviewState,
+  snapshotHeadHash: string,
+  workingFingerprint?: string,
+  now = new Date()
+): ReviewInboxPendingStatus {
+  const committedPending = Boolean(
+    item.committedChange
+      && state.reviewCheckpoint?.commitHash
+        !== (item.latestCommit?.hash ?? snapshotHeadHash)
+  );
+  let workingPending = Boolean(item.workspaceChange);
+  if (workingFingerprint) {
+    workingPending = state.reviewedWorkingFingerprint !== workingFingerprint
+      && state.reviewCheckpoint?.workingFingerprint !== workingFingerprint;
+  }
+  const snoozed = Boolean(
+    state.snoozedUntil && new Date(state.snoozedUntil) > now
+  );
+  return { committedPending, workingPending, snoozed };
 }
 
 export function groupReviewInboxItems(
