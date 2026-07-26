@@ -35,6 +35,10 @@ import {
 import { RestoreHistoryModal } from "./ui/restore-history-modal";
 import { contentFingerprint } from "./history/version-groups";
 import { BlockAgeModal } from "./ui/block-age-modal";
+import {
+  markReviewInboxItemState,
+  setReviewInboxItemSnoozed
+} from "./review/review-state";
 
 export default class GitNoteHistoryPlugin extends Plugin {
   settings: GitNoteHistorySettings = { ...DEFAULT_SETTINGS };
@@ -430,8 +434,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
   async snoozeInboxItem(context: GitRepositoryContext, until: string | null): Promise<void> {
     const state = this.getFileReviewState(context);
-    if (until) state.snoozedUntil = until;
-    else delete state.snoozedUntil;
+    setReviewInboxItemSnoozed(state, until);
     await this.savePluginData();
   }
 
@@ -506,18 +509,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
     reviewedAt = new Date().toISOString()
   ): void {
     const state = this.getFileReviewState(context);
-    if (latestCommit) {
-      state.reviewCheckpoint = {
-        commitHash: latestCommit.hash,
-        historicalPath: context.repositoryRelativePath,
-        reviewedAt,
-        ...(workingFingerprint ? { workingFingerprint } : {})
-      };
-    }
-    if (workingFingerprint) {
-      state.reviewedWorkingFingerprint = workingFingerprint;
-      state.reviewedWorkingAt = reviewedAt;
-    }
-    delete state.snoozedUntil;
+    markReviewInboxItemState(
+      state,
+      context.repositoryRelativePath,
+      latestCommit,
+      workingFingerprint,
+      reviewedAt
+    );
   }
 }
