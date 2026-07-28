@@ -656,6 +656,41 @@
   line-height: 1.62;
 }
 
+.git-note-history-collapsed-properties {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--color-yellow) 7%, var(--background-secondary));
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-note-history-collapsed-properties > span:first-child {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--text-accent);
+}
+
+.git-note-history-collapsed-properties > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-note-history-collapsed-properties > span:last-child {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
 .git-note-history-line-number,
 .git-note-history-side-line {
   min-height: 1.55em;

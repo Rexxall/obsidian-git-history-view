@@ -27,7 +27,11 @@ import {
   type LinkImpact,
   type NoteRelation
 } from "../analysis/link-impact";
-import { renderSideBySideDiff, renderUnifiedDiff } from "../ui/diff-renderer";
+import {
+  compactLongFrontmatterPair,
+  renderSideBySideDiff,
+  renderUnifiedDiff
+} from "../ui/diff-renderer";
 import { buildChangeMap, type ChangeMapItem } from "../diff/change-map";
 import {
   buildRenderedDiff,
@@ -118,6 +122,7 @@ export class GitHistoryDetailView extends ItemView {
   private lastImpactMode: Extract<DetailMode, "semantic" | "impact"> = "semantic";
   private ignoreFrontmatter = false;
   private ignoreBlankLines = true;
+  private collapseLongProperties = true;
   private changesOnly = true;
   private syncPreviewScroll = true;
   private loading = false;
@@ -310,14 +315,27 @@ export class GitHistoryDetailView extends ItemView {
     }
 
     const effectiveMode: DetailMode = this.mode === "side-by-side" && this.narrowLayout ? "unified" : this.mode;
-    const comparison = this.comparisonContents();
+    const isTextDiff = effectiveMode === "unified" || effectiveMode === "side-by-side";
+    const rawComparison = this.comparisonContents();
+    const compactedComparison = isTextDiff
+      && !this.ignoreFrontmatter
+      && this.collapseLongProperties
+      ? compactLongFrontmatterPair(rawComparison.base, rawComparison.target)
+      : {
+          before: rawComparison.base,
+          after: rawComparison.target,
+          collapsedProperties: [] as string[]
+        };
+    const comparison = {
+      base: compactedComparison.before,
+      target: compactedComparison.after
+    };
     if (this.mode === "side-by-side" && this.narrowLayout) {
       container.createDiv({
         cls: "git-note-history-responsive-note",
         text: "当前宽度较窄，已自动使用统一 Diff；放宽页面后会恢复并排视图。"
       });
     }
-    const isTextDiff = effectiveMode === "unified" || effectiveMode === "side-by-side";
     const showChangeMap = isTextDiff
       && this.changeMapExpanded
       && this.changeMap.length > 1
@@ -330,9 +348,22 @@ export class GitHistoryDetailView extends ItemView {
       : container;
     if (showChangeMap) this.renderChangeMap(shell);
     const body = shell.createDiv({ cls: `git-note-history-review-body mode-${effectiveMode}` });
-    if (effectiveMode === "unified") this.renderUnified(body, comparison.base, comparison.target);
+    const renderTarget = compactedComparison.collapsedProperties.length > 0
+      ? body.createDiv({ cls: "git-note-history-raw-diff-content" })
+      : body;
+    if (compactedComparison.collapsedProperties.length > 0) {
+      const notice = body.createDiv({ cls: "git-note-history-collapsed-properties" });
+      setIcon(notice.createSpan(), "fold-horizontal");
+      const names = compactedComparison.collapsedProperties;
+      notice.createSpan({
+        text: `已折叠 ${names.length} 个长属性：${names.slice(0, 3).join("、")}${names.length > 3 ? "…" : ""}`
+      });
+      notice.createSpan({ text: "可在“过滤”中展开" });
+      body.prepend(notice);
+    }
+    if (effectiveMode === "unified") this.renderUnified(renderTarget, comparison.base, comparison.target);
     else if (effectiveMode === "side-by-side") {
-      renderSideBySideDiff(body, comparison.base, comparison.target, {
+      renderSideBySideDiff(renderTarget, comparison.base, comparison.target, {
         ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
         ignoreBlankLines: this.ignoreBlankLines,
         changesOnly: this.changesOnly
@@ -615,7 +646,8 @@ export class GitHistoryDetailView extends ItemView {
     const activeCount = [
       this.ignoreBlankLines,
       this.plugin.settings.ignoreWhitespace,
-      this.ignoreFrontmatter
+      this.ignoreFrontmatter,
+      this.collapseLongProperties
     ].filter(Boolean).length;
     const button = container.createEl("button", {
       cls: activeCount > 0 ? "git-note-history-filter-button is-active" : "git-note-history-filter-button",
@@ -655,6 +687,14 @@ export class GitHistoryDetailView extends ItemView {
       .setChecked(this.ignoreFrontmatter)
       .onClick(() => {
         this.ignoreFrontmatter = !this.ignoreFrontmatter;
+        this.render();
+      }));
+    menu.addItem((item) => item
+      .setTitle("折叠长属性")
+      .setIcon("fold-horizontal")
+      .setChecked(this.collapseLongProperties)
+      .onClick(() => {
+        this.collapseLongProperties = !this.collapseLongProperties;
         this.render();
       }));
     menu.showAtMouseEvent(event);

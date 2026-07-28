@@ -81,6 +81,12 @@ function preview(value: string, limit = 120): string {
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized;
 }
 
+function propertyPreview(value: string): string {
+  if (value.length <= 320) return value;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return `${normalized.slice(0, 220)}…（共 ${value.length} 字符）`;
+}
+
 function contextLabel(headings: string[]): string {
   return headings.length > 0 ? headings.join(" / ") : "文档开头";
 }
@@ -530,8 +536,8 @@ function propertyChanges(beforeText: string, afterText: string): SemanticChange[
       kind: beforeValue === undefined ? "added" : afterValue === undefined ? "removed" : "changed",
       label: name
     };
-    if (beforeValue !== undefined) change.before = beforeValue || "空值";
-    if (afterValue !== undefined) change.after = afterValue || "空值";
+    if (beforeValue !== undefined) change.before = beforeValue ? propertyPreview(beforeValue) : "空值";
+    if (afterValue !== undefined) change.after = afterValue ? propertyPreview(afterValue) : "空值";
     changes.push(change);
   }
   return changes;

@@ -2,6 +2,8 @@ import { applyPatch, diffArrays, diffLines, diffWordsWithSpace, structuredPatch 
 
 const CONTEXT_LINE_COUNT = 3;
 const COLLAPSE_THRESHOLD = 14;
+const LONG_PROPERTY_CHARACTER_THRESHOLD = 800;
+const LONG_PROPERTY_LINE_THRESHOLD = 12;
 
 export interface UnifiedDiffOptions {
   ignoreWhitespace: boolean;
@@ -23,6 +25,132 @@ export interface HunkRestoreTarget {
   targetContent: string;
   currentBlock: string;
   historicalBlock: string;
+}
+
+interface FrontmatterPropertyBlock {
+  name: string;
+  start: number;
+  end: number;
+  value: string;
+}
+
+export interface CompactedFrontmatterPair {
+  before: string;
+  after: string;
+  collapsedProperties: string[];
+}
+
+function frontmatterPropertyBlocks(value: string): {
+  lines: string[];
+  trailingNewline: boolean;
+  blocks: FrontmatterPropertyBlock[];
+} {
+  const normalized = value.replace(/\r\n/g, "\n");
+  const trailingNewline = normalized.endsWith("\n");
+  const lines = normalized.split("\n");
+  if (trailingNewline) lines.pop();
+  if (lines[0]?.trim() !== "---") return { lines, trailingNewline, blocks: [] };
+  const closingOffset = lines.slice(1).findIndex((line) => line.trim() === "---");
+  if (closingOffset < 0) return { lines, trailingNewline, blocks: [] };
+  const closingIndex = closingOffset + 1;
+  const blocks: FrontmatterPropertyBlock[] = [];
+  let current: Omit<FrontmatterPropertyBlock, "end" | "value"> & { valueLines: string[] } | null = null;
+  const flush = (end: number): void => {
+    if (!current) return;
+    blocks.push({
+      name: current.name,
+      start: current.start,
+      end,
+      value: current.valueLines.join("\n").trim()
+    });
+  };
+
+  for (let index = 1; index < closingIndex; index += 1) {
+    const line = lines[index] ?? "";
+    const property = /^([^#\s][^:]*):(?:\s*(.*))?$/.exec(line);
+    if (property?.[1]) {
+      flush(index);
+      current = {
+        name: property[1].trim(),
+        start: index,
+        valueLines: property[2] ? [property[2]] : []
+      };
+    } else if (current) {
+      current.valueLines.push(line.trimEnd());
+    }
+  }
+  flush(closingIndex);
+  return { lines, trailingNewline, blocks };
+}
+
+function isLongProperty(block: FrontmatterPropertyBlock | undefined): boolean {
+  if (!block) return false;
+  return block.value.length >= LONG_PROPERTY_CHARACTER_THRESHOLD
+    || block.end - block.start >= LONG_PROPERTY_LINE_THRESHOLD;
+}
+
+function compactPropertyBlock(
+  lines: string[],
+  block: FrontmatterPropertyBlock,
+  state: "same" | "before" | "after" | "removed" | "added"
+): void {
+  const stateLabel = state === "same"
+    ? ""
+    : state === "before"
+      ? " · 修改前"
+      : state === "after"
+        ? " · 修改后"
+        : state === "removed"
+          ? " · 删除前"
+          : " · 新增";
+  const lineCount = block.end - block.start;
+  const size = `${block.value.length} 字符${lineCount > 1 ? ` · ${lineCount} 行` : ""}`;
+  lines[block.start] = `${block.name}: 〈长属性已折叠${stateLabel} · ${size}〉`;
+  for (let index = block.start + 1; index < block.end; index += 1) lines[index] = "";
+}
+
+function joinDisplayLines(lines: string[], trailingNewline: boolean): string {
+  return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
+}
+
+export function compactLongFrontmatterPair(
+  beforeText: string,
+  afterText: string
+): CompactedFrontmatterPair {
+  const before = frontmatterPropertyBlocks(beforeText);
+  const after = frontmatterPropertyBlocks(afterText);
+  const beforeByName = new Map(before.blocks.map((block) => [block.name, block]));
+  const afterByName = new Map(after.blocks.map((block) => [block.name, block]));
+  const names = [...new Set([...beforeByName.keys(), ...afterByName.keys()])];
+  const collapsedProperties: string[] = [];
+
+  for (const name of names) {
+    const beforeBlock = beforeByName.get(name);
+    const afterBlock = afterByName.get(name);
+    if (!isLongProperty(beforeBlock) && !isLongProperty(afterBlock)) continue;
+    const same = beforeBlock?.value === afterBlock?.value;
+    if (!same) collapsedProperties.push(name);
+    if (beforeBlock) {
+      compactPropertyBlock(
+        before.lines,
+        beforeBlock,
+        same ? "same" : afterBlock ? "before" : "removed"
+      );
+    }
+    if (afterBlock) {
+      compactPropertyBlock(
+        after.lines,
+        afterBlock,
+        same ? "same" : beforeBlock ? "after" : "added"
+      );
+    }
+  }
+
+  return {
+    before: joinDisplayLines(before.lines, before.trailingNewline),
+    after: joinDisplayLines(after.lines, after.trailingNewline),
+    collapsedProperties
+  };
 }
 
 export function buildHunkRestoreTargets(

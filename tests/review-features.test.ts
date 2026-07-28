@@ -4,6 +4,7 @@ import {
   buildHunkRestoreTargets,
   buildFocusedSideItems,
   buildSideRows,
+  compactLongFrontmatterPair,
   withoutBlankLines
 } from "../src/ui/diff-renderer";
 import {
@@ -110,6 +111,17 @@ describe("Markdown semantic diff", () => {
       })
     ]);
     expect(buildSemanticDiff(before, after, { ignoreFrontmatter: true })).toEqual([]);
+  });
+
+  it("previews very long property values instead of rendering the entire value", () => {
+    const before = `---\ntranscript: ${"old ".repeat(200)}\n---\n# Note\n`;
+    const after = `---\ntranscript: ${"new ".repeat(200)}\n---\n# Note\n`;
+    const [change] = buildSemanticDiff(before, after);
+
+    expect(change).toMatchObject({ group: "属性", kind: "changed", label: "transcript" });
+    expect(change?.before).toContain("共 799 字符");
+    expect(change?.after).toContain("共 799 字符");
+    expect(change?.before?.length).toBeLessThan(280);
   });
 
   it("treats a renamed heading as one change without repeating its stable paragraph", () => {
@@ -249,6 +261,44 @@ describe("partial hunk restore", () => {
 });
 
 describe("focused side-by-side diff", () => {
+  it("folds changed long frontmatter values while preserving source line numbers", () => {
+    const before = `---\nstatus: draft\ntranscript: ${"before ".repeat(140)}\n---\n# Note\nold\n`;
+    const after = `---\nstatus: draft\ntranscript: ${"after ".repeat(160)}\n---\n# Note\nnew\n`;
+    const compacted = compactLongFrontmatterPair(before, after);
+    const rows = buildSideRows(compacted.before, compacted.after, {
+      ignoreWhitespace: false,
+      ignoreBlankLines: true
+    });
+
+    expect(compacted.collapsedProperties).toEqual(["transcript"]);
+    expect(compacted.before).not.toContain("before before");
+    expect(compacted.after).not.toContain("after after");
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "changed",
+        oldLineNumber: 3,
+        newLineNumber: 3,
+        oldText: expect.stringContaining("修改前"),
+        newText: expect.stringContaining("修改后")
+      }),
+      expect.objectContaining({
+        kind: "changed",
+        oldLineNumber: 6,
+        newLineNumber: 6,
+        oldText: "old",
+        newText: "new"
+      })
+    ]));
+  });
+
+  it("does not fold long Markdown body content outside frontmatter", () => {
+    const body = "Body ".repeat(300);
+    const compacted = compactLongFrontmatterPair(`# Note\n${body}`, `# Note\n${body}changed`);
+
+    expect(compacted.collapsedProperties).toEqual([]);
+    expect(compacted.before).toContain(body);
+  });
+
   it("ignores blank lines while preserving original line numbers", () => {
     const before = "same\n\nold\n\nstable\n";
     const after = "same\n\nnew\nstable\n";

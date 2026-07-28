@@ -115,10 +115,10 @@ export function renderSemanticOverview(
   const summary = compact
     ? shell.createEl("summary", { cls: "git-note-history-semantic-summary" })
     : shell.createDiv({ cls: "git-note-history-semantic-summary" });
-  const title = summary.createDiv({ cls: "git-note-history-semantic-title" });
+  const title = summary.createSpan({ cls: "git-note-history-semantic-title" });
   title.createSpan({ text: "结构变化" });
   title.createSpan({ text: `${changes.length} 项` });
-  const metrics = summary.createDiv({ cls: "git-note-history-semantic-metrics" });
+  const metrics = summary.createSpan({ cls: "git-note-history-semantic-metrics" });
   for (const kind of ["changed", "moved", "added", "removed"] as const) {
     const count = changes.filter((change) => change.kind === kind).length;
     if (count > 0) metrics.createSpan({ cls: `is-${kind}`, text: `${KIND_LABELS[kind]} ${count}` });
