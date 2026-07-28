@@ -50,6 +50,11 @@ import {
   setReviewInboxItemSnoozed
 } from "../src/review/review-state";
 import {
+  historicalContentMatch,
+  historicalContentSnippet,
+  searchableMarkdownBody
+} from "../src/history/content-search";
+import {
   parseCommittedNameStatus,
   parseLatestCommitByPath
 } from "../src/git/parse-log";
@@ -242,6 +247,39 @@ describe("reading diff", () => {
 
     expect(sections.every((section) => section.kind === "unchanged")).toBe(true);
     expect(stripFrontmatter(before)).toBe("# Note\n\nSame   words\n");
+  });
+});
+
+describe("historical content search", () => {
+  it("finds a remembered phrase and returns compact surrounding context", () => {
+    const content = `# Research\n\n${"background ".repeat(20)}The deleted insight lives here.${" conclusion".repeat(20)}\n`;
+    const snippet = historicalContentSnippet(content, "deleted insight", 28);
+
+    expect(snippet).toContain("deleted insight");
+    expect(snippet?.startsWith("…")).toBe(true);
+    expect(snippet?.endsWith("…")).toBe(true);
+    expect(snippet?.length).toBeLessThan(100);
+  });
+
+  it("prefers Markdown body matches and still labels property-only matches", () => {
+    const content = "---\ntranscript: secret phrase\n---\n# Note\nVisible phrase\n";
+
+    expect(searchableMarkdownBody(content)).toBe("# Note\nVisible phrase\n");
+    expect(historicalContentMatch(content, "secret phrase")).toMatchObject({
+      scope: "properties",
+      snippet: expect.stringContaining("secret phrase")
+    });
+    expect(historicalContentMatch(content, "Visible phrase")).toMatchObject({
+      scope: "body",
+      snippet: expect.stringContaining("Visible phrase")
+    });
+  });
+
+  it("matches Chinese text case-insensitively where applicable", () => {
+    const content = "# 研究\n\n这个版本保留了关键研究问题。\n";
+
+    expect(historicalContentSnippet(content, "关键研究问题")).toContain("这个版本保留了关键研究问题。");
+    expect(historicalContentSnippet(content, "不存在内容")).toBeNull();
   });
 });
 

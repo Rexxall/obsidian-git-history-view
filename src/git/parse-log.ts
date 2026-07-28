@@ -84,10 +84,13 @@ export function parseGitLog(raw: string, currentPath: string): GitCommitVersion[
       trailers: parseCommitTrailers(messageBody)
     });
 
-    const rename = entries.find(
-      (entry) => entry.status.startsWith("R") && entry.path === historicalPath && entry.oldPath
+    const pathChange = entries.find(
+      (entry) =>
+        (entry.status.startsWith("R") || entry.status.startsWith("C"))
+        && entry.path === historicalPath
+        && entry.oldPath
     );
-    if (rename?.oldPath) historicalPath = rename.oldPath;
+    if (pathChange?.oldPath) historicalPath = pathChange.oldPath;
   }
 
   return commits;

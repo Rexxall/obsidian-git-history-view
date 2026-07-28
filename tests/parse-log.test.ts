@@ -43,6 +43,21 @@ describe("parseGitLog", () => {
     ]);
   });
 
+  it("tracks the source path when Git follows a copied note", () => {
+    const raw =
+      `${RS}aaaaaaaa${FS}aaaaaaa${FS}Alice${FS}alice@example.com${FS}2026-07-15T12:00:00+09:00${FS}Edit copied note\nM\tNotes/copied.md\n` +
+      `${RS}bbbbbbbb${FS}bbbbbbb${FS}Alice${FS}alice@example.com${FS}2026-07-14T12:00:00+09:00${FS}Copy note\nC072\tNotes/source.md\tNotes/copied.md\n` +
+      `${RS}cccccccc${FS}ccccccc${FS}Alice${FS}alice@example.com${FS}2026-07-13T12:00:00+09:00${FS}Original note\nA\tNotes/source.md\n`;
+
+    const commits = parseGitLog(raw, "Notes/copied.md");
+
+    expect(commits.map((commit) => commit.historicalPath)).toEqual([
+      "Notes/copied.md",
+      "Notes/copied.md",
+      "Notes/source.md"
+    ]);
+  });
+
   it("extracts supported commit trailers", () => {
     const raw = `${RS}aaaaaaaa${FS}aaaaaaa${FS}Local Tool${FS}local-tool@example.com${FS}2026-07-15T12:00:00+09:00${FS}Review note${FS}Review note\n\nAgent: local-tool\nAuthority: working_master\nSend-Gate: user_review_not_sent${BS}\nM\tNotes/current.md\n`;
     expect(parseGitLog(raw, "Notes/current.md")[0]?.trailers).toEqual({

@@ -249,6 +249,85 @@
   margin-top: var(--size-4-2);
 }
 
+.git-note-history-content-search-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.git-note-history-content-search-status > span:first-child {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.git-note-history-content-search-status.is-loading > span:first-child {
+  animation: git-note-history-spin 0.9s linear infinite;
+}
+
+.git-note-history-content-match {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 7px;
+  border-left: 2px solid color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--interactive-accent) 5%, var(--background-secondary));
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.git-note-history-content-match > span:first-child {
+  display: grid;
+  width: 14px;
+  height: 17px;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--text-accent);
+}
+
+.git-note-history-content-match-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+.git-note-history-content-match-scope {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--text-faint);
+  background: var(--background-primary);
+  font-size: 8px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.git-note-history-content-match mark {
+  padding: 0 2px;
+  border-radius: 2px;
+  color: var(--text-normal);
+  background: color-mix(in srgb, var(--color-yellow) 34%, transparent);
+}
+
+.git-note-history-content-match-badge {
+  color: var(--text-accent);
+  font-size: 9px;
+}
+
 .git-note-history-open-main {
   align-items: center;
   background: color-mix(in srgb, var(--interactive-accent) 11%, var(--background-primary));

@@ -27,6 +27,10 @@ import {
   buildTimelineWindow,
   expandTimelineLimit
 } from "../history/timeline-window";
+import {
+  historicalContentMatch,
+  type HistoricalContentMatch
+} from "../history/content-search";
 
 export const GIT_NOTE_HISTORY_VIEW_TYPE = "git-note-history-view";
 
@@ -67,7 +71,7 @@ function statusLabel(history: GitFileHistory): string {
   return "工作区干净";
 }
 
-function matchesSearch(commit: GitCommitVersion, query: string, state: FileReviewState): boolean {
+function matchesMetadata(commit: GitCommitVersion, query: string, state: FileReviewState): boolean {
   if (!query) return true;
   const bookmark = state.bookmarks[commit.hash]?.label ?? "";
   const trailers = Object.values(commit.trailers).join(" ");
@@ -75,6 +79,15 @@ function matchesSearch(commit: GitCommitVersion, query: string, state: FileRevie
     .join(" ")
     .toLocaleLowerCase()
     .includes(query.toLocaleLowerCase());
+}
+
+function matchesSearch(
+  commit: GitCommitVersion,
+  query: string,
+  state: FileReviewState,
+  contentMatches: ReadonlyMap<string, HistoricalContentMatch>
+): boolean {
+  return matchesMetadata(commit, query, state) || contentMatches.has(commit.hash);
 }
 
 export class GitNoteHistoryView extends ItemView {
@@ -97,6 +110,13 @@ export class GitNoteHistoryView extends ItemView {
   private timeMachinePreviewTimer: number | null = null;
   private effectiveGroups: EffectiveVersionGroup[] = [];
   private readonly commitContents = new Map<string, string>();
+  private readonly contentSearchMatches = new Map<string, HistoricalContentMatch>();
+  private contentSearchTimer: number | null = null;
+  private contentSearchGeneration = 0;
+  private contentSearchLoading = false;
+  private contentSearchScanned = 0;
+  private contentSearchTotal = 0;
+  private contentSearchFailed = 0;
   private readonly expandedGroups = new Set<string>();
   private showRawCommits = false;
   private currentFingerprint = "";
@@ -153,6 +173,7 @@ export class GitNoteHistoryView extends ItemView {
   async onClose(): Promise<void> {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     if (this.hoverTimer !== null) window.clearTimeout(this.hoverTimer);
+    this.cancelContentSearch();
     this.stopTimeMachinePlayback(false);
     if (this.timeMachinePreviewTimer !== null) window.clearTimeout(this.timeMachinePreviewTimer);
   }
@@ -162,6 +183,8 @@ export class GitNoteHistoryView extends ItemView {
     this.stopTimeMachinePlayback(false);
     this.targetFile = file;
     this.history = null;
+    this.query = "";
+    this.cancelContentSearch();
     this.compareSelection.clear();
     this.commitContents.clear();
     this.effectiveGroups = [];
@@ -179,6 +202,7 @@ export class GitNoteHistoryView extends ItemView {
       return;
     }
     const generation = ++this.refreshGeneration;
+    this.cancelContentSearch(false);
     this.refiningGroups = false;
     this.loading = true;
     this.error = "";
@@ -205,6 +229,7 @@ export class GitNoteHistoryView extends ItemView {
       if (generation === this.refreshGeneration) {
         this.loading = false;
         this.render();
+        this.scheduleContentSearch();
       }
     }
   }
@@ -247,9 +272,20 @@ export class GitNoteHistoryView extends ItemView {
 
     this.renderVersionModeToggle(container);
 
-    const commits = this.history.commits.filter((commit) => matchesSearch(commit, this.query, state));
+    const commits = this.history.commits.filter((commit) =>
+      matchesSearch(commit, this.query, state, this.contentSearchMatches)
+    );
     if (commits.length === 0) {
       if (this.query) {
+        if (this.contentSearchLoading) {
+          this.renderState(
+            container,
+            "search",
+            "正在搜索历史内容",
+            `已检查 ${this.contentSearchScanned} / ${this.contentSearchTotal} 个版本。输入新内容即可取消当前搜索。`
+          );
+          return;
+        }
         this.renderState(
           container,
           "search-x",
@@ -291,7 +327,9 @@ export class GitNoteHistoryView extends ItemView {
     }
 
     const groups = this.effectiveGroups.filter((group) =>
-      group.commits.some((commit) => matchesSearch(commit, this.query, state))
+      group.commits.some((commit) =>
+        matchesSearch(commit, this.query, state, this.contentSearchMatches)
+      )
     );
     const window = buildTimelineWindow(groups, this.visibleTimelineCount);
     let previousGroup = "";
@@ -352,6 +390,79 @@ export class GitNoteHistoryView extends ItemView {
         this.render();
       }
     }
+  }
+
+  private cancelContentSearch(clearResults = true): void {
+    if (this.contentSearchTimer !== null) window.clearTimeout(this.contentSearchTimer);
+    this.contentSearchTimer = null;
+    this.contentSearchGeneration += 1;
+    this.contentSearchLoading = false;
+    this.contentSearchScanned = 0;
+    this.contentSearchTotal = 0;
+    this.contentSearchFailed = 0;
+    if (clearResults) this.contentSearchMatches.clear();
+  }
+
+  private scheduleContentSearch(): void {
+    if (this.contentSearchTimer !== null) window.clearTimeout(this.contentSearchTimer);
+    this.contentSearchTimer = null;
+    this.contentSearchGeneration += 1;
+    const generation = this.contentSearchGeneration;
+    this.contentSearchMatches.clear();
+    this.contentSearchScanned = 0;
+    this.contentSearchTotal = this.history?.commits.length ?? 0;
+    this.contentSearchFailed = 0;
+    this.contentSearchLoading = this.query.length >= 2 && this.contentSearchTotal > 0;
+    if (!this.contentSearchLoading) return;
+    const query = this.query;
+    this.contentSearchTimer = window.setTimeout(() => {
+      this.contentSearchTimer = null;
+      void this.searchHistoricalContent(query, generation);
+    }, 220);
+  }
+
+  private async searchHistoricalContent(query: string, generation: number): Promise<void> {
+    const history = this.history;
+    if (!history || query !== this.query || generation !== this.contentSearchGeneration) return;
+    const batchSize = 8;
+    for (let index = 0; index < history.commits.length; index += batchSize) {
+      const batch = history.commits.slice(index, index + batchSize);
+      const matchesBeforeBatch = this.contentSearchMatches.size;
+      const results = await Promise.all(batch.map(async (commit) => {
+        try {
+          const cached = this.commitContents.get(commit.hash);
+          const content = cached ?? await this.plugin.gitClient.getFileContent(
+            history.context.repositoryRoot,
+            commit.hash,
+            commit.historicalPath
+          );
+          return { commit, match: historicalContentMatch(content, query), failed: false };
+        } catch {
+          return { commit, match: null, failed: true };
+        }
+      }));
+      if (
+        generation !== this.contentSearchGeneration
+        || history !== this.history
+        || query !== this.query
+      ) return;
+      for (const result of results) {
+        if (result.match) this.contentSearchMatches.set(result.commit.hash, result.match);
+        if (result.failed) this.contentSearchFailed += 1;
+      }
+      this.contentSearchScanned = Math.min(history.commits.length, index + batch.length);
+      if (
+        (matchesBeforeBatch === 0 && this.contentSearchMatches.size > 0)
+        || this.contentSearchScanned % 32 === 0
+      ) this.render();
+    }
+    if (
+      generation !== this.contentSearchGeneration
+      || history !== this.history
+      || query !== this.query
+    ) return;
+    this.contentSearchLoading = false;
+    this.render();
   }
 
   private renderReviewInbox(container: HTMLElement, state: FileReviewState): void {
@@ -497,6 +608,8 @@ export class GitNoteHistoryView extends ItemView {
     meta.createSpan({ text: representative.authorName });
     if (group.commits.length > 1) meta.createSpan({ text: `${group.commits.length} 个 commit` });
     if (group.duplicateCount > 0) meta.createSpan({ text: `${group.duplicateCount} 个重复` });
+    const contentMatch = group.commits.find((commit) => this.contentSearchMatches.has(commit.hash));
+    if (contentMatch) this.renderContentSearchMatch(content, contentMatch);
 
     const actions = row.createDiv({ cls: "git-note-history-row-actions" });
     if (group.commits.length > 1) {
@@ -528,6 +641,13 @@ export class GitNoteHistoryView extends ItemView {
         member.createSpan({ text: `${formatCommitTime(commit.authoredAt)} · ${commit.shortHash}` });
         if (memberIndex > 0 && this.commitContents.get(commit.hash) === this.commitContents.get(group.commits[memberIndex - 1]!.hash)) {
           member.createSpan({ cls: "git-note-history-duplicate-badge", text: "内容重复" });
+        }
+        if (this.contentSearchMatches.has(commit.hash)) {
+          const scope = this.contentSearchMatches.get(commit.hash)?.scope;
+          member.createSpan({
+            cls: "git-note-history-content-match-badge",
+            text: scope === "properties" ? "属性命中" : "正文命中"
+          });
         }
         member.addEventListener("click", () => void this.openAgainstWorking(commit));
       });
@@ -648,12 +768,33 @@ export class GitNoteHistoryView extends ItemView {
 
     const searchRow = header.createDiv({ cls: "git-note-history-search" });
     const search = new SearchComponent(searchRow);
-    search.setPlaceholder("搜索版本").setValue(this.query).onChange((value) => {
+    search.setPlaceholder("搜索版本或历史内容").setValue(this.query).onChange((value) => {
       this.query = value.trim();
       this.selectedIndex = 0;
       this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
+      this.scheduleContentSearch();
       this.render();
     });
+    if (this.query) {
+      const status = header.createDiv({
+        cls: `git-note-history-content-search-status ${this.contentSearchLoading ? "is-loading" : ""}`,
+        attr: { role: "status", "aria-live": "polite" }
+      });
+      const icon = status.createSpan();
+      setIcon(icon, this.contentSearchLoading ? "loader-circle" : this.query.length < 2 ? "info" : "search-check");
+      if (this.query.length < 2) {
+        status.createSpan({ text: "输入至少 2 个字符后搜索历史内容；当前仅匹配版本信息。" });
+      } else if (this.contentSearchLoading) {
+        status.createSpan({
+          text: `正在搜索历史内容 ${this.contentSearchScanned}/${this.contentSearchTotal} · 已命中 ${this.contentSearchMatches.size}`
+        });
+      } else {
+        const failed = this.contentSearchFailed > 0 ? ` · ${this.contentSearchFailed} 个版本不可读` : "";
+        status.createSpan({
+          text: `内容命中 ${this.contentSearchMatches.size} 个版本 · 已检查 ${this.contentSearchScanned}${failed}`
+        });
+      }
+    }
   }
 
   private renderWorkingTreeCard(container: HTMLElement, state: FileReviewState): void {
@@ -905,6 +1046,7 @@ export class GitNoteHistoryView extends ItemView {
     meta.createSpan({ text: formatCommitTime(commit.authoredAt) });
     meta.createSpan({ text: commit.authorName });
     meta.createEl("code", { text: commit.shortHash });
+    this.renderContentSearchMatch(content, commit);
 
     const badges = content.createDiv({ cls: "git-note-history-badges" });
     if (state.baselineHash === commit.hash) this.addBadge(badges, "star", "比较基线", "is-baseline");
@@ -987,6 +1129,28 @@ export class GitNoteHistoryView extends ItemView {
     badge.createSpan({ text });
   }
 
+  private renderContentSearchMatch(container: HTMLElement, commit: GitCommitVersion): void {
+    const contentMatch = this.contentSearchMatches.get(commit.hash);
+    if (!contentMatch || !this.query) return;
+    const { snippet } = contentMatch;
+    const match = container.createDiv({ cls: "git-note-history-content-match" });
+    const icon = match.createSpan();
+    setIcon(icon, "text-search");
+    match.createSpan({
+      cls: "git-note-history-content-match-scope",
+      text: contentMatch.scope === "properties" ? "属性" : "正文"
+    });
+    const excerpt = match.createSpan({ cls: "git-note-history-content-match-text" });
+    const index = snippet.toLocaleLowerCase().indexOf(this.query.toLocaleLowerCase());
+    if (index < 0) {
+      excerpt.setText(snippet);
+      return;
+    }
+    excerpt.createSpan({ text: snippet.slice(0, index) });
+    excerpt.createEl("mark", { text: snippet.slice(index, index + this.query.length) });
+    excerpt.createSpan({ text: snippet.slice(index + this.query.length) });
+  }
+
   private openCommitMenu(event: MouseEvent, commit: GitCommitVersion, state: FileReviewState): void {
     if (!this.history) return;
     const menu = new Menu();
@@ -1048,10 +1212,15 @@ export class GitNoteHistoryView extends ItemView {
   private handleKeyboard(event: KeyboardEvent): void {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || !this.history) return;
     const state = this.plugin.getFileReviewState(this.history.context);
-    const filtered = (this.showRawCommits
-      ? this.history.commits
-      : this.effectiveGroups.map((group) => group.representative))
-      .filter((commit) => matchesSearch(commit, this.query, state));
+    const filtered = this.showRawCommits
+      ? this.history.commits.filter((commit) =>
+          matchesSearch(commit, this.query, state, this.contentSearchMatches)
+        )
+      : this.effectiveGroups
+          .filter((group) => group.commits.some((commit) =>
+            matchesSearch(commit, this.query, state, this.contentSearchMatches)
+          ))
+          .map((group) => group.representative);
     if (event.key.toLowerCase() === "j" || event.key === "ArrowDown") {
       event.preventDefault();
       this.selectedIndex = Math.min(filtered.length - 1, this.selectedIndex + 1);
