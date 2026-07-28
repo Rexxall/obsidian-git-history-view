@@ -13,7 +13,8 @@ import type {
   EffectiveVersionGroup,
   FileReviewState,
   GitCommitVersion,
-  GitFileHistory
+  GitFileHistory,
+  VersionReference
 } from "../models";
 import { GitCommandError } from "../git/git-client";
 import { VersionLabelModal } from "../ui/label-modal";
@@ -28,7 +29,9 @@ import {
   expandTimelineLimit
 } from "../history/timeline-window";
 import {
+  buildContentLifecycle,
   historicalContentMatch,
+  type ContentLifecycle,
   type HistoricalContentMatch
 } from "../history/content-search";
 
@@ -111,6 +114,7 @@ export class GitNoteHistoryView extends ItemView {
   private effectiveGroups: EffectiveVersionGroup[] = [];
   private readonly commitContents = new Map<string, string>();
   private readonly contentSearchMatches = new Map<string, HistoricalContentMatch>();
+  private readonly contentSearchReadable = new Set<string>();
   private contentSearchTimer: number | null = null;
   private contentSearchGeneration = 0;
   private contentSearchLoading = false;
@@ -119,6 +123,7 @@ export class GitNoteHistoryView extends ItemView {
   private contentSearchFailed = 0;
   private readonly expandedGroups = new Set<string>();
   private showRawCommits = false;
+  private currentContent = "";
   private currentFingerprint = "";
   private refiningGroups = false;
   private visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
@@ -214,6 +219,7 @@ export class GitNoteHistoryView extends ItemView {
       ]);
       if (generation !== this.refreshGeneration) return;
       this.history = history;
+      this.currentContent = currentContent;
       this.currentFingerprint = contentFingerprint(currentContent);
       const state = this.plugin.getFileReviewState(history.context);
       this.effectiveGroups = groupEffectiveVersions(history.commits, state, this.commitContents);
@@ -264,13 +270,16 @@ export class GitNoteHistoryView extends ItemView {
     if (!this.history) return;
 
     const state = this.plugin.getFileReviewState(this.history.context);
-    const overview = container.createDiv({ cls: "git-note-history-overview" });
-    this.renderReviewInbox(overview, state);
-    this.renderWorkingTreeCard(overview, state);
-    this.renderTimeMachine(container);
+    if (!this.query) {
+      const overview = container.createDiv({ cls: "git-note-history-overview" });
+      this.renderReviewInbox(overview, state);
+      this.renderWorkingTreeCard(overview, state);
+      this.renderTimeMachine(container);
+    }
     this.renderCompareBar(container);
 
     this.renderVersionModeToggle(container);
+    this.renderContentLifecycle(container);
 
     const commits = this.history.commits.filter((commit) =>
       matchesSearch(commit, this.query, state, this.contentSearchMatches)
@@ -283,6 +292,15 @@ export class GitNoteHistoryView extends ItemView {
             "search",
             "正在搜索历史内容",
             `已检查 ${this.contentSearchScanned} / ${this.contentSearchTotal} 个版本。输入新内容即可取消当前搜索。`
+          );
+          return;
+        }
+        if (this.currentContentMatch()) {
+          this.renderState(
+            container,
+            "file-pen-line",
+            "只在当前工作区找到",
+            `“${this.query}”尚未进入任何可读的 Git 版本。`
           );
           return;
         }
@@ -400,7 +418,10 @@ export class GitNoteHistoryView extends ItemView {
     this.contentSearchScanned = 0;
     this.contentSearchTotal = 0;
     this.contentSearchFailed = 0;
-    if (clearResults) this.contentSearchMatches.clear();
+    if (clearResults) {
+      this.contentSearchMatches.clear();
+      this.contentSearchReadable.clear();
+    }
   }
 
   private scheduleContentSearch(): void {
@@ -409,6 +430,7 @@ export class GitNoteHistoryView extends ItemView {
     this.contentSearchGeneration += 1;
     const generation = this.contentSearchGeneration;
     this.contentSearchMatches.clear();
+    this.contentSearchReadable.clear();
     this.contentSearchScanned = 0;
     this.contentSearchTotal = this.history?.commits.length ?? 0;
     this.contentSearchFailed = 0;
@@ -436,9 +458,9 @@ export class GitNoteHistoryView extends ItemView {
             commit.hash,
             commit.historicalPath
           );
-          return { commit, match: historicalContentMatch(content, query), failed: false };
+          return { commit, content, match: historicalContentMatch(content, query), failed: false };
         } catch {
-          return { commit, match: null, failed: true };
+          return { commit, content: null, match: null, failed: true };
         }
       }));
       if (
@@ -447,6 +469,8 @@ export class GitNoteHistoryView extends ItemView {
         || query !== this.query
       ) return;
       for (const result of results) {
+        if (!result.failed) this.contentSearchReadable.add(result.commit.hash);
+        if (result.content !== null) this.commitContents.set(result.commit.hash, result.content);
         if (result.match) this.contentSearchMatches.set(result.commit.hash, result.match);
         if (result.failed) this.contentSearchFailed += 1;
       }
@@ -463,6 +487,117 @@ export class GitNoteHistoryView extends ItemView {
     ) return;
     this.contentSearchLoading = false;
     this.render();
+  }
+
+  private currentContentMatch(): HistoricalContentMatch | null {
+    if (this.query.length < 2) return null;
+    return historicalContentMatch(this.currentContent, this.query);
+  }
+
+  private contentLifecycle(): ContentLifecycle | null {
+    if (!this.history || this.query.length < 2 || this.contentSearchLoading) return null;
+    const versions = [...this.history.commits].reverse().map((commit) => ({
+      key: commit.hash,
+      state: this.contentSearchMatches.has(commit.hash)
+        ? "present" as const
+        : this.contentSearchReadable.has(commit.hash)
+          ? "absent" as const
+          : "unknown" as const
+    }));
+    versions.push({
+      key: "working",
+      state: this.currentContentMatch() ? "present" : "absent"
+    });
+    return buildContentLifecycle(versions);
+  }
+
+  private versionReferenceForKey(key: string): VersionReference | null {
+    if (!this.history) return null;
+    if (key === "working") return { kind: "working", label: "当前工作区" };
+    const commit = this.history.commits.find((candidate) => candidate.hash === key);
+    return commit ? { kind: "commit", commit } : null;
+  }
+
+  private lifecycleVersionLabel(key: string): string {
+    if (key === "working") return "当前工作区";
+    const commit = this.history?.commits.find((candidate) => candidate.hash === key);
+    return commit ? `${formatCommitTime(commit.authoredAt, true)} · ${commit.shortHash}` : key.slice(0, 7);
+  }
+
+  private async openVersionPair(baseKey: string, targetKey: string): Promise<void> {
+    if (!this.targetFile || !this.history) return;
+    const base = this.versionReferenceForKey(baseKey);
+    const target = this.versionReferenceForKey(targetKey);
+    if (!base || !target) return;
+    await this.plugin.openDetail({
+      filePath: this.targetFile.path,
+      repositoryRoot: this.history.context.repositoryRoot,
+      base,
+      target,
+      initialMode: this.plugin.getFileReviewState(this.history.context).detailMode
+        ?? this.plugin.settings.defaultDetailMode
+    });
+  }
+
+  private renderContentLifecycle(container: HTMLElement): void {
+    const lifecycle = this.contentLifecycle();
+    if (!lifecycle || lifecycle.spans.length === 0) return;
+    const firstSpan = lifecycle.spans[0]!;
+    const lastSpan = lifecycle.spans.at(-1)!;
+    const card = container.createDiv({ cls: "git-note-history-content-lifecycle" });
+    const heading = card.createDiv({ cls: "git-note-history-content-lifecycle-heading" });
+    const title = heading.createDiv({ cls: "git-note-history-content-lifecycle-title" });
+    setIcon(title.createSpan(), "route");
+    title.createSpan({ text: "内容轨迹" });
+    heading.createSpan({
+      cls: `git-note-history-content-lifecycle-state ${lifecycle.currentPresent ? "is-present" : "is-removed"}`,
+      text: lifecycle.currentPresent ? "当前仍存在" : "当前已删除"
+    });
+
+    const milestones = card.createDiv({ cls: "git-note-history-content-lifecycle-milestones" });
+    const addMilestone = (label: string, key: string, tone: string): void => {
+      const item = milestones.createDiv({ cls: `git-note-history-content-lifecycle-milestone ${tone}` });
+      item.createSpan({ cls: "git-note-history-content-lifecycle-dot" });
+      const copy = item.createDiv();
+      copy.createSpan({ cls: "git-note-history-content-lifecycle-label", text: label });
+      copy.createSpan({ cls: "git-note-history-content-lifecycle-value", text: this.lifecycleVersionLabel(key) });
+    };
+    addMilestone("首次出现", lifecycle.firstAppearanceKey!, "is-introduced");
+    if (lifecycle.lastPresenceKey !== lifecycle.firstAppearanceKey) {
+      addMilestone(
+        lifecycle.currentPresent ? "延续至" : "最后存在",
+        lifecycle.lastPresenceKey!,
+        "is-last"
+      );
+    }
+    if (lastSpan.removedByKey) addMilestone("随后删除于", lastSpan.removedByKey, "is-removed");
+
+    const notes: string[] = [];
+    if (lifecycle.confirmedReappearances > 0) {
+      notes.push(`曾重新出现 ${lifecycle.confirmedReappearances} 次`);
+    }
+    if (lifecycle.unknownVersions > 0) {
+      notes.push(`${lifecycle.unknownVersions} 个版本无法验证`);
+    }
+    if (notes.length > 0) {
+      card.createDiv({ cls: "git-note-history-content-lifecycle-note", text: notes.join(" · ") });
+    }
+
+    const actions = card.createDiv({ cls: "git-note-history-content-lifecycle-actions" });
+    if (firstSpan.introducedAfterKey) {
+      const introduced = actions.createEl("button", { text: "查看首次加入" });
+      setIcon(introduced.createSpan(), "git-compare-arrows");
+      introduced.addEventListener("click", () => {
+        void this.openVersionPair(firstSpan.introducedAfterKey!, firstSpan.firstKey);
+      });
+    }
+    if (lastSpan.removedByKey) {
+      const removed = actions.createEl("button", { text: "查看删除位置" });
+      setIcon(removed.createSpan(), "search-x");
+      removed.addEventListener("click", () => {
+        void this.openVersionPair(lastSpan.lastKey, lastSpan.removedByKey!);
+      });
+    }
   }
 
   private renderReviewInbox(container: HTMLElement, state: FileReviewState): void {
@@ -789,9 +924,11 @@ export class GitNoteHistoryView extends ItemView {
           text: `正在搜索历史内容 ${this.contentSearchScanned}/${this.contentSearchTotal} · 已命中 ${this.contentSearchMatches.size}`
         });
       } else {
+        const currentMatch = this.currentContentMatch();
         const failed = this.contentSearchFailed > 0 ? ` · ${this.contentSearchFailed} 个版本不可读` : "";
+        const working = currentMatch ? " · 当前工作区命中" : "";
         status.createSpan({
-          text: `内容命中 ${this.contentSearchMatches.size} 个版本 · 已检查 ${this.contentSearchScanned}${failed}`
+          text: `历史内容命中 ${this.contentSearchMatches.size} 个版本 · 已检查 ${this.contentSearchScanned}${working}${failed}`
         });
       }
     }

@@ -50,6 +50,7 @@ import {
   setReviewInboxItemSnoozed
 } from "../src/review/review-state";
 import {
+  buildContentLifecycle,
   historicalContentMatch,
   historicalContentSnippet,
   searchableMarkdownBody
@@ -280,6 +281,80 @@ describe("historical content search", () => {
 
     expect(historicalContentSnippet(content, "关键研究问题")).toContain("这个版本保留了关键研究问题。");
     expect(historicalContentSnippet(content, "不存在内容")).toBeNull();
+  });
+
+  it("locates a phrase's first appearance and confirmed deletion boundary", () => {
+    const lifecycle = buildContentLifecycle([
+      { key: "a", state: "absent" },
+      { key: "b", state: "present" },
+      { key: "c", state: "present" },
+      { key: "d", state: "absent" },
+      { key: "working", state: "absent" }
+    ]);
+
+    expect(lifecycle).toMatchObject({
+      firstAppearanceKey: "b",
+      lastPresenceKey: "c",
+      currentPresent: false,
+      confirmedReappearances: 0,
+      unknownVersions: 0
+    });
+    expect(lifecycle.spans).toEqual([
+      expect.objectContaining({
+        firstKey: "b",
+        lastKey: "c",
+        introducedAfterKey: "a",
+        removedByKey: "d"
+      })
+    ]);
+  });
+
+  it("tracks confirmed reappearances and current working-tree presence", () => {
+    const lifecycle = buildContentLifecycle([
+      { key: "a", state: "present" },
+      { key: "b", state: "absent" },
+      { key: "c", state: "present" },
+      { key: "working", state: "present" }
+    ]);
+
+    expect(lifecycle.currentPresent).toBe(true);
+    expect(lifecycle.confirmedReappearances).toBe(1);
+    expect(lifecycle.lastPresenceKey).toBe("working");
+    expect(lifecycle.spans[0]?.removedByKey).toBe("b");
+    expect(lifecycle.spans[1]?.introducedAfterKey).toBe("b");
+  });
+
+  it("does not infer additions or deletions across unreadable versions", () => {
+    const lifecycle = buildContentLifecycle([
+      { key: "a", state: "unknown" },
+      { key: "b", state: "present" },
+      { key: "c", state: "unknown" },
+      { key: "working", state: "absent" }
+    ]);
+
+    expect(lifecycle.unknownVersions).toBe(2);
+    expect(lifecycle.spans[0]).toMatchObject({
+      uncertainStart: true,
+      uncertainEnd: true
+    });
+    expect(lifecycle.spans[0]?.introducedAfterKey).toBeUndefined();
+    expect(lifecycle.spans[0]?.removedByKey).toBeUndefined();
+  });
+
+  it("uses the working tree as an uncommitted addition or deletion boundary", () => {
+    const deletedInWorkingTree = buildContentLifecycle([
+      { key: "a", state: "absent" },
+      { key: "b", state: "present" },
+      { key: "working", state: "absent" }
+    ]);
+    const addedInWorkingTree = buildContentLifecycle([
+      { key: "a", state: "absent" },
+      { key: "working", state: "present" }
+    ]);
+
+    expect(deletedInWorkingTree.spans[0]?.removedByKey).toBe("working");
+    expect(addedInWorkingTree.spans[0]?.introducedAfterKey).toBe("a");
+    expect(addedInWorkingTree.firstAppearanceKey).toBe("working");
   });
 });
 

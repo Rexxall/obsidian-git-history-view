@@ -7,6 +7,31 @@ export interface HistoricalContentMatch {
   scope: HistoricalContentScope;
 }
 
+export type ContentPresenceState = "present" | "absent" | "unknown";
+
+export interface ContentLifecycleVersion {
+  key: string;
+  state: ContentPresenceState;
+}
+
+export interface ContentPresenceSpan {
+  firstKey: string;
+  lastKey: string;
+  introducedAfterKey: string | undefined;
+  removedByKey: string | undefined;
+  uncertainStart: boolean;
+  uncertainEnd: boolean;
+}
+
+export interface ContentLifecycle {
+  spans: ContentPresenceSpan[];
+  firstAppearanceKey: string | undefined;
+  lastPresenceKey: string | undefined;
+  currentPresent: boolean;
+  confirmedReappearances: number;
+  unknownVersions: number;
+}
+
 export function searchableMarkdownBody(content: string): string {
   return content.replace(FRONTMATTER_PATTERN, "");
 }
@@ -48,4 +73,43 @@ export function historicalContentSnippet(
   contextCharacters = 84
 ): string | null {
   return historicalContentMatch(content, query, contextCharacters)?.snippet ?? null;
+}
+
+export function buildContentLifecycle(
+  versions: ContentLifecycleVersion[]
+): ContentLifecycle {
+  const spans: ContentPresenceSpan[] = [];
+  let index = 0;
+
+  while (index < versions.length) {
+    if (versions[index]?.state !== "present") {
+      index += 1;
+      continue;
+    }
+
+    const firstIndex = index;
+    while (versions[index + 1]?.state === "present") index += 1;
+    const lastIndex = index;
+    const previous = versions[firstIndex - 1];
+    const next = versions[lastIndex + 1];
+
+    spans.push({
+      firstKey: versions[firstIndex]!.key,
+      lastKey: versions[lastIndex]!.key,
+      introducedAfterKey: previous?.state === "absent" ? previous.key : undefined,
+      removedByKey: next?.state === "absent" ? next.key : undefined,
+      uncertainStart: firstIndex > 0 && previous?.state === "unknown",
+      uncertainEnd: lastIndex < versions.length - 1 && next?.state === "unknown"
+    });
+    index += 1;
+  }
+
+  return {
+    spans,
+    firstAppearanceKey: spans[0]?.firstKey,
+    lastPresenceKey: spans.at(-1)?.lastKey,
+    currentPresent: versions.at(-1)?.state === "present",
+    confirmedReappearances: spans.slice(1).filter((span) => span.introducedAfterKey).length,
+    unknownVersions: versions.filter((version) => version.state === "unknown").length
+  };
 }
