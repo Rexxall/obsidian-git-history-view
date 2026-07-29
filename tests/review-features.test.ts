@@ -928,6 +928,16 @@ describe("Obsidian relationship impact", () => {
     ]));
     expect(extractNoteRelations(after).some((relation) => relation.target.includes("example.com"))).toBe(false);
   });
+
+  it("keeps malformed percent-encoded historical links inspectable", () => {
+    expect(() => extractNoteRelations("See [[Broken%ZZLink]] and [note](Bad%2.md).")).not.toThrow();
+    expect(extractNoteRelations("See [[Broken%ZZLink]] and [note](Bad%2.md).")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ target: "Broken%ZZLink", kind: "wikilink" }),
+        expect.objectContaining({ target: "Bad%2.md", kind: "markdown" })
+      ])
+    );
+  });
 });
 
 describe("three-way conflict resolution", () => {

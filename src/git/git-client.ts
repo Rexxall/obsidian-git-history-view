@@ -15,6 +15,7 @@ import type {
   VersionReference
 } from "../models";
 import {
+  parseCommitMetadata,
   parseCommittedNameStatus,
   parseGitLog,
   parseGitStatus,
@@ -22,6 +23,7 @@ import {
   parseNumStatByPath,
   parseNumStatLog,
   parseSingleNumStat,
+  parseZeroDelimitedNumStat,
   parseWorkspaceStatus
 } from "./parse-log";
 import { limitHistory } from "../history/timeline-window";
@@ -29,10 +31,48 @@ import {
   isReviewPathExcluded,
   mergeReviewInboxItems
 } from "../review/review-inbox";
+import { buildLinkImpact } from "../analysis/link-impact";
+import {
+  countUniqueHiddenRepositoryFiles,
+  createHiddenRepositoryPathIdentity,
+  mergeWorkEventChanges,
+  selectInferredSessionCommits
+} from "../work-events/work-event";
+import type { MergeWorkEventChangesResult } from "../work-events/work-event";
+import type {
+  WorkEventAnalysisState,
+  WorkEventCommit,
+  WorkEventFileChange,
+  WorkEventRelationDelta,
+  WorkEventRequest,
+  WorkEventSnapshot
+} from "../work-events/types";
 
 const LOG_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%B%x1d";
 const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
+const WORK_EVENT_LOG_FORMAT =
+  "%x1e%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%s%x1f%B%x1d";
 const MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024;
+const WORK_EVENT_ANALYSIS_LIMITS = {
+  maxMarkdownFiles: 60,
+  maxFileBytes: 256 * 1024,
+  maxTotalBytes: 2 * 1024 * 1024,
+  maxRelationsPerFile: 500,
+  maxTotalRelations: 2000
+} as const;
+
+function parseWorkEventCommitLog(raw: string): WorkEventCommit[] {
+  const commits: WorkEventCommit[] = [];
+  for (const part of raw.split("\u001e")) {
+    const record = part
+      .replace(/^\r?\n/, "")
+      .replace(/\u001d(?:\r?\n)?$/, "");
+    if (!record) continue;
+    const metadata = parseCommitMetadata(record);
+    if (metadata) commits.push(metadata);
+  }
+  return commits;
+}
 
 export class GitCommandError extends Error {
   readonly stderr: string;
@@ -345,6 +385,22 @@ export class GitClient {
     };
   }
 
+  async loadWorkEvent(request: WorkEventRequest): Promise<WorkEventSnapshot> {
+    const { vaultRoot, repositoryRoot } = await this.resolveRepository();
+    if (request.repositoryRoot) {
+      const requestedRoot = await this.resolveRealPath(request.repositoryRoot);
+      if (requestedRoot !== repositoryRoot) {
+        throw new GitCommandError("工作事件请求来自另一个 Git 仓库，请从时间线重新打开。");
+      }
+    }
+    const branch = (await this.getBranch(repositoryRoot)).trim() || "HEAD";
+    const context = { vaultRoot, repositoryRoot };
+    if (request.source.kind === "working") {
+      return this.loadWorkingWorkEvent(context, branch, request);
+    }
+    return this.loadCommittedWorkEvent(context, branch, request, request.source);
+  }
+
   repositoryPathToVaultPath(context: GitRepositoryContext, repositoryPath: string): string {
     const absolutePath = path.resolve(context.repositoryRoot, repositoryPath);
     return path.relative(context.vaultRoot, absolutePath).split(path.sep).join("/");
@@ -426,6 +482,836 @@ export class GitClient {
     return { context, ancestor, ours, theirs, working };
   }
 
+  private async loadCommittedWorkEvent(
+    context: Omit<GitRepositoryContext, "repositoryRelativePath">,
+    branch: string,
+    request: WorkEventRequest,
+    source: Extract<WorkEventRequest["source"], { kind: "commit" }>
+  ): Promise<WorkEventSnapshot> {
+    const { commitHash, aggregation } = source;
+    if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
+      throw new GitCommandError("Git 提交哈希格式无效。");
+    }
+    const logOutput = await this.runGit(context.repositoryRoot, [
+      "log",
+      "--first-parent",
+      "--max-count=13",
+      `--format=${WORK_EVENT_LOG_FORMAT}`,
+      commitHash
+    ]);
+    const candidates = parseWorkEventCommitLog(logOutput);
+    const anchor = candidates[0];
+    if (!anchor || !anchor.hash.toLocaleLowerCase().startsWith(commitHash.toLocaleLowerCase())) {
+      throw new GitCommandError("没有找到这次工作事件对应的 Git 提交。");
+    }
+
+    const selection = aggregation === "session"
+      ? selectInferredSessionCommits(
+          candidates,
+          source.milestoneHashes ?? [],
+          12
+        )
+      : {
+          commits: [anchor],
+          confidence: "exact" as const,
+          reason: "精确显示这一个 Git 提交。"
+        };
+    const sessionTruncated = aggregation === "session"
+      && selectInferredSessionCommits(
+        candidates,
+        source.milestoneHashes ?? [],
+        13
+      ).commits.length > selection.commits.length;
+    const commits = selection.commits;
+    const oldest = commits.at(-1)!;
+    const baseHash = oldest.parentHashes[0];
+    const headHash = anchor.hash;
+    const hiddenPathIdentity = createHiddenRepositoryPathIdentity();
+    const sliceResults = await Promise.all(
+      commits.map((commit) =>
+        this.loadCommittedChangeSet(
+          context,
+          commit.parentHashes[0],
+          commit.hash,
+          request.anchorVaultPath,
+          request.anchorHistoricalPath,
+          hiddenPathIdentity
+        )
+      )
+    );
+    const slices = commits.map((commit, index) => {
+      const result = sliceResults[index]!;
+      return {
+        commit,
+        changes: result.changes,
+        hiddenRepositoryFileCount: result.hiddenRepositoryFileCount
+      };
+    });
+    const net = commits.length === 1
+      ? {
+          changes: slices[0]?.changes.map((change) => ({ ...change })) ?? [],
+          hiddenRepositoryFileCount: slices[0]?.hiddenRepositoryFileCount ?? 0,
+          hiddenRepositoryFileIdentityGroups:
+            sliceResults[0]?.hiddenRepositoryFileIdentityGroups ?? []
+        }
+      : await this.loadCommittedChangeSet(
+          context,
+          baseHash,
+          headHash,
+          request.anchorVaultPath,
+          request.anchorHistoricalPath,
+          hiddenPathIdentity
+        );
+    const hiddenRepositoryFileCount = commits.length === 1
+      ? net.hiddenRepositoryFileCount
+      : countUniqueHiddenRepositoryFiles([
+          ...sliceResults.flatMap(
+            (result) => result.hiddenRepositoryFileIdentityGroups
+          ),
+          ...net.hiddenRepositoryFileIdentityGroups
+        ]);
+    const sessionRestoredFiles = commits.length > 1
+      ? this.includeSessionTouchedFiles(net.changes, slices)
+      : 0;
+    const hydrated = await this.hydrateWorkEventMarkdown(
+      context,
+      net.changes,
+      baseHash,
+      headHash,
+      false
+    );
+    const capturedAt = new Date().toISOString();
+    const warnings = [...hydrated.warnings];
+    if (selection.confidence === "heuristic") {
+      warnings.unshift(`编辑会话为推测结果：${selection.reason}`);
+    }
+    if (sessionTruncated) {
+      warnings.push("这组自动备份已达到 12 个提交上限，会话可能从更早开始。");
+    }
+    if (sessionRestoredFiles > 0) {
+      warnings.push(
+        `${sessionRestoredFiles} 个文件在会话中曾修改，但结束时回到了起点内容。`
+      );
+    }
+    if (hiddenRepositoryFileCount > 0) {
+      warnings.push(
+        `另有 ${hiddenRepositoryFileCount} 个 Vault 外仓库文件未展示。`
+      );
+    }
+    return {
+      id: `${selection.confidence === "heuristic" ? "git-session" : "git-commit"}:${headHash}:${baseHash ?? "root"}`,
+      source: selection.confidence === "heuristic" ? "git-session" : "git-commit",
+      confidence: selection.confidence,
+      aggregation,
+      repositoryRoot: context.repositoryRoot,
+      vaultRoot: context.vaultRoot,
+      branch,
+      ...(request.anchorVaultPath ? { anchorVaultPath: request.anchorVaultPath } : {}),
+      ...(request.anchorHistoricalPath
+        ? { anchorHistoricalPath: request.anchorHistoricalPath }
+        : {}),
+      ...(baseHash ? { baseHash } : {}),
+      headHash,
+      startedAt: oldest.committedAt,
+      endedAt: anchor.committedAt,
+      capturedAt,
+      commits,
+      commitSlices: slices,
+      netChanges: hydrated.changes,
+      relationDeltas: hydrated.relations,
+      hiddenRepositoryFileCount,
+      warnings,
+      analysis: hydrated.analysis
+    };
+  }
+
+  private includeSessionTouchedFiles(
+    netChanges: WorkEventFileChange[],
+    slices: WorkEventSnapshot["commitSlices"]
+  ): number {
+    const netPaths = new Set(
+      netChanges.flatMap((change) => [
+        change.repositoryPath,
+        ...(change.originalRepositoryPath ? [change.originalRepositoryPath] : [])
+      ])
+    );
+    const restored = new Map<string, WorkEventFileChange>();
+    for (const slice of slices) {
+      for (const change of slice.changes) {
+        if (
+          netPaths.has(change.repositoryPath)
+          || (
+            change.originalRepositoryPath
+            && netPaths.has(change.originalRepositoryPath)
+          )
+        ) continue;
+        const key = change.vaultPath;
+        const existing = restored.get(key);
+        if (existing) {
+          existing.addedLines += change.addedLines;
+          existing.deletedLines += change.deletedLines;
+          existing.isAnchor = existing.isAnchor || change.isAnchor;
+          continue;
+        }
+        restored.set(key, {
+          ...change,
+          status: "M",
+          netUnchanged: true,
+          previewStatus: "unavailable"
+        });
+      }
+    }
+    netChanges.push(...restored.values());
+    return restored.size;
+  }
+
+  private async loadWorkingWorkEvent(
+    context: Omit<GitRepositoryContext, "repositoryRelativePath">,
+    branch: string,
+    request: WorkEventRequest
+  ): Promise<WorkEventSnapshot> {
+    const headHash = (await this.runGit(context.repositoryRoot, [
+      "rev-parse",
+      "HEAD"
+    ]).catch((error: unknown) => {
+      if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) {
+        return "";
+      }
+      throw error;
+    })).trim();
+    const [statusOutput, nameStatusOutput, statsOutput] = await Promise.all([
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all"
+      ]),
+      headHash
+        ? this.runGit(context.repositoryRoot, [
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            headHash,
+            "--find-renames",
+            "--find-copies",
+            "--name-status",
+            "-z",
+            "--"
+          ])
+        : Promise.resolve(""),
+      headHash
+        ? this.runGit(context.repositoryRoot, [
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            headHash,
+            "--find-renames",
+            "--find-copies",
+            "--numstat",
+            "-z",
+            "--"
+          ])
+        : Promise.resolve("")
+    ]);
+    const workspace = parseWorkspaceStatus(statusOutput);
+    const statuses = parseCommittedNameStatus(nameStatusOutput);
+    const statusByPath = new Map(statuses.map((status) => [status.path, status]));
+    for (const change of workspace) {
+      let status = statusByPath.get(change.path);
+      if (!status && (change.untracked || !headHash || change.conflicted)) {
+        const status: GitCommittedChange = {
+          path: change.path,
+          ...(change.originalPath ? { originalPath: change.originalPath } : {}),
+          changeType: change.conflicted ? "U" : "A",
+          addedLines: 0,
+          deletedLines: 0
+        };
+        statuses.push(status);
+        statusByPath.set(status.path, status);
+        continue;
+      }
+      if (!change.conflicted) continue;
+      status = statusByPath.get(change.path);
+      if (status) {
+        status.changeType = "U";
+      } else {
+        const conflict: GitCommittedChange = {
+          path: change.path,
+          changeType: "U",
+          addedLines: 0,
+          deletedLines: 0
+        };
+        statuses.push(conflict);
+        statusByPath.set(conflict.path, conflict);
+      }
+    }
+    const merged = mergeWorkEventChanges(
+      statuses,
+      parseZeroDelimitedNumStat(statsOutput),
+      {
+        toVaultPath: (repositoryPath) =>
+          this.workEventVaultPath(context, repositoryPath),
+        ...(request.anchorVaultPath
+          ? { anchorVaultPath: request.anchorVaultPath }
+          : {})
+      }
+    );
+    for (const change of merged.changes) {
+      const matching = workspace.find((item) =>
+        item.path === change.repositoryPath
+        || item.originalPath === change.repositoryPath
+      );
+      if (!matching) continue;
+      if (matching.conflicted) change.conflicted = true;
+      if (matching.untracked) change.untracked = true;
+    }
+    const hydrated = await this.hydrateWorkEventMarkdown(
+      context,
+      merged.changes,
+      headHash || undefined,
+      headHash || undefined,
+      true
+    );
+    const stateAfter = await this.readWorkingEventGitState(
+      context.repositoryRoot,
+      headHash
+    );
+    if (
+      stateAfter.headHash !== headHash
+      || stateAfter.status !== statusOutput
+      || stateAfter.nameStatus !== nameStatusOutput
+      || stateAfter.stats !== statsOutput
+    ) {
+      throw new GitCommandError(
+        "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+      );
+    }
+    await this.assertWorkingPreviewUnchanged(context, hydrated.changes);
+    const finalState = await this.readWorkingEventGitState(
+      context.repositoryRoot,
+      headHash
+    );
+    if (
+      finalState.headHash !== headHash
+      || finalState.status !== statusOutput
+      || finalState.nameStatus !== nameStatusOutput
+      || finalState.stats !== statsOutput
+    ) {
+      throw new GitCommandError(
+        "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+      );
+    }
+    const capturedAt = new Date().toISOString();
+    const warnings = [...hydrated.warnings];
+    if (merged.hiddenRepositoryFileCount > 0) {
+      warnings.push(
+        `另有 ${merged.hiddenRepositoryFileCount} 个 Vault 外仓库文件未展示。`
+      );
+    }
+    return {
+      id: `working:${headHash || "unborn"}:${capturedAt}`,
+      source: "working",
+      confidence: "snapshot",
+      aggregation: "working",
+      repositoryRoot: context.repositoryRoot,
+      vaultRoot: context.vaultRoot,
+      branch,
+      ...(request.anchorVaultPath ? { anchorVaultPath: request.anchorVaultPath } : {}),
+      ...(request.anchorHistoricalPath
+        ? { anchorHistoricalPath: request.anchorHistoricalPath }
+        : {}),
+      ...(headHash ? { baseHash: headHash, headHash } : {}),
+      endedAt: capturedAt,
+      capturedAt,
+      commits: [],
+      commitSlices: [],
+      netChanges: hydrated.changes,
+      relationDeltas: hydrated.relations,
+      hiddenRepositoryFileCount: merged.hiddenRepositoryFileCount,
+      warnings,
+      analysis: hydrated.analysis
+    };
+  }
+
+  private async loadCommittedChangeSet(
+    context: Omit<GitRepositoryContext, "repositoryRelativePath">,
+    baseHash: string | undefined,
+    targetHash: string,
+    anchorVaultPath?: string,
+    anchorRepositoryPath?: string,
+    hiddenPathIdentity?: (repositoryPath: string) => string
+  ): Promise<MergeWorkEventChangesResult> {
+    const base = baseHash ?? await this.getEmptyTreeHash(context.repositoryRoot);
+    const [nameStatusOutput, statsOutput] = await Promise.all([
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "--find-renames",
+        "--find-copies",
+        "--name-status",
+        "-z",
+        base,
+        targetHash,
+        "--"
+      ]),
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "--find-renames",
+        "--find-copies",
+        "--numstat",
+        "-z",
+        base,
+        targetHash,
+        "--"
+      ])
+    ]);
+    return mergeWorkEventChanges(
+      parseCommittedNameStatus(nameStatusOutput),
+      parseZeroDelimitedNumStat(statsOutput),
+      {
+        toVaultPath: (repositoryPath) =>
+          this.workEventVaultPath(context, repositoryPath),
+        ...(anchorVaultPath ? { anchorVaultPath } : {}),
+        ...(anchorRepositoryPath ? { anchorRepositoryPath } : {}),
+        ...(hiddenPathIdentity ? { hiddenPathIdentity } : {})
+      }
+    );
+  }
+
+  private workEventVaultPath(
+    context: Omit<GitRepositoryContext, "repositoryRelativePath">,
+    repositoryPath: string
+  ): string | null {
+    const vaultPath = this.repositoryPathToVaultPath(
+      { ...context, repositoryRelativePath: repositoryPath },
+      repositoryPath
+    );
+    if (
+      vaultPath === ".."
+      || vaultPath.startsWith("../")
+      || path.isAbsolute(vaultPath)
+    ) return null;
+    return vaultPath;
+  }
+
+  private async hydrateWorkEventMarkdown(
+    context: Omit<GitRepositoryContext, "repositoryRelativePath">,
+    sourceChanges: readonly WorkEventFileChange[],
+    baseHash: string | undefined,
+    targetHash: string | undefined,
+    workingTarget: boolean
+  ): Promise<{
+    changes: WorkEventFileChange[];
+    relations: WorkEventRelationDelta[];
+    warnings: string[];
+    analysis: WorkEventAnalysisState;
+  }> {
+    const changes = sourceChanges.map((change) => ({ ...change }));
+    const markdown = changes.filter((change) => change.kind === "markdown");
+    const relations: WorkEventRelationDelta[] = [];
+    const warnings: string[] = [];
+    let analyzedMarkdownFiles = 0;
+    let skippedMarkdownFiles = 0;
+    let physicalBoundarySkipped = 0;
+    let analyzedBytes = 0;
+    let skippedRelationChanges = 0;
+    const changedPaths = new Set(
+      changes.flatMap((change) => [
+        change.vaultPath,
+        ...(change.originalVaultPath ? [change.originalVaultPath] : [])
+      ])
+    );
+
+    if (workingTarget) {
+      for (const change of changes) {
+        if (change.status === "D") continue;
+        const currentFile = this.app.vault.getFileByPath(change.vaultPath);
+        if (
+          currentFile
+          && !await this.isPhysicalVaultPath(context.vaultRoot, change.vaultPath)
+        ) {
+          change.openable = false;
+        }
+      }
+    }
+
+    for (const [index, change] of markdown.entries()) {
+      if (index >= WORK_EVENT_ANALYSIS_LIMITS.maxMarkdownFiles) {
+        change.previewStatus = "too-large";
+        skippedMarkdownFiles += 1;
+        continue;
+      }
+      const beforePath = change.originalRepositoryPath ?? change.repositoryPath;
+      let beforeSize = 0;
+      if (change.status !== "A" || change.originalRepositoryPath) {
+        if (!baseHash) {
+          change.previewStatus = "unavailable";
+          skippedMarkdownFiles += 1;
+          continue;
+        }
+        const size = await this.getHistoricalObjectSizeOrNull(
+          context.repositoryRoot,
+          baseHash,
+          beforePath
+        );
+        if (size === null) {
+          change.previewStatus = "unavailable";
+          skippedMarkdownFiles += 1;
+          continue;
+        }
+        beforeSize = size;
+      }
+
+      let workingFile: TFile | null = null;
+      let afterSize = 0;
+      if (change.status !== "D") {
+        if (workingTarget) {
+          workingFile = this.app.vault.getFileByPath(change.vaultPath);
+          if (
+            !workingFile
+            || change.openable === false
+          ) {
+            change.previewStatus = "unavailable";
+            skippedMarkdownFiles += 1;
+            if (workingFile) physicalBoundarySkipped += 1;
+            continue;
+          }
+          afterSize = workingFile.stat?.size ?? 0;
+        } else {
+          if (!targetHash) {
+            change.previewStatus = "unavailable";
+            skippedMarkdownFiles += 1;
+            continue;
+          }
+          const size = await this.getHistoricalObjectSizeOrNull(
+            context.repositoryRoot,
+            targetHash,
+            change.repositoryPath
+          );
+          if (size === null) {
+            change.previewStatus = "unavailable";
+            skippedMarkdownFiles += 1;
+            continue;
+          }
+          afterSize = size;
+        }
+      }
+      const estimatedBytes = beforeSize + afterSize;
+      if (
+        estimatedBytes > WORK_EVENT_ANALYSIS_LIMITS.maxFileBytes
+        || analyzedBytes + estimatedBytes > WORK_EVENT_ANALYSIS_LIMITS.maxTotalBytes
+      ) {
+        change.previewStatus = "too-large";
+        skippedMarkdownFiles += 1;
+        continue;
+      }
+
+      let before: string | null;
+      if (change.status === "A" && !change.originalRepositoryPath) {
+        before = "";
+      } else {
+        before = await this.readHistoricalContentOrNull(
+          context.repositoryRoot,
+          baseHash!,
+          beforePath
+        );
+      }
+
+      let after: string | null;
+      if (change.status === "D") {
+        after = "";
+      } else if (workingTarget) {
+        after = await this.app.vault.read(workingFile!);
+      } else {
+        after = await this.readHistoricalContentOrNull(
+          context.repositoryRoot,
+          targetHash!,
+          change.repositoryPath
+        );
+      }
+      if (before === null || after === null) {
+        change.previewStatus = "unavailable";
+        skippedMarkdownFiles += 1;
+        continue;
+      }
+      if (change.status === "A" && change.addedLines === 0) {
+        change.addedLines = after === "" ? 0 : after.split(/\r?\n/).length;
+      }
+      if (change.status === "D" && change.deletedLines === 0) {
+        change.deletedLines = before === "" ? 0 : before.split(/\r?\n/).length;
+      }
+      const bytes = Buffer.byteLength(before, "utf8") + Buffer.byteLength(after, "utf8");
+      if (
+        bytes > WORK_EVENT_ANALYSIS_LIMITS.maxFileBytes
+        || analyzedBytes + bytes > WORK_EVENT_ANALYSIS_LIMITS.maxTotalBytes
+      ) {
+        change.previewStatus = "too-large";
+        skippedMarkdownFiles += 1;
+        continue;
+      }
+      change.beforeContent = before;
+      change.afterContent = after;
+      change.previewStatus = "ready";
+      analyzedMarkdownFiles += 1;
+      analyzedBytes += bytes;
+
+      const impact = buildLinkImpact(before, after);
+      const availableRelationSlots = Math.max(
+        0,
+        WORK_EVENT_ANALYSIS_LIMITS.maxTotalRelations - relations.length
+      );
+      const fileRelations = [
+        ...impact.added.map((relation) => ({ relation, relationChange: "added" as const })),
+        ...impact.removed.map((relation) => ({ relation, relationChange: "removed" as const }))
+      ];
+      const acceptedRelations = fileRelations.slice(
+        0,
+        Math.min(WORK_EVENT_ANALYSIS_LIMITS.maxRelationsPerFile, availableRelationSlots)
+      );
+      skippedRelationChanges += fileRelations.length - acceptedRelations.length;
+      for (const { relation, relationChange } of acceptedRelations) {
+        const sourcePath = relationChange === "added"
+          ? change.vaultPath
+          : change.originalVaultPath ?? change.vaultPath;
+        let resolvedPath: string | undefined;
+        if (relation.kind !== "tag") {
+          try {
+            resolvedPath = this.app.metadataCache
+              ?.getFirstLinkpathDest(relation.target, sourcePath)
+              ?.path;
+          } catch {
+            // Historical paths and malformed targets may not resolve in the current Vault.
+          }
+        }
+        const delta: WorkEventRelationDelta = {
+          change: relationChange,
+          kind: relation.kind,
+          target: relation.target,
+          label: relation.label,
+          eventLocal: relation.kind !== "tag"
+            && this.isEventLocalRelation(relation.target, sourcePath, changedPaths)
+        };
+        if (relationChange === "removed") {
+          delta.sourceBeforePath = change.originalVaultPath ?? change.vaultPath;
+        } else {
+          delta.sourceAfterPath = change.vaultPath;
+        }
+        if (resolvedPath) delta.currentResolvedVaultPath = resolvedPath;
+        relations.push(delta);
+      }
+    }
+
+    for (const change of changes) {
+      if (change.kind !== "markdown") change.previewStatus = "not-text";
+    }
+    if (skippedMarkdownFiles > 0) {
+      warnings.push(
+        `关系与内容预览只分析了 ${analyzedMarkdownFiles}/${markdown.length} 篇 Markdown；其余文件因大小、数量或历史对象不可读而跳过。`
+      );
+    }
+    if (physicalBoundarySkipped > 0) {
+      warnings.push(
+        `${physicalBoundarySkipped} 个工作区 Markdown 的物理路径位于 Vault 外，正文未读取。`
+      );
+    }
+    if (skippedRelationChanges > 0) {
+      warnings.push(
+        `${skippedRelationChanges} 项关系变化超过分析上限，未在本页展开。`
+      );
+    }
+    return {
+      changes,
+      relations,
+      warnings,
+      analysis: {
+        markdownFiles: markdown.length,
+        analyzedMarkdownFiles,
+        skippedMarkdownFiles,
+        analyzedBytes,
+        relationChanges: relations.length,
+        skippedRelationChanges,
+        partial: skippedMarkdownFiles > 0 || skippedRelationChanges > 0,
+        limits: { ...WORK_EVENT_ANALYSIS_LIMITS }
+      }
+    };
+  }
+
+  private async readHistoricalContentOrNull(
+    repositoryRoot: string,
+    commitHash: string,
+    repositoryPath: string
+  ): Promise<string | null> {
+    try {
+      return await this.getFileContent(repositoryRoot, commitHash, repositoryPath);
+    } catch {
+      return null;
+    }
+  }
+
+  private async getHistoricalObjectSizeOrNull(
+    repositoryRoot: string,
+    commitHash: string,
+    repositoryPath: string
+  ): Promise<number | null> {
+    try {
+      const output = await this.runGit(repositoryRoot, [
+        "cat-file",
+        "-s",
+        `${commitHash}:${repositoryPath}`
+      ]);
+      const size = Number.parseInt(output.trim(), 10);
+      return Number.isFinite(size) && size >= 0 ? size : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private isEventLocalRelation(
+    target: string,
+    sourcePath: string,
+    changedPaths: ReadonlySet<string>
+  ): boolean {
+    const cleanTarget = target
+      .replace(/^\/+/, "")
+      .replace(/\\/g, "/")
+      .replace(/\.md$/i, "");
+    if (!cleanTarget) return false;
+    const sourceDirectory = path.posix.dirname(sourcePath);
+    const relativeTarget = path.posix
+      .normalize(path.posix.join(sourceDirectory, cleanTarget))
+      .replace(/\.md$/i, "");
+    const targetName = path.posix.basename(cleanTarget).toLocaleLowerCase();
+    for (const changedPath of changedPaths) {
+      const normalized = changedPath.replace(/\\/g, "/");
+      const withoutMarkdown = normalized.replace(/\.md$/i, "");
+      const lower = withoutMarkdown.toLocaleLowerCase();
+      if (
+        lower === cleanTarget.toLocaleLowerCase()
+        || lower === relativeTarget.toLocaleLowerCase()
+        || path.posix.basename(lower) === targetName
+      ) return true;
+    }
+    return false;
+  }
+
+  private async isPhysicalVaultPath(vaultRoot: string, vaultPath: string): Promise<boolean> {
+    const physicalPath = await this.resolveRealPath(path.resolve(vaultRoot, vaultPath));
+    const relative = path.relative(vaultRoot, physicalPath);
+    return relative !== ".."
+      && !relative.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relative);
+  }
+
+  private async assertWorkingPreviewUnchanged(
+    context: Omit<GitRepositoryContext, "repositoryRelativePath">,
+    changes: readonly WorkEventFileChange[]
+  ): Promise<void> {
+    for (const change of changes) {
+      if (change.previewStatus !== "ready" || change.kind !== "markdown") continue;
+      const currentFile = this.app.vault.getFileByPath(change.vaultPath);
+      if (change.status === "D") {
+        if (currentFile) {
+          throw new GitCommandError(
+            "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+          );
+        }
+        continue;
+      }
+      if (
+        !currentFile
+        || !await this.isPhysicalVaultPath(context.vaultRoot, change.vaultPath)
+      ) {
+        throw new GitCommandError(
+          "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+        );
+      }
+      const currentContent = await this.app.vault.read(currentFile);
+      if (currentContent !== change.afterContent) {
+        throw new GitCommandError(
+          "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+        );
+      }
+    }
+  }
+
+  private async readWorkingEventGitState(
+    repositoryRoot: string,
+    comparisonHash: string
+  ): Promise<{
+    headHash: string;
+    status: string;
+    nameStatus: string;
+    stats: string;
+  }> {
+    const [headHash, status, nameStatus, stats] = await Promise.all([
+      this.runGit(repositoryRoot, ["rev-parse", "HEAD"]).catch(
+        (error: unknown) => {
+          if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) {
+            return "";
+          }
+          throw error;
+        }
+      ),
+      this.runGit(repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all"
+      ]),
+      comparisonHash
+        ? this.runGit(repositoryRoot, [
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            comparisonHash,
+            "--find-renames",
+            "--find-copies",
+            "--name-status",
+            "-z",
+            "--"
+          ])
+        : Promise.resolve(""),
+      comparisonHash
+        ? this.runGit(repositoryRoot, [
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            comparisonHash,
+            "--find-renames",
+            "--find-copies",
+            "--numstat",
+            "-z",
+            "--"
+          ])
+        : Promise.resolve("")
+    ]);
+    return {
+      headHash: headHash.trim(),
+      status,
+      nameStatus,
+      stats
+    };
+  }
+
+  private async getEmptyTreeHash(repositoryRoot: string): Promise<string> {
+    const hash = (await this.runGit(
+      repositoryRoot,
+      ["hash-object", "-t", "tree", "--stdin"],
+      ""
+    )).trim();
+    if (!/^[0-9a-f]{40,64}$/i.test(hash)) {
+      throw new GitCommandError("无法计算当前 Git 仓库格式对应的空目录对象。");
+    }
+    return hash;
+  }
+
   private async resolveContext(file: TFile): Promise<GitRepositoryContext> {
     return this.resolveVaultPathContext(file.path);
   }
@@ -484,11 +1370,11 @@ export class GitClient {
     }
   }
 
-  private runGit(cwd: string, args: string[]): Promise<string> {
+  private runGit(cwd: string, args: string[], input?: string): Promise<string> {
     const executable = this.getSettings().gitExecutable.trim() || "git";
 
     return new Promise((resolve, reject) => {
-      execFile(
+      const child = execFile(
         executable,
         ["-C", cwd, ...args],
         {
@@ -519,6 +1405,7 @@ export class GitClient {
           reject(new GitCommandError("Git 命令执行失败。", detail));
         }
       );
+      if (input !== undefined) child.stdin?.end(input);
     });
   }
 
@@ -535,7 +1422,7 @@ export class GitClient {
   }
 
   private isEmptyRepositoryError(stderr: string): boolean {
-    return /does not have any commits|your current branch .* has no commits|bad revision ['\"]?HEAD/i.test(
+    return /does not have any commits|your current branch .* has no commits|bad revision ['\"]?HEAD|ambiguous argument ['\"]?HEAD['\"]?: unknown revision or path|needed a single revision/i.test(
       stderr
     );
   }

@@ -96,32 +96,51 @@ export class RestorePreviewModal extends Modal {
     });
 
     let cancelButton: HTMLButtonElement | null = null;
+    let saveButton: HTMLButtonElement | null = null;
+    let confirmButton: HTMLButtonElement | null = null;
+    let actionInFlight = false;
+    const beginAction = (): boolean => {
+      if (actionInFlight) return false;
+      actionInFlight = true;
+      if (cancelButton) cancelButton.disabled = true;
+      if (saveButton) saveButton.disabled = true;
+      if (confirmButton) confirmButton.disabled = true;
+      return true;
+    };
     new Setting(this.contentEl)
       .addButton((button) => {
         cancelButton = button.buttonEl;
         button.setButtonText("取消").onClick(() => this.close());
       })
       .addButton((button) => {
+        saveButton = button.buttonEl;
         if (!this.options.onSaveCopy) {
           button.buttonEl.hide();
           return;
         }
         button.setButtonText("另存副本").onClick(async () => {
-          button.setDisabled(true);
-          await this.options.onSaveCopy?.();
-          this.close();
+          if (!beginAction()) return;
+          try {
+            await this.options.onSaveCopy?.();
+          } finally {
+            this.close();
+          }
         });
       })
-      .addButton((button) =>
+      .addButton((button) => {
+        confirmButton = button.buttonEl;
         button
           .setButtonText(this.options.confirmText)
           .setWarning()
           .onClick(async () => {
-            button.setDisabled(true);
-            await this.options.onConfirm();
-            this.close();
-          })
-      );
+            if (!beginAction()) return;
+            try {
+              await this.options.onConfirm();
+            } finally {
+              this.close();
+            }
+          });
+      });
 
     window.setTimeout(() => cancelButton?.focus(), 0);
   }

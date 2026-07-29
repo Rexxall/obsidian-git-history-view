@@ -1,6 +1,6 @@
 # Release process
 
-Every iteration keeps the source, documentation, build output, install archive, and version metadata in one commit.
+Every iteration commits the source, documentation, tracked build output, and version metadata together. The matching install archive is generated and verified under the ignored `dist` directory; it is not force-added to the source commit.
 
 ## Required updates
 
@@ -26,15 +26,16 @@ Every iteration keeps the source, documentation, build output, install archive, 
    ```
 
    The local target file is ignored by Git. It must include the active both test vaults vault plugin directories on the development machine.
-7. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
-8. After explicit publication approval, create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
+7. Open the plugin in both both test vaults and complete the feature-specific real Obsidian checks. A successful file copy or hash comparison does not count as UI verification; confirm the installed version, entry points, layout, read-only boundaries, and preservation of local `data.json`.
+8. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
+9. After explicit publication approval, create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
 
    - `dist/git-note-history-<version>.zip`
    - `main.js`
    - `manifest.json`
    - `styles.css`
 
-9. Download the published assets and verify that their SHA-256 hashes match the local release files.
+10. Download the published assets and verify that their SHA-256 hashes match the local release files.
 
 ## Release contents
 
@@ -45,3 +46,12 @@ The install archive must contain exactly:
 - `styles.css`
 
 `dist`, `node_modules`, test caches, editor state, and operating-system metadata are local build content and are not committed to the source repository. Published packages live in GitHub Releases.
+
+## v0.6.1 local acceptance
+
+- [x] `npm run release:check` on 2026-07-30: 10 test files and 124 tests passed; package verification passed.
+- [x] `dist/git-note-history-0.6.1.zip` SHA-256: `a6eb7060c1f46d3658cf5e17eeb62cc0142d46ad583b1589835b6819aa4148b4`.
+- [x] The archive contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build.
+- [x] both test vaults installs match the tracked build and preserve their existing `data.json`.
+- [x] Obsidian 1.12.7 checks passed in both Vaults, including command entry, exact and inferred events, current snapshots, explicit resampling, read-only comparison boundaries, responsive layout, and theme behavior.
+- Publication state: local only. No push, tag, or GitHub Release was created.

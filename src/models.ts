@@ -241,4 +241,7 @@ export interface DetailRequest {
   base: VersionReference;
   target: VersionReference;
   initialMode?: DetailMode;
+  readOnly?: boolean;
+  baseContentOverride?: string;
+  targetContentOverride?: string;
 }

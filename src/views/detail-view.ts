@@ -162,6 +162,7 @@ export class GitHistoryDetailView extends ItemView {
   private loading = false;
   private error = "";
   private generation = 0;
+  private contentGeneration = -1;
   private focusMode = false;
   private focusLayoutState: { leftCollapsed: boolean; rightCollapsed: boolean } | null = null;
   private changeMap: ChangeMapItem[] = [];
@@ -198,6 +199,7 @@ export class GitHistoryDetailView extends ItemView {
     }
     this.request = request;
     this.changesOnly = true;
+    this.activeVersionSide = "target";
     this.mode = request.initialMode ?? this.plugin.settings.defaultDetailMode;
     if (this.mode === "side-by-side" || this.mode === "unified") this.lastTextDiffMode = this.mode;
     if (this.mode === "semantic" || this.mode === "impact") this.lastImpactMode = this.mode;
@@ -249,6 +251,9 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.generation += 1;
+    this.contentGeneration = -1;
+    this.loading = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.restoreFocusLayout();
@@ -257,26 +262,36 @@ export class GitHistoryDetailView extends ItemView {
   private async loadComparison(): Promise<void> {
     const request = this.request;
     if (!request) return;
+    const generation = ++this.generation;
+    this.contentGeneration = -1;
+    this.baseContent = "";
+    this.targetContent = "";
+    this.changeMap = [];
+    this.currentChangeIndex = 0;
     const file = this.app.vault.getFileByPath(request.filePath);
     if (!file) {
       this.file = null;
+      this.loading = false;
       this.error = `找不到笔记：${request.filePath}`;
       this.render();
       return;
     }
 
-    const generation = ++this.generation;
     this.file = file;
     this.loading = true;
     this.error = "";
     this.render();
     try {
-      const historyPromise = this.historyLoadedFor === file.path
+      const historyPromise = request.readOnly || this.historyLoadedFor === file.path
         ? Promise.resolve(null)
         : this.plugin.gitClient.loadFileHistory(file).catch(() => null);
       const [baseContent, targetContent, history] = await Promise.all([
-        this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.base),
-        this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.target),
+        request.baseContentOverride !== undefined
+          ? Promise.resolve(request.baseContentOverride)
+          : this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.base),
+        request.targetContentOverride !== undefined
+          ? Promise.resolve(request.targetContentOverride)
+          : this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.target),
         historyPromise
       ]);
       if (generation !== this.generation) return;
@@ -294,6 +309,7 @@ export class GitHistoryDetailView extends ItemView {
       this.targetContent = targetContent;
       this.changeMap = buildChangeMap(baseContent, targetContent);
       this.currentChangeIndex = Math.min(this.currentChangeIndex, Math.max(0, this.changeMap.length - 1));
+      this.contentGeneration = generation;
     } catch (error) {
       if (generation !== this.generation) return;
       this.error = errorMessage(error);
@@ -364,13 +380,26 @@ export class GitHistoryDetailView extends ItemView {
     });
     setIcon(moreActions.createSpan(), "ellipsis-vertical");
     moreActions.createSpan({ text: "更多" });
+    moreActions.disabled = !this.hasCurrentContent();
     moreActions.addEventListener("click", (event) => this.openActionOptions(event));
 
-    if (this.request.base.kind === "commit") {
+    if (this.request.base.kind === "commit" && !this.request.readOnly) {
       const restore = actions.createEl("button", { cls: "mod-warning git-note-history-restore-primary" });
       setIcon(restore.createSpan(), "history");
       restore.createSpan({ text: "恢复…" });
+      restore.disabled = !this.hasCurrentContent();
       restore.addEventListener("click", () => void this.confirmFullRestore());
+    }
+    if (this.request.readOnly) {
+      const snapshotTitle = this.request.target.kind === "working"
+        ? `${this.request.target.label}；内容固定为打开工作事件时的采样`
+        : "从工作事件打开的对比不会提供恢复、另存或里程碑编辑";
+      const badge = actions.createSpan({
+        cls: "git-note-history-read-only-badge",
+        attr: { title: snapshotTitle }
+      });
+      setIcon(badge.createSpan(), "lock-keyhole");
+      badge.createSpan({ text: "工作事件只读" });
     }
 
     if (this.loading) {
@@ -454,6 +483,7 @@ export class GitHistoryDetailView extends ItemView {
       attr: { "aria-label": "交换左右版本（X）" }
     });
     swap.disabled = this.loading
+      || this.request.readOnly === true
       || versionReferenceKey(this.request.base) === versionReferenceKey(this.request.target);
     setIcon(swap, "arrow-left-right");
     swap.addEventListener("click", () => this.swapVersions());
@@ -465,7 +495,10 @@ export class GitHistoryDetailView extends ItemView {
       attr: { "aria-label": "自动选择右侧版本的前一个版本" },
       text: alreadyAdjacent ? "已相邻" : "相邻"
     });
-    adjacent.disabled = this.loading || previous === null || alreadyAdjacent;
+    adjacent.disabled = this.loading
+      || this.request.readOnly === true
+      || previous === null
+      || alreadyAdjacent;
     adjacent.addEventListener("click", () => this.compareAdjacentVersions());
     this.renderVersionCard(workbench, "target", "右侧版本", "对比");
   }
@@ -523,27 +556,29 @@ export class GitHistoryDetailView extends ItemView {
         })
       : [];
     if (reference.kind !== "working") {
-      const manageMilestones = cardActions.createEl("button", {
-        cls: "clickable-icon",
-        attr: {
-          "aria-label": milestones.length > 0
-            ? `管理${label}的 ${milestones.length} 个里程碑`
-            : `为${label}添加里程碑`,
-          title: this.historyContext
-            ? ""
-            : "未能读取这篇笔记的 Git 上下文，暂时无法保存里程碑"
-        }
-      });
-      manageMilestones.disabled = !this.historyContext;
-      setIcon(manageMilestones, milestones.length > 0 ? "bookmark-check" : "bookmark-plus");
-      manageMilestones.addEventListener("click", (event) => {
-        this.openMilestoneMenu(event, reference.commit, milestones);
-      });
+      if (!this.request.readOnly) {
+        const manageMilestones = cardActions.createEl("button", {
+          cls: "clickable-icon",
+          attr: {
+            "aria-label": milestones.length > 0
+              ? `管理${label}的 ${milestones.length} 个里程碑`
+              : `为${label}添加里程碑`,
+            title: this.historyContext
+              ? ""
+              : "未能读取这篇笔记的 Git 上下文，暂时无法保存里程碑"
+          }
+        });
+        manageMilestones.disabled = !this.historyContext || !this.hasCurrentContent();
+        setIcon(manageMilestones, milestones.length > 0 ? "bookmark-check" : "bookmark-plus");
+        manageMilestones.addEventListener("click", (event) => {
+          this.openMilestoneMenu(event, reference.commit, milestones);
+        });
+      }
       const working = cardActions.createEl("button", {
         cls: "clickable-icon",
         attr: { "aria-label": `${label}改为当前工作区` }
       });
-      working.disabled = this.loading || other.kind === "working";
+      working.disabled = this.loading || this.request.readOnly === true || other.kind === "working";
       setIcon(working, "file-pen-line");
       working.addEventListener("click", () => this.setVersionReference(side, {
         kind: "working",
@@ -554,7 +589,7 @@ export class GitHistoryDetailView extends ItemView {
       cls: "clickable-icon",
       attr: { "aria-label": `复制${label}内容` }
     });
-    copy.disabled = this.loading;
+    copy.disabled = !this.hasCurrentContent();
     setIcon(copy, "copy");
     copy.addEventListener("click", () => void this.copyVersionContent(side));
 
@@ -570,7 +605,7 @@ export class GitHistoryDetailView extends ItemView {
             : ""
       }
     });
-    earlier.disabled = this.loading || older === null;
+    earlier.disabled = this.loading || this.request.readOnly === true || older === null;
     setIcon(earlier, "chevron-left");
     earlier.addEventListener("click", () => this.moveVersion(side, -1));
 
@@ -581,7 +616,7 @@ export class GitHistoryDetailView extends ItemView {
         "aria-pressed": String(this.activeVersionSide === side)
       }
     });
-    chooser.disabled = this.loading;
+    chooser.disabled = this.loading || this.request.readOnly === true;
     const chooserText = chooser.createSpan({ cls: "git-note-history-version-chooser-text" });
     chooserText.createSpan({
       cls: "git-note-history-version-title",
@@ -603,7 +638,7 @@ export class GitHistoryDetailView extends ItemView {
             : ""
       }
     });
-    newerButton.disabled = this.loading || newer === null;
+    newerButton.disabled = this.loading || this.request.readOnly === true || newer === null;
     setIcon(newerButton, "chevron-right");
     newerButton.addEventListener("click", () => this.moveVersion(side, 1));
 
@@ -660,15 +695,18 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private openVersionPicker(side: "base" | "target"): void {
-    if (!this.request) return;
+    if (!this.request || !this.file) return;
+    const request = this.request;
+    const file = this.file;
+    const generation = this.contentGeneration;
     this.activeVersionSide = side;
-    const current = this.request[side];
+    const current = request[side];
     const occupiedKey = versionReferenceKey(
-      this.request[side === "base" ? "target" : "base"]
+      request[side === "base" ? "target" : "base"]
     );
     const choices = buildVersionSequence(this.knownHistoryCommits(), [
-      this.request.base,
-      this.request.target
+      request.base,
+      request.target
     ]).filter((reference) => versionReferenceKey(reference) !== occupiedKey).reverse();
     new VersionPickerModal(
       this.app,
@@ -677,7 +715,13 @@ export class GitHistoryDetailView extends ItemView {
       versionReferenceKey(current),
       (reference) => this.versionDisplayTitle(reference),
       (reference) => this.versionSearchText(reference),
-      (reference) => this.setVersionReference(side, reference)
+      (reference) => {
+        if (!this.isContentContextCurrent(request, file, generation)) {
+          new Notice("对比已经切换，请从当前页面重新选择版本。");
+          return;
+        }
+        this.setVersionReference(side, reference);
+      }
     ).open();
     this.render();
   }
@@ -738,28 +782,41 @@ export class GitHistoryDetailView extends ItemView {
     commit: GitCommitVersion,
     milestones: VersionMilestone[]
   ): void {
+    if (this.request?.readOnly || !this.hasCurrentContent()) return;
+    const generation = this.contentGeneration;
     const menu = new Menu();
     for (const milestone of milestones) {
       menu.addItem((item) => item
         .setTitle(`编辑里程碑「${milestone.label}」`)
         .setIcon(milestoneKindIcon(milestone.kind))
-        .onClick(() => this.openMilestoneEditor(commit, milestone)));
+        .onClick(() => this.openMilestoneEditor(commit, milestone, generation)));
     }
     menu.addItem((item) => item
       .setTitle(milestones.length > 0 ? "再添加一个里程碑" : "命名这个版本")
       .setIcon("bookmark-plus")
-      .onClick(() => this.openMilestoneEditor(commit)));
+      .onClick(() => this.openMilestoneEditor(commit, undefined, generation)));
     menu.showAtMouseEvent(event);
   }
 
   private openMilestoneEditor(
     commit: GitCommitVersion,
-    current?: VersionMilestone
+    current?: VersionMilestone,
+    expectedGeneration = this.contentGeneration
   ): void {
-    if (!this.historyContext || !this.file) return;
+    if (!this.request || this.request.readOnly || !this.historyContext || !this.file) return;
+    const request = this.request;
     const file = this.file;
+    if (!this.isContentContextCurrent(request, file, expectedGeneration)) return;
     new VersionMilestoneModal(this.app, current, async (milestone) => {
+      if (!this.isContentContextCurrent(request, file, expectedGeneration)) {
+        new Notice("对比已经切换，请从当前页面重新编辑里程碑。");
+        return;
+      }
       const context = await this.plugin.gitClient.resolveFileContext(file);
+      if (!this.isContentContextCurrent(request, file, expectedGeneration)) {
+        new Notice("对比已经切换，未保存里程碑。");
+        return;
+      }
       await this.plugin.setVersionMilestone(
         context,
         commit,
@@ -776,6 +833,7 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private setVersionReference(side: "base" | "target", reference: VersionReference): void {
+    if (this.request?.readOnly) return;
     if (!this.request || versionReferenceKey(this.request[side]) === versionReferenceKey(reference)) return;
     const other = this.request[side === "base" ? "target" : "base"];
     if (versionReferenceKey(other) === versionReferenceKey(reference)) {
@@ -806,7 +864,7 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private swapVersions(): void {
-    if (!this.request || this.loading) return;
+    if (!this.request || this.loading || this.request.readOnly) return;
     this.request = {
       ...this.request,
       base: this.request.target,
@@ -833,7 +891,7 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private compareAdjacentVersions(): void {
-    if (!this.request) return;
+    if (!this.request || this.request.readOnly) return;
     const previous = this.previousToTarget();
     if (!previous) return;
     this.request = { ...this.request, base: previous };
@@ -843,6 +901,10 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private async copyVersionContent(side: "base" | "target"): Promise<void> {
+    if (!this.hasCurrentContent()) {
+      new Notice("版本内容仍在加载，请稍后重试。");
+      return;
+    }
     await navigator.clipboard.writeText(side === "base" ? this.baseContent : this.targetContent);
     new Notice(`已复制${side === "base" ? "左侧" : "右侧"}版本内容。`);
   }
@@ -995,6 +1057,22 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private openActionOptions(event: MouseEvent): void {
+    if (!this.hasCurrentContent() || !this.request || !this.file) return;
+    const request = this.request;
+    const file = this.file;
+    const generation = this.generation;
+    const baseContent = this.baseContent;
+    const contextIsCurrent = (): boolean =>
+      !this.loading
+      && this.generation === generation
+      && this.contentGeneration === generation
+      && this.request === request
+      && this.file === file;
+    const rejectStaleAction = (): boolean => {
+      if (contextIsCurrent()) return false;
+      new Notice("版本对比已变化，请从当前页面重新打开操作菜单。");
+      return true;
+    };
     const menu = new Menu();
     if (this.mode === "side-by-side") {
       menu.addItem((item) => item
@@ -1002,15 +1080,42 @@ export class GitHistoryDetailView extends ItemView {
         .setIcon("text-select")
         .setChecked(!this.changesOnly)
         .onClick(() => {
+          if (rejectStaleAction()) return;
           this.changesOnly = !this.changesOnly;
           this.render();
         }));
       menu.addSeparator();
     }
-    if (this.request && this.historyContext) {
+    const reference = request[this.activeVersionSide];
+    menu.addItem((item) => item
+      .setTitle(
+        reference.kind === "working"
+          ? "查看当前未提交工作"
+          : "查看此版本的工作事件"
+      )
+      .setIcon("git-pull-request-arrow")
+      .onClick(() => {
+        if (rejectStaleAction()) return;
+        void this.plugin.openWorkEvent({
+          repositoryRoot: request.repositoryRoot,
+          anchorVaultPath: file.path,
+          ...(reference.kind === "commit"
+            ? {
+                anchorHistoricalPath: reference.commit.historicalPath,
+                source: {
+                  kind: "commit" as const,
+                  commitHash: reference.commit.hash,
+                  aggregation: "commit" as const
+                }
+              }
+            : { source: { kind: "working" as const } })
+        });
+      }));
+    menu.addSeparator();
+    if (!request.readOnly && this.historyContext) {
       const state = this.plugin.getFileReviewState(this.historyContext);
-      const targetHash = this.request.target.kind === "commit"
-        ? this.request.target.commit.hash
+      const targetHash = request.target.kind === "commit"
+        ? request.target.commit.hash
         : undefined;
       const titles = {
         sent: "与上次发送版比较",
@@ -1036,36 +1141,46 @@ export class GitHistoryDetailView extends ItemView {
         );
         if (
           !previous
-          || versionReferenceKey(this.request.base) === previous.commit.hash
+          || versionReferenceKey(request.base) === previous.commit.hash
         ) continue;
         menu.addItem((item) => item
           .setTitle(titles[kind] || `与上个里程碑「${previous.milestone.label}」比较`)
           .setIcon(milestoneKindIcon(kind))
-          .onClick(() => this.setVersionReference("base", {
-            kind: "commit",
-            commit: previous.commit
-          })));
+          .onClick(() => {
+            if (rejectStaleAction()) return;
+            this.setVersionReference("base", {
+              kind: "commit",
+              commit: previous.commit
+            });
+          }));
       }
     }
-    if (this.request?.base.kind === "commit") {
+    if (request.base.kind === "commit") {
       menu.addItem((item) => item
         .setTitle("复制基准版本内容")
         .setIcon("copy")
         .onClick(async () => {
-          await navigator.clipboard.writeText(this.baseContent);
+          if (rejectStaleAction()) return;
+          await navigator.clipboard.writeText(baseContent);
           new Notice("已复制基准版本内容。");
         }));
-      menu.addItem((item) => item
-        .setTitle("把基准版本另存为副本")
-        .setIcon("file-plus-2")
-        .onClick(() => void this.saveBaseAsCopy()));
+      if (!request.readOnly) {
+        menu.addItem((item) => item
+          .setTitle("把基准版本另存为副本")
+          .setIcon("file-plus-2")
+          .onClick(() => {
+            if (rejectStaleAction()) return;
+            void this.saveBaseAsCopy();
+          }));
+      }
     }
     menu.addSeparator();
     menu.addItem((item) => item
       .setTitle("打开内容年龄镜头")
       .setIcon("scan-eye")
       .onClick(() => {
-        if (this.file) new BlockAgeModal(this.app, this.plugin, this.file).open();
+        if (rejectStaleAction()) return;
+        new BlockAgeModal(this.app, this.plugin, file).open();
       }));
     menu.addItem((item) => item
       .setTitle("查看恢复历史")
@@ -1170,18 +1285,27 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private renderUnified(container: HTMLElement, baseContent: string, targetContent: string): void {
+    const request = this.request;
+    const file = this.file;
+    const generation = this.contentGeneration;
     const canRestoreHunk = !this.ignoreFrontmatter
       && !this.ignoreBlankLines
-      && this.request?.target.kind === "working"
-      && this.file !== null;
+      && !request?.readOnly
+      && request?.target.kind === "working"
+      && file !== null
+      && this.hasCurrentContent();
     renderUnifiedDiff(container, baseContent, targetContent, {
       ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
       ignoreBlankLines: this.ignoreBlankLines,
       ...(canRestoreHunk
         ? {
             onRestoreHunk: async (targetContent: string, hunkNumber: number) => {
-              if (!this.file) return;
-              await this.confirmHunkRestore(targetContent, hunkNumber);
+              if (!request || !file) return;
+              await this.confirmHunkRestore(targetContent, hunkNumber, {
+                request,
+                file,
+                generation
+              });
             },
             onLocateLine: async (line: number) => this.locateCurrentLine(line)
           }
@@ -1475,25 +1599,50 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private async confirmFullRestore(): Promise<void> {
-    if (!this.file || this.request?.base.kind !== "commit") return;
+    if (!this.file || !this.request || this.request.readOnly || !this.hasCurrentContent()) return;
+    const base = this.request.base;
+    if (base.kind !== "commit") return;
     const file = this.file;
-    const commit = this.request.base.commit;
+    const request = this.request;
+    const generation = this.contentGeneration;
+    const commit = base.commit;
+    const targetContent = this.baseContent;
+    const sourceLabel = this.versionReceiptLabel(request.base);
     const currentContent = await this.app.vault.read(file);
+    if (!this.isContentContextCurrent(request, file, generation)) {
+      new Notice("对比已经切换，请重新发起恢复。");
+      return;
+    }
     new RestorePreviewModal(this.app, {
       file,
       title: `安全恢复到 ${commit.shortHash}`,
       currentContent,
-      targetContent: this.baseContent,
+      targetContent,
       label: `恢复整篇到 ${commit.shortHash}`,
-      sourceLabel: this.versionReceiptLabel(this.request.base),
+      sourceLabel,
       scope: "file",
       confirmText: "确认恢复整篇",
-      onSaveCopy: () => this.saveBaseAsCopy(),
+      onSaveCopy: async () => {
+        if (!this.isContentContextCurrent(request, file, generation)) {
+          new Notice("对比已经切换，请重新发起另存。");
+          return;
+        }
+        await this.saveBaseAsCopy({
+          request,
+          file,
+          generation,
+          content: targetContent
+        });
+      },
       onConfirm: async () => {
+        if (!this.isContentContextCurrent(request, file, generation)) {
+          new Notice("对比已经切换，请重新发起恢复。");
+          return;
+        }
         try {
-          if (await this.plugin.restoreService.restore(file, this.baseContent, {
+          if (await this.plugin.restoreService.restore(file, targetContent, {
             label: `恢复整篇到 ${commit.shortHash}`,
-            sourceLabel: this.versionReceiptLabel(this.request!.base),
+            sourceLabel,
             scope: "file",
             expectedCurrentContent: currentContent
           })) {
@@ -1507,40 +1656,83 @@ export class GitHistoryDetailView extends ItemView {
     }).open();
   }
 
-  private async saveBaseAsCopy(): Promise<void> {
-    if (!this.file || this.request?.base.kind !== "commit") return;
-    const parentPath = this.file.parent?.path;
+  private async saveBaseAsCopy(expected?: {
+    request: DetailRequest;
+    file: TFile;
+    generation: number;
+    content: string;
+  }): Promise<void> {
+    const request = expected?.request ?? this.request;
+    const file = expected?.file ?? this.file;
+    const generation = expected?.generation ?? this.contentGeneration;
+    if (
+      !file
+      || !request
+      || request.readOnly
+      || request.base.kind !== "commit"
+      || !this.isContentContextCurrent(request, file, generation)
+    ) return;
+    const content = expected?.content ?? this.baseContent;
+    const parentPath = file.parent?.path;
     const folder = !parentPath || parentPath === "/" ? "" : `${parentPath}/`;
-    const baseName = `${this.file.basename}.git-${this.request.base.commit.shortHash}`;
+    const baseName = `${file.basename}.git-${request.base.commit.shortHash}`;
     let candidate = normalizePath(`${folder}${baseName}.md`);
     let suffix = 2;
     while (this.app.vault.getAbstractFileByPath(candidate)) {
       candidate = normalizePath(`${folder}${baseName}-${suffix}.md`);
       suffix += 1;
     }
-    const copy = await this.app.vault.create(candidate, this.baseContent);
+    if (!this.isContentContextCurrent(request, file, generation)) {
+      new Notice("对比已经切换，请重新发起另存。");
+      return;
+    }
+    const copy = await this.app.vault.create(candidate, content);
     await this.app.workspace.getLeaf(true).openFile(copy);
     new Notice(`已创建历史副本：${candidate}`);
   }
 
-  private async confirmHunkRestore(targetContent: string, hunkNumber: number): Promise<void> {
-    if (!this.file || !this.request) return;
-    const file = this.file;
+  private async confirmHunkRestore(
+    targetContent: string,
+    hunkNumber: number,
+    expected?: {
+      request: DetailRequest;
+      file: TFile;
+      generation: number;
+    }
+  ): Promise<void> {
+    const file = expected?.file ?? this.file;
+    const request = expected?.request ?? this.request;
+    const generation = expected?.generation ?? this.contentGeneration;
+    if (
+      !file
+      || !request
+      || request.readOnly
+      || !this.isContentContextCurrent(request, file, generation)
+    ) return;
+    const sourceLabel = this.versionReceiptLabel(request.base);
     const currentContent = await this.app.vault.read(file);
+    if (!this.isContentContextCurrent(request, file, generation)) {
+      new Notice("对比已经切换，请重新发起恢复。");
+      return;
+    }
     new RestorePreviewModal(this.app, {
       file,
       title: `安全恢复变更块 ${hunkNumber}`,
       currentContent,
       targetContent,
       label: `恢复变更块 ${hunkNumber}`,
-      sourceLabel: this.versionReceiptLabel(this.request.base),
+      sourceLabel,
       scope: "hunk",
       confirmText: "确认恢复此块",
       onConfirm: async () => {
+        if (!this.isContentContextCurrent(request, file, generation)) {
+          new Notice("对比已经切换，请重新发起恢复。");
+          return;
+        }
         try {
           if (await this.plugin.restoreService.restore(file, targetContent, {
             label: `恢复变更块 ${hunkNumber}`,
-            sourceLabel: this.versionReceiptLabel(this.request!.base),
+            sourceLabel,
             scope: "hunk",
             expectedCurrentContent: currentContent
           })) {
@@ -1554,6 +1746,26 @@ export class GitHistoryDetailView extends ItemView {
         }
       }
     }).open();
+  }
+
+  private hasCurrentContent(): boolean {
+    return Boolean(
+      this.request
+      && this.file
+      && !this.loading
+      && this.contentGeneration === this.generation
+    );
+  }
+
+  private isContentContextCurrent(
+    request: DetailRequest,
+    file: TFile,
+    generation: number
+  ): boolean {
+    return this.hasCurrentContent()
+      && this.request === request
+      && this.file === file
+      && this.generation === generation;
   }
 
   private async locateCurrentLine(line: number): Promise<void> {

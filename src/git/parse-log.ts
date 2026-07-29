@@ -17,6 +17,23 @@ interface NameStatusEntry {
   path: string;
 }
 
+export interface GitZeroNumStatEntry extends GitLineStats {
+  path: string;
+  originalPath?: string;
+}
+
+export interface GitCommitMetadata {
+  hash: string;
+  shortHash: string;
+  parentHashes: string[];
+  authorName: string;
+  authorEmail: string;
+  authoredAt: string;
+  committedAt: string;
+  subject: string;
+  body: string;
+}
+
 function parseNameStatusLine(line: string): NameStatusEntry | null {
   const parts = line.split("\t");
   const status = parts[0]?.trim();
@@ -173,6 +190,98 @@ export function parseNumStatByPath(raw: string): Map<string, GitLineStats> {
   return result;
 }
 
+/**
+ * Parses `git diff --numstat -z` / `git diff-tree --numstat -z` output.
+ *
+ * Git emits an ordinary path in the same NUL-delimited record as the two
+ * counters. Rename and copy records instead leave that path empty and emit the
+ * original and destination paths as the next two NUL-delimited records.
+ */
+export function parseZeroDelimitedNumStat(raw: string): GitZeroNumStatEntry[] {
+  const records = raw.split("\0");
+  const entries: GitZeroNumStatEntry[] = [];
+
+  for (let index = 0; index < records.length; index += 1) {
+    const header = records[index];
+    if (!header) continue;
+
+    const firstTab = header.indexOf("\t");
+    const secondTab = firstTab < 0 ? -1 : header.indexOf("\t", firstTab + 1);
+    if (firstTab < 0 || secondTab < 0) continue;
+
+    const added = header.slice(0, firstTab);
+    const deleted = header.slice(firstTab + 1, secondTab);
+    let path = header.slice(secondTab + 1);
+    let originalPath: string | undefined;
+
+    if (!path) {
+      originalPath = records[index + 1] || undefined;
+      path = records[index + 2] || "";
+      index += 2;
+    }
+    if (!path) continue;
+
+    const entry: GitZeroNumStatEntry = {
+      path,
+      addedLines: added === "-" ? 0 : Number.parseInt(added, 10) || 0,
+      deletedLines: deleted === "-" ? 0 : Number.parseInt(deleted, 10) || 0,
+      binary: added === "-" || deleted === "-"
+    };
+    if (originalPath) entry.originalPath = originalPath;
+    entries.push(entry);
+  }
+
+  return entries;
+}
+
+/**
+ * Parses one commit formatted as:
+ * `%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%s%x1f%B`.
+ */
+export function parseCommitMetadata(raw: string): GitCommitMetadata | null {
+  const record = raw
+    .replace(/^\u001e/, "")
+    .replace(/^\r?\n/, "")
+    .replace(/\0+$/, "")
+    .replace(/\r?\n$/, "");
+  if (!record) return null;
+
+  const fields: string[] = [];
+  let remainder = record;
+  for (let index = 0; index < 8; index += 1) {
+    const separatorIndex = remainder.indexOf(FIELD_SEPARATOR);
+    if (separatorIndex < 0) return null;
+    fields.push(remainder.slice(0, separatorIndex));
+    remainder = remainder.slice(separatorIndex + FIELD_SEPARATOR.length);
+  }
+
+  const [
+    hash,
+    shortHash,
+    parents,
+    authorName,
+    authorEmail,
+    authoredAt,
+    committedAt,
+    subject
+  ] = fields;
+  if (!hash || !shortHash || !authorName || !authorEmail || !authoredAt || !committedAt) {
+    return null;
+  }
+
+  return {
+    hash,
+    shortHash,
+    parentHashes: parents?.trim() ? parents.trim().split(/\s+/) : [],
+    authorName,
+    authorEmail,
+    authoredAt,
+    committedAt,
+    subject: subject ?? "",
+    body: remainder
+  };
+}
+
 const CONFLICT_CODES = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
 export function parseGitStatus(raw: string): GitFileStatus {
@@ -201,7 +310,12 @@ export function parseWorkspaceStatus(raw: string): GitWorkspaceChange[] {
     const path = record.slice(3);
     let originalPath: string | undefined;
 
-    if (indexStatus === "R" || indexStatus === "C") {
+    if (
+      indexStatus === "R"
+      || indexStatus === "C"
+      || workTreeStatus === "R"
+      || workTreeStatus === "C"
+    ) {
       originalPath = records[index + 1] || undefined;
       index += 1;
     }

@@ -57,9 +57,31 @@ import {
   markReviewInboxItemState,
   setReviewInboxItemSnoozed
 } from "./review/review-state";
+import type {
+  WorkEventFileChange,
+  WorkEventRequest,
+  WorkEventSnapshot
+} from "./work-events/types";
+import {
+  GIT_WORK_EVENT_VIEW_TYPE,
+  GitWorkEventView
+} from "./views/work-event-view";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function workEventSnapshotLabel(capturedAt: string): string {
+  const date = new Date(capturedAt);
+  if (Number.isNaN(date.getTime())) return "工作区快照";
+  const time = new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+  return `工作区快照 · ${time}`;
 }
 
 export default class GitNoteHistoryPlugin extends Plugin {
@@ -71,6 +93,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private fileReviewStates: Record<string, FileReviewState> = {};
   private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
   private dataOperationQueue: Promise<void> = Promise.resolve();
+  private detailOpenGeneration = 0;
+  private pendingDetailLeaf: Promise<WorkspaceLeaf> | null = null;
+  private workEventOpenGeneration = 0;
+  private pendingWorkEventLeaf: Promise<WorkspaceLeaf> | null = null;
 
   async onload(): Promise<void> {
     await this.loadPluginData();
@@ -99,6 +125,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
       GIT_CONFLICT_RESOLVER_VIEW_TYPE,
       (leaf) => new GitConflictResolverView(leaf, this)
     );
+    this.registerView(
+      GIT_WORK_EVENT_VIEW_TYPE,
+      (leaf) => new GitWorkEventView(leaf, this)
+    );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
       void this.activateHistoryView(this.app.workspace.getActiveFile());
@@ -122,6 +152,18 @@ export default class GitNoteHistoryPlugin extends Plugin {
       id: "open-git-workspace-review",
       name: "打开复查收件箱",
       callback: () => void this.activateWorkspaceReview()
+    });
+
+    this.addCommand({
+      id: "open-current-working-event",
+      name: "查看当前未提交工作",
+      callback: () => {
+        const file = this.app.workspace.getActiveFile();
+        void this.openWorkEvent({
+          ...(file?.extension === "md" ? { anchorVaultPath: file.path } : {}),
+          source: { kind: "working" }
+        });
+      }
     });
 
     this.addCommand({
@@ -297,10 +339,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.detailOpenGeneration += 1;
+    this.pendingDetailLeaf = null;
+    this.workEventOpenGeneration += 1;
+    this.pendingWorkEventLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_CONFLICT_RESOLVER_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_WORK_EVENT_VIEW_TYPE);
   }
 
   async activateWorkspaceReview(): Promise<void> {
@@ -314,13 +361,143 @@ export default class GitNoteHistoryPlugin extends Plugin {
   }
 
   async openDetail(request: DetailRequest): Promise<void> {
-    let leaf = this.app.workspace.getLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE)[0];
-    if (!leaf) {
-      leaf = this.app.workspace.getLeaf("tab");
-      await leaf.setViewState({ type: GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE, active: true });
-    }
+    const generation = ++this.detailOpenGeneration;
+    const leaf = await this.ensureDetailLeaf();
+    if (generation !== this.detailOpenGeneration) return;
+
     await this.app.workspace.revealLeaf(leaf);
-    if (leaf.view instanceof GitHistoryDetailView) await leaf.view.setRequest(request);
+    if (generation !== this.detailOpenGeneration) return;
+
+    if (leaf.view instanceof GitHistoryDetailView) {
+      await leaf.view.setRequest(request);
+    }
+  }
+
+  private async ensureDetailLeaf(): Promise<WorkspaceLeaf> {
+    const pendingLeaf = this.pendingDetailLeaf;
+    if (pendingLeaf) return pendingLeaf;
+
+    const existingLeaf = this.app.workspace
+      .getLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE)[0];
+    if (existingLeaf) return existingLeaf;
+
+    const leafPromise = (async (): Promise<WorkspaceLeaf> => {
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({ type: GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE, active: true });
+      return leaf;
+    })();
+    this.pendingDetailLeaf = leafPromise;
+    try {
+      return await leafPromise;
+    } finally {
+      if (this.pendingDetailLeaf === leafPromise) {
+        this.pendingDetailLeaf = null;
+      }
+    }
+  }
+
+  async openWorkEvent(request: WorkEventRequest): Promise<void> {
+    const generation = ++this.workEventOpenGeneration;
+    const leaf = await this.ensureWorkEventLeaf();
+    if (generation !== this.workEventOpenGeneration) return;
+
+    await this.app.workspace.revealLeaf(leaf);
+    if (generation !== this.workEventOpenGeneration) return;
+
+    if (leaf.view instanceof GitWorkEventView) {
+      await leaf.view.setRequest(request);
+    }
+  }
+
+  private async ensureWorkEventLeaf(): Promise<WorkspaceLeaf> {
+    const pendingLeaf = this.pendingWorkEventLeaf;
+    if (pendingLeaf) return pendingLeaf;
+
+    const existingLeaf = this.app.workspace
+      .getLeavesOfType(GIT_WORK_EVENT_VIEW_TYPE)
+      .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+    if (existingLeaf) return existingLeaf;
+
+    const leafPromise = (async (): Promise<WorkspaceLeaf> => {
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({ type: GIT_WORK_EVENT_VIEW_TYPE, active: true });
+      return leaf;
+    })();
+    this.pendingWorkEventLeaf = leafPromise;
+    try {
+      return await leafPromise;
+    } finally {
+      if (this.pendingWorkEventLeaf === leafPromise) {
+        this.pendingWorkEventLeaf = null;
+      }
+    }
+  }
+
+  async openWorkEventFileComparison(
+    snapshot: WorkEventSnapshot,
+    change: WorkEventFileChange
+  ): Promise<void> {
+    const file = this.app.vault.getFileByPath(change.vaultPath);
+    if (
+      !file
+      || file.extension !== "md"
+      || change.kind !== "markdown"
+      || change.status === "A"
+      || change.status === "D"
+      || change.netUnchanged
+      || !snapshot.baseHash
+      || !snapshot.headHash
+    ) {
+      new Notice("这个文件缺少可读取的两端版本，请在工作事件内查看只读预览。");
+      return;
+    }
+    const targetCommit = snapshot.commits[0];
+    const oldestCommit = snapshot.commits.at(-1);
+    const baseCommit: GitCommitVersion = {
+      hash: snapshot.baseHash,
+      shortHash: snapshot.baseHash.slice(0, 7),
+      authorName: oldestCommit?.authorName ?? "",
+      authorEmail: oldestCommit?.authorEmail ?? "",
+      authoredAt: oldestCommit?.committedAt ?? snapshot.startedAt ?? snapshot.endedAt,
+      subject: "工作事件前",
+      historicalPath: change.originalRepositoryPath ?? change.repositoryPath,
+      changeType: "M",
+      addedLines: 0,
+      deletedLines: 0,
+      trailers: {}
+    };
+    const target: DetailRequest["target"] = snapshot.source === "working"
+      ? { kind: "working", label: workEventSnapshotLabel(snapshot.capturedAt) }
+      : {
+          kind: "commit",
+          commit: {
+            hash: snapshot.headHash,
+            shortHash: snapshot.headHash.slice(0, 7),
+            authorName: targetCommit?.authorName ?? "",
+            authorEmail: targetCommit?.authorEmail ?? "",
+            authoredAt: targetCommit?.authoredAt ?? snapshot.endedAt,
+            subject: targetCommit?.subject ?? "工作事件结束",
+            historicalPath: change.repositoryPath,
+            changeType: change.status,
+            addedLines: change.addedLines,
+            deletedLines: change.deletedLines,
+            trailers: {}
+          }
+        };
+    await this.openDetail({
+      filePath: file.path,
+      repositoryRoot: snapshot.repositoryRoot,
+      base: { kind: "commit", commit: baseCommit },
+      target,
+      initialMode: this.settings.defaultDetailMode,
+      readOnly: true,
+      ...(change.beforeContent !== undefined
+        ? { baseContentOverride: change.beforeContent }
+        : {}),
+      ...(change.afterContent !== undefined
+        ? { targetContentOverride: change.afterContent }
+        : {})
+    });
   }
 
   async activateConflictResolver(file: TFile | null): Promise<void> {

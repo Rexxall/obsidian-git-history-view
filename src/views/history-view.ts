@@ -1189,6 +1189,23 @@ export class GitNoteHistoryView extends ItemView {
     if (!this.history) return;
     const menu = new Menu();
     menu.addItem((item) => item
+      .setTitle("查看跨文件编辑会话")
+      .setIcon("git-pull-request-arrow")
+      .onClick(() => void this.plugin.openWorkEvent({
+        repositoryRoot: this.history!.context.repositoryRoot,
+        ...(this.targetFile ? { anchorVaultPath: this.targetFile.path } : {}),
+        anchorHistoricalPath: group.representative.historicalPath,
+        source: {
+          kind: "commit",
+          commitHash: group.representative.hash,
+          aggregation: "session",
+          milestoneHashes: namedMilestoneEvents(state).map(
+            (milestone) => milestone.commitHash
+          )
+        }
+      })));
+    menu.addSeparator();
+    menu.addItem((item) => item
       .setTitle("查看这组变化")
       .setIcon("git-compare-arrows")
       .onClick(() => void this.openEffectiveGroupComparison(group, index, groups)));
@@ -1418,6 +1435,12 @@ export class GitNoteHistoryView extends ItemView {
       const compareMilestone = actions.createEl("button", { text: "与最近里程碑比较" });
       compareMilestone.addEventListener("click", () => void this.openAgainstWorking(latestMilestone.commit));
     }
+    const event = actions.createEl("button", { text: "查看本次工作" });
+    event.addEventListener("click", () => void this.plugin.openWorkEvent({
+      repositoryRoot: this.history!.context.repositoryRoot,
+      anchorVaultPath: this.targetFile!.path,
+      source: { kind: "working" }
+    }));
     const workspace = actions.createEl("button", { text: "未提交笔记" });
     workspace.addEventListener("click", () => void this.plugin.activateWorkspaceReview());
     if (this.history.status.conflicted) {
@@ -1944,6 +1967,20 @@ export class GitNoteHistoryView extends ItemView {
   private openCommitMenu(event: MouseEvent, commit: GitCommitVersion, state: FileReviewState): void {
     if (!this.history) return;
     const menu = new Menu();
+    menu.addItem((item) => item
+      .setTitle("查看本次工作事件")
+      .setIcon("git-pull-request-arrow")
+      .onClick(() => void this.plugin.openWorkEvent({
+        repositoryRoot: this.history!.context.repositoryRoot,
+        ...(this.targetFile ? { anchorVaultPath: this.targetFile.path } : {}),
+        anchorHistoricalPath: commit.historicalPath,
+        source: {
+          kind: "commit",
+          commitHash: commit.hash,
+          aggregation: "commit"
+        }
+      })));
+    menu.addSeparator();
     menu.addItem((item) => item.setTitle("与当前版本比较").setIcon("git-compare-arrows").onClick(() => void this.openAgainstWorking(commit)));
     this.addPreviousMilestoneCompareItems(menu, commit, state);
     menu.addItem((item) => item.setTitle(state.baselineHash === commit.hash ? "取消比较基线" : "设为比较基线").setIcon("star").onClick(async () => {

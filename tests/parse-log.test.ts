@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseCommitMetadata,
   parseGitLog,
   parseGitStatus,
   parseNumStatByPath,
   parseNumStatLog,
+  parseZeroDelimitedNumStat,
   parseWorkspaceStatus
 } from "../src/git/parse-log";
 
@@ -96,10 +98,116 @@ describe("Git statistics", () => {
     });
   });
 
+  it("parses NUL-delimited numstat paths without treating tabs as separators", () => {
+    const entries = parseZeroDelimitedNumStat(
+      "35\t1\t10 - Projects/日本医学博士申请/含\t制表符.md\0"
+    );
+
+    expect(entries).toEqual([
+      {
+        path: "10 - Projects/日本医学博士申请/含\t制表符.md",
+        addedLines: 35,
+        deletedLines: 1,
+        binary: false
+      }
+    ]);
+  });
+
+  it("parses the extra NUL path records used by rename and copy numstat output", () => {
+    const entries = parseZeroDelimitedNumStat(
+      "2\t3\t\0Notes/旧名字.md\0Notes/新名字.md\0"
+      + "4\t0\t\0Notes/source.md\0Notes/copy.md\0"
+    );
+
+    expect(entries).toEqual([
+      {
+        path: "Notes/新名字.md",
+        originalPath: "Notes/旧名字.md",
+        addedLines: 2,
+        deletedLines: 3,
+        binary: false
+      },
+      {
+        path: "Notes/copy.md",
+        originalPath: "Notes/source.md",
+        addedLines: 4,
+        deletedLines: 0,
+        binary: false
+      }
+    ]);
+  });
+
+  it("marks NUL-delimited binary numstat entries", () => {
+    expect(parseZeroDelimitedNumStat("-\t-\tAttachments/图像.png\0")).toEqual([
+      {
+        path: "Attachments/图像.png",
+        addedLines: 0,
+        deletedLines: 0,
+        binary: true
+      }
+    ]);
+  });
+
+  it("ignores incomplete or malformed NUL-delimited numstat records", () => {
+    expect(parseZeroDelimitedNumStat("not-a-numstat-record\0")).toEqual([]);
+    expect(parseZeroDelimitedNumStat("1\t2\t\0only-old-path\0")).toEqual([]);
+  });
+
   it("parses zero-delimited workspace status including rename", () => {
     const changes = parseWorkspaceStatus(" M Notes/a.md\0R  Notes/new.md\0Notes/old.md\0?? Notes/new-note.md\0");
     expect(changes).toHaveLength(3);
     expect(changes[1]).toMatchObject({ path: "Notes/new.md", originalPath: "Notes/old.md", indexStatus: "R" });
     expect(changes[2]).toMatchObject({ untracked: true });
+  });
+
+  it("keeps the source path for worktree-side renames and copies", () => {
+    expect(parseWorkspaceStatus(" R Notes/new.md\0Notes/old.md\0")).toEqual([
+      expect.objectContaining({
+        path: "Notes/new.md",
+        originalPath: "Notes/old.md",
+        indexStatus: " ",
+        workTreeStatus: "R"
+      })
+    ]);
+  });
+});
+
+describe("parseCommitMetadata", () => {
+  it("parses a root commit with no parents and a multiline body", () => {
+    const raw =
+      `aaaaaaaa${FS}aaaaaaa${FS}${FS}Alice${FS}alice@example.com`
+      + `${FS}2026-07-15T12:00:00+09:00${FS}2026-07-15T12:01:00+09:00`
+      + `${FS}Initial notes${FS}Initial notes\n\nAuthority: working_master\n`;
+
+    expect(parseCommitMetadata(raw)).toEqual({
+      hash: "aaaaaaaa",
+      shortHash: "aaaaaaa",
+      parentHashes: [],
+      authorName: "Alice",
+      authorEmail: "alice@example.com",
+      authoredAt: "2026-07-15T12:00:00+09:00",
+      committedAt: "2026-07-15T12:01:00+09:00",
+      subject: "Initial notes",
+      body: "Initial notes\n\nAuthority: working_master"
+    });
+  });
+
+  it("parses every parent of a merge commit", () => {
+    const raw =
+      `${RS}\ncccccccc${FS}ccccccc${FS}aaaaaaaa bbbbbbbb${FS}Merge Bot`
+      + `${FS}merge@example.com${FS}2026-07-16T09:00:00+09:00`
+      + `${FS}2026-07-16T09:02:00+09:00${FS}Merge notes${FS}Merge notes`;
+
+    expect(parseCommitMetadata(raw)).toMatchObject({
+      hash: "cccccccc",
+      parentHashes: ["aaaaaaaa", "bbbbbbbb"],
+      committedAt: "2026-07-16T09:02:00+09:00",
+      subject: "Merge notes",
+      body: "Merge notes"
+    });
+  });
+
+  it("rejects incomplete metadata records", () => {
+    expect(parseCommitMetadata("aaaaaaaa\u001faaaaaaa")).toBeNull();
   });
 });

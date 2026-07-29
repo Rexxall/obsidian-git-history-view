@@ -14,7 +14,14 @@ export interface LinkImpact {
 }
 
 function cleanTarget(value: string): string {
-  return decodeURIComponent(value.trim())
+  const trimmed = value.trim();
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    // Keep malformed historical links inspectable instead of failing the whole impact view.
+  }
+  return decoded
     .replace(/^<|>$/g, "")
     .split("|")[0]!
     .split("#")[0]!
