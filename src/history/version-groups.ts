@@ -31,7 +31,7 @@ function changeSize(commit: GitCommitVersion): number {
 }
 
 function isSpecial(commit: GitCommitVersion, state: FileReviewState): boolean {
-  return commit.changeType === "R"
+  return ["R", "C"].includes(commit.changeType)
     || Boolean(state.bookmarks[commit.hash])
     || state.reviewCheckpoint?.commitHash === commit.hash;
 }
@@ -78,6 +78,7 @@ function summarize(
   const bookmark = state.bookmarks[representative.hash]?.label;
   if (bookmark) return bookmark;
   if (representative.changeType === "R") return "重命名笔记";
+  if (representative.changeType === "C") return "从其他笔记复制";
   if (commits.length > 1) {
     const noise = duplicateCount + whitespaceOnlyCount;
     return noise === commits.length - 1

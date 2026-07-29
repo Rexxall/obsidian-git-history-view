@@ -49,6 +49,7 @@ import {
   versionReferencePosition,
   type VersionDirection
 } from "../history/version-navigation";
+import { compactHistoryPath } from "../history/path-history";
 
 export const GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE = "git-note-history-detail-view";
 
@@ -487,6 +488,20 @@ export class GitHistoryDetailView extends ItemView {
     newerButton.disabled = this.loading || newer === null;
     setIcon(newerButton, "chevron-right");
     newerButton.addEventListener("click", () => this.moveVersion(side, 1));
+
+    const pairedReference = this.request[side === "base" ? "target" : "base"];
+    if (
+      reference.kind === "commit"
+      && pairedReference.kind === "commit"
+      && reference.commit.historicalPath !== pairedReference.commit.historicalPath
+    ) {
+      const path = card.createDiv({
+        cls: "git-note-history-version-path",
+        attr: { title: reference.commit.historicalPath }
+      });
+      setIcon(path.createSpan(), "folder");
+      path.createSpan({ text: compactHistoryPath(reference.commit.historicalPath, 3) });
+    }
   }
 
   private openVersionPicker(side: "base" | "target"): void {

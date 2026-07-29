@@ -34,6 +34,11 @@ import {
   type ContentLifecycle,
   type HistoricalContentMatch
 } from "../history/content-search";
+import {
+  buildPathTransitions,
+  compactHistoryPath,
+  type PathTransition
+} from "../history/path-history";
 
 export const GIT_NOTE_HISTORY_VIEW_TYPE = "git-note-history-view";
 
@@ -78,7 +83,16 @@ function matchesMetadata(commit: GitCommitVersion, query: string, state: FileRev
   if (!query) return true;
   const bookmark = state.bookmarks[commit.hash]?.label ?? "";
   const trailers = Object.values(commit.trailers).join(" ");
-  return [commit.subject, commit.authorName, commit.authorEmail, commit.hash, commit.authoredAt, bookmark, trailers]
+  return [
+    commit.subject,
+    commit.authorName,
+    commit.authorEmail,
+    commit.hash,
+    commit.authoredAt,
+    commit.historicalPath,
+    bookmark,
+    trailers
+  ]
     .join(" ")
     .toLocaleLowerCase()
     .includes(query.toLocaleLowerCase());
@@ -123,6 +137,8 @@ export class GitNoteHistoryView extends ItemView {
   private contentSearchFailed = 0;
   private readonly expandedGroups = new Set<string>();
   private showRawCommits = false;
+  private pathHistoryExpanded = false;
+  private pathTransitions: PathTransition[] = [];
   private currentContent = "";
   private currentFingerprint = "";
   private refiningGroups = false;
@@ -193,6 +209,8 @@ export class GitNoteHistoryView extends ItemView {
     this.compareSelection.clear();
     this.commitContents.clear();
     this.effectiveGroups = [];
+    this.pathTransitions = [];
+    this.pathHistoryExpanded = false;
     this.expandedGroups.clear();
     this.selectedIndex = 0;
     this.timeMachinePosition = -1;
@@ -221,6 +239,7 @@ export class GitNoteHistoryView extends ItemView {
       this.history = history;
       this.currentContent = currentContent;
       this.currentFingerprint = contentFingerprint(currentContent);
+      this.pathTransitions = buildPathTransitions(history.commits);
       const state = this.plugin.getFileReviewState(history.context);
       this.effectiveGroups = groupEffectiveVersions(history.commits, state, this.commitContents);
       this.timeMachinePosition = this.timeMachinePosition < 0
@@ -745,6 +764,10 @@ export class GitNoteHistoryView extends ItemView {
     if (group.duplicateCount > 0) meta.createSpan({ text: `${group.duplicateCount} 个重复` });
     const contentMatch = group.commits.find((commit) => this.contentSearchMatches.has(commit.hash));
     if (contentMatch) this.renderContentSearchMatch(content, contentMatch);
+    const pathChange = group.commits.find((commit) =>
+      this.pathTransitions.some((transition) => transition.commit.hash === commit.hash)
+    );
+    if (pathChange) this.renderPathTransition(content, pathChange);
 
     const actions = row.createDiv({ cls: "git-note-history-row-actions" });
     if (group.commits.length > 1) {
@@ -900,6 +923,7 @@ export class GitNoteHistoryView extends ItemView {
     }
 
     if (this.targetFile) header.createDiv({ cls: "git-note-history-file-path", text: this.targetFile.path });
+    this.renderPathHistory(header);
 
     const searchRow = header.createDiv({ cls: "git-note-history-search" });
     const search = new SearchComponent(searchRow);
@@ -932,6 +956,78 @@ export class GitNoteHistoryView extends ItemView {
         });
       }
     }
+  }
+
+  private renderPathHistory(container: HTMLElement): void {
+    if (this.pathTransitions.length === 0) return;
+    const disclosure = container.createEl("button", {
+      cls: "git-note-history-path-disclosure",
+      attr: {
+        "aria-expanded": String(this.pathHistoryExpanded),
+        "aria-label": `${this.pathHistoryExpanded ? "收起" : "展开"}笔记路径轨迹`
+      }
+    });
+    setIcon(disclosure.createSpan(), "folder-tree");
+    disclosure.createSpan({ text: "路径轨迹" });
+    disclosure.createSpan({
+      cls: "git-note-history-path-count",
+      text: `${this.pathTransitions.length} 次`
+    });
+    const chevron = disclosure.createSpan({ cls: "git-note-history-path-chevron" });
+    setIcon(chevron, this.pathHistoryExpanded ? "chevron-up" : "chevron-down");
+    disclosure.addEventListener("click", () => {
+      this.pathHistoryExpanded = !this.pathHistoryExpanded;
+      this.render();
+    });
+    if (!this.pathHistoryExpanded) return;
+
+    const panel = container.createDiv({ cls: "git-note-history-path-history" });
+    for (const transition of this.pathTransitions) {
+      const item = panel.createEl("button", {
+        cls: "git-note-history-path-event",
+        attr: {
+          "aria-label": `${transition.kind === "copy" ? "复制来源" : "重命名"}：${transition.fromPath} 到 ${transition.toPath}`
+        }
+      });
+      const meta = item.createDiv({ cls: "git-note-history-path-event-meta" });
+      meta.createSpan({
+        cls: `git-note-history-path-kind is-${transition.kind}`,
+        text: transition.kind === "copy" ? "复制来源" : "重命名"
+      });
+      meta.createSpan({
+        text: `${formatCommitTime(transition.commit.authoredAt, true)} · ${transition.commit.shortHash}`
+      });
+      const route = item.createDiv({ cls: "git-note-history-path-route" });
+      route.createSpan({
+        text: compactHistoryPath(transition.fromPath),
+        attr: { title: transition.fromPath }
+      });
+      setIcon(route.createSpan({ cls: "git-note-history-path-arrow" }), "arrow-right");
+      route.createSpan({
+        text: compactHistoryPath(transition.toPath),
+        attr: { title: transition.toPath }
+      });
+      item.addEventListener("click", () => {
+        void this.openCommitPair(transition.previous, transition.commit);
+      });
+    }
+  }
+
+  private renderPathTransition(container: HTMLElement, commit: GitCommitVersion): void {
+    const transition = this.pathTransitions.find((candidate) => candidate.commit.hash === commit.hash);
+    if (!transition) return;
+    const route = container.createDiv({
+      cls: "git-note-history-inline-path",
+      attr: { title: `${transition.fromPath} → ${transition.toPath}` }
+    });
+    setIcon(route.createSpan({ cls: "git-note-history-inline-path-icon" }), transition.kind === "copy" ? "copy" : "folder-input");
+    route.createSpan({
+      cls: "git-note-history-inline-path-kind",
+      text: transition.kind === "copy" ? "复制来源" : "路径变更"
+    });
+    route.createSpan({ text: compactHistoryPath(transition.fromPath) });
+    setIcon(route.createSpan({ cls: "git-note-history-path-arrow" }), "arrow-right");
+    route.createSpan({ text: compactHistoryPath(transition.toPath) });
   }
 
   private renderWorkingTreeCard(container: HTMLElement, state: FileReviewState): void {
@@ -1052,7 +1148,7 @@ export class GitNoteHistoryView extends ItemView {
     });
     const marks = card.createEl("datalist", { attr: { id: listId } });
     chronological.forEach((commit, index) => {
-      if (index === 0 || commit.changeType === "R" || commit.addedLines + commit.deletedLines >= 20) {
+      if (index === 0 || ["R", "C"].includes(commit.changeType) || commit.addedLines + commit.deletedLines >= 20) {
         marks.createEl("option", { attr: { value: String(index), label: commit.shortHash } });
       }
     });
@@ -1168,7 +1264,7 @@ export class GitNoteHistoryView extends ItemView {
     });
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const dot = rail.createSpan({ cls: `git-note-history-dot change-${commit.changeType.toLowerCase()}` });
-    setIcon(dot, commit.changeType === "R" ? "file-symlink" : "git-commit-horizontal");
+    setIcon(dot, commit.changeType === "R" ? "file-symlink" : commit.changeType === "C" ? "copy" : "git-commit-horizontal");
 
     const content = row.createDiv({ cls: "git-note-history-commit-content" });
     const top = content.createDiv({ cls: "git-note-history-commit-top" });
@@ -1184,6 +1280,7 @@ export class GitNoteHistoryView extends ItemView {
     meta.createSpan({ text: commit.authorName });
     meta.createEl("code", { text: commit.shortHash });
     this.renderContentSearchMatch(content, commit);
+    this.renderPathTransition(content, commit);
 
     const badges = content.createDiv({ cls: "git-note-history-badges" });
     if (state.baselineHash === commit.hash) this.addBadge(badges, "star", "比较基线", "is-baseline");

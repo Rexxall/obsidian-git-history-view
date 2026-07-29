@@ -56,6 +56,10 @@ import {
   searchableMarkdownBody
 } from "../src/history/content-search";
 import {
+  buildPathTransitions,
+  compactHistoryPath
+} from "../src/history/path-history";
+import {
   parseCommittedNameStatus,
   parseLatestCommitByPath
 } from "../src/git/parse-log";
@@ -358,6 +362,51 @@ describe("historical content search", () => {
   });
 });
 
+describe("note path history", () => {
+  it("builds chronological rename and copy transitions from newest-first history", () => {
+    const newest = {
+      ...commit("dddddddd", "2026-07-14T10:00:00+09:00", "Edit current"),
+      historicalPath: "Projects/Current.md"
+    };
+    const renamed = {
+      ...commit("cccccccc", "2026-07-13T10:00:00+09:00", "Rename note"),
+      historicalPath: "Projects/Current.md",
+      changeType: "R"
+    };
+    const copied = {
+      ...commit("bbbbbbbb", "2026-07-12T10:00:00+09:00", "Copy source"),
+      historicalPath: "Archive/Original.md",
+      changeType: "C"
+    };
+    const original = {
+      ...commit("aaaaaaaa", "2026-07-11T10:00:00+09:00", "Create source"),
+      historicalPath: "Sources/Seed.md"
+    };
+
+    const transitions = buildPathTransitions([newest, renamed, copied, original]);
+
+    expect(transitions).toEqual([
+      expect.objectContaining({
+        kind: "copy",
+        fromPath: "Sources/Seed.md",
+        toPath: "Archive/Original.md",
+        commit: expect.objectContaining({ hash: "bbbbbbbb" })
+      }),
+      expect.objectContaining({
+        kind: "rename",
+        fromPath: "Archive/Original.md",
+        toPath: "Projects/Current.md",
+        commit: expect.objectContaining({ hash: "cccccccc" })
+      })
+    ]);
+  });
+
+  it("keeps short paths readable without hiding their full identity", () => {
+    expect(compactHistoryPath("Projects/Research/Current.md")).toBe("…/Research/Current.md");
+    expect(compactHistoryPath("Notes/Current.md")).toBe("Notes/Current.md");
+  });
+});
+
 describe("partial hunk restore", () => {
   it("restores one separated hunk without reverting another", () => {
     const padding = Array.from({ length: 12 }, (_, index) => `same ${index}`).join("\n");
@@ -556,6 +605,21 @@ describe("meaningful Git versions", () => {
 
     expect(groups.some((group) => group.commits.some((item) => item.hash === "bbbbbbbb") && group.isMilestone)).toBe(true);
     expect(groupsSinceCheckpoint(groups, "bbbbbbbb").flatMap((group) => group.commits).map((item) => item.hash)).toEqual(["aaaaaaaa"]);
+  });
+
+  it("keeps Git copy boundaries as separate milestones", () => {
+    const copied = {
+      ...commit("aaaaaaaa", "2026-07-21T10:20:00+09:00", "Auto backup"),
+      changeType: "C"
+    };
+    const earlier = commit("bbbbbbbb", "2026-07-21T10:10:00+09:00", "Auto backup");
+    const groups = groupEffectiveVersions([copied, earlier], { bookmarks: {} });
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({
+      isMilestone: true,
+      summary: "从其他笔记复制"
+    });
   });
 
   it("creates stable working-content fingerprints", () => {
