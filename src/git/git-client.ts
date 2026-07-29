@@ -50,10 +50,16 @@ export class GitClient {
     private readonly getSettings: () => GitNoteHistorySettings
   ) {}
 
-  async loadFileHistory(file: TFile): Promise<GitFileHistory> {
+  async loadFileHistory(
+    file: TFile,
+    requestedMaxCommits?: number
+  ): Promise<GitFileHistory> {
     const context = await this.resolveContext(file);
     const settings = this.getSettings();
-    const maxCommits = Math.max(1, Math.min(1000, Math.trunc(settings.maxCommits)));
+    const maxCommits = Math.max(
+      1,
+      Math.min(1000, Math.trunc(requestedMaxCommits ?? settings.maxCommits))
+    );
 
     const [logOutput, numStatOutput, statusOutput, branchOutput] = await Promise.all([
       this.runGit(context.repositoryRoot, [
@@ -365,6 +371,25 @@ export class GitClient {
     return this.resolveContext(file);
   }
 
+  async resolveVaultPathContext(vaultPath: string): Promise<GitRepositoryContext> {
+    const { vaultRoot, repositoryRoot } = await this.resolveRepository();
+    const absoluteFilePath = path.resolve(vaultRoot, vaultPath);
+    const repositoryRelativePath = path.relative(repositoryRoot, absoluteFilePath);
+    if (
+      repositoryRelativePath === ""
+      || repositoryRelativePath.startsWith(`..${path.sep}`)
+      || repositoryRelativePath === ".."
+      || path.isAbsolute(repositoryRelativePath)
+    ) {
+      throw new GitCommandError("当前笔记不在检测到的 Git 仓库中。");
+    }
+    return {
+      vaultRoot,
+      repositoryRoot,
+      repositoryRelativePath: repositoryRelativePath.split(path.sep).join("/")
+    };
+  }
+
   async resolveRepositoryContext(): Promise<Omit<GitRepositoryContext, "repositoryRelativePath">> {
     return this.resolveRepository();
   }
@@ -402,24 +427,7 @@ export class GitClient {
   }
 
   private async resolveContext(file: TFile): Promise<GitRepositoryContext> {
-    const { vaultRoot, repositoryRoot } = await this.resolveRepository();
-
-    const absoluteFilePath = path.resolve(vaultRoot, file.path);
-    const repositoryRelativePath = path.relative(repositoryRoot, absoluteFilePath);
-    if (
-      repositoryRelativePath === "" ||
-      repositoryRelativePath.startsWith(`..${path.sep}`) ||
-      repositoryRelativePath === ".." ||
-      path.isAbsolute(repositoryRelativePath)
-    ) {
-      throw new GitCommandError("当前笔记不在检测到的 Git 仓库中。");
-    }
-
-    return {
-      vaultRoot,
-      repositoryRoot,
-      repositoryRelativePath: repositoryRelativePath.split(path.sep).join("/")
-    };
+    return this.resolveVaultPathContext(file.path);
   }
 
   private async resolveRepository(): Promise<{ vaultRoot: string; repositoryRoot: string }> {

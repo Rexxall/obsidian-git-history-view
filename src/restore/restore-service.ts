@@ -1,5 +1,6 @@
 import { App, Notice, TFile } from "obsidian";
 import { contentFingerprint } from "../history/version-groups";
+import { remapVaultPath } from "../persistence/plugin-data";
 import type {
   RestoreOptions,
   RestoreReceipt,
@@ -25,9 +26,11 @@ export class UndoUnavailableError extends Error {
 
 interface RestorePersistence {
   getStack: () => UndoSnapshot[];
-  setStack: (stack: UndoSnapshot[]) => Promise<void>;
   getReceipts: () => RestoreReceipt[];
-  setReceipts: (receipts: RestoreReceipt[]) => Promise<void>;
+  mutateHistory: <T>(
+    mutation: (stack: UndoSnapshot[], receipts: RestoreReceipt[]) => T,
+    shouldPersist?: (result: T) => boolean
+  ) => Promise<T>;
 }
 
 function createId(prefix: string): string {
@@ -49,10 +52,21 @@ function normalizeOptions(
 }
 
 export class RestoreService {
+  private historyOperationQueue: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly app: App,
     private readonly persistence: RestorePersistence
   ) {}
+
+  private enqueueHistoryOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const queued = this.historyOperationQueue.then(operation);
+    this.historyOperationQueue = queued.then(
+      () => undefined,
+      () => undefined
+    );
+    return queued;
+  }
 
   canUndo(): boolean {
     return this.persistence.getStack().length > 0;
@@ -66,7 +80,21 @@ export class RestoreService {
     return this.persistence.getReceipts();
   }
 
-  async restore(
+  restore(
+    file: TFile,
+    targetContent: string,
+    options: string | RestoreOptions,
+    legacyExpectedCurrentContent?: string
+  ): Promise<boolean> {
+    return this.enqueueHistoryOperation(() => this.performRestore(
+      file,
+      targetContent,
+      options,
+      legacyExpectedCurrentContent
+    ));
+  }
+
+  private async performRestore(
     file: TFile,
     targetContent: string,
     options: string | RestoreOptions,
@@ -105,29 +133,60 @@ export class RestoreService {
       ...(normalized.sourceLabel ? { sourceLabel: normalized.sourceLabel } : {})
     };
 
-    const previousStack = [...this.persistence.getStack()];
-    const previousReceipts = [...this.persistence.getReceipts()];
-    const nextStack = [...previousStack, undoSnapshot].slice(-MAX_UNDO_STEPS);
-    const nextReceipts = [receipt, ...previousReceipts].slice(0, MAX_RECEIPTS);
-
-    await this.persistence.setStack(nextStack);
-    await this.persistence.setReceipts(nextReceipts);
+    await this.persistence.mutateHistory((stack, receipts) => {
+      stack.push(undoSnapshot);
+      receipts.unshift(receipt);
+    });
     try {
       await this.app.vault.process(file, (current) => {
         if (current !== before) throw new ConcurrentNoteChangeError();
         return targetContent;
       });
     } catch (error) {
-      await this.persistence.setStack(previousStack);
-      await this.persistence.setReceipts(previousReceipts);
+      try {
+        await this.persistence.mutateHistory((stack, receipts) => {
+          const snapshotIndex = stack.findIndex((item) => item.id === id);
+          if (snapshotIndex >= 0) stack.splice(snapshotIndex, 1);
+          const receiptIndex = receipts.findIndex((item) => item.id === id);
+          if (receiptIndex >= 0) receipts.splice(receiptIndex, 1);
+        });
+      } catch (cleanupError) {
+        throw new Error(
+          `笔记恢复未完成，且待处理记录清理失败：${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`
+        );
+      }
       throw error;
+    }
+
+    try {
+      await this.persistence.mutateHistory((stack, receipts) => {
+        let changed = false;
+        if (stack.length > MAX_UNDO_STEPS) {
+          stack.splice(0, stack.length - MAX_UNDO_STEPS);
+          changed = true;
+        }
+        if (receipts.length > MAX_RECEIPTS) {
+          receipts.splice(MAX_RECEIPTS);
+          changed = true;
+        }
+        return changed;
+      }, (changed) => changed);
+    } catch (error) {
+      new Notice(
+        `恢复已完成，但旧恢复记录未能整理：${error instanceof Error ? error.message : String(error)}`,
+        9000
+      );
     }
 
     new Notice(`已${normalized.label}；可撤销“${normalized.label}”。`, 7000);
     return true;
   }
 
-  async undoLastRestore(): Promise<TFile> {
+  undoLastRestore(): Promise<TFile> {
+    return this.enqueueHistoryOperation(() => this.performUndoLastRestore());
+  }
+
+  private async performUndoLastRestore(): Promise<TFile> {
     const stack = [...this.persistence.getStack()];
     const snapshot = stack.at(-1);
     if (!snapshot) throw new UndoUnavailableError("没有可以撤销的 Git 恢复操作。");
@@ -147,30 +206,62 @@ export class RestoreService {
       return snapshot.content;
     });
 
-    stack.pop();
-    const receipts = this.persistence.getReceipts().map((receipt) =>
-      receipt.id === snapshot.id ? { ...receipt, status: "undone" as const } : receipt
-    );
-    await this.persistence.setStack(stack);
-    await this.persistence.setReceipts(receipts);
+    try {
+      await this.persistence.mutateHistory((latestStack, receipts) => {
+        const snapshotIndex = latestStack.findIndex((item) => item.id === snapshot.id);
+        if (snapshotIndex >= 0) latestStack.splice(snapshotIndex, 1);
+        const receipt = receipts.find((item) => item.id === snapshot.id);
+        if (receipt) receipt.status = "undone";
+      });
+    } catch (historyError) {
+      try {
+        await this.app.vault.process(file, (latest) => {
+          if (latest !== snapshot.content) throw new ConcurrentNoteChangeError();
+          return current;
+        });
+      } catch (compensationError) {
+        throw new Error(
+          `笔记内容已经撤销，但撤销记录保存失败，且因后续修改无法自动复原：${compensationError instanceof Error ? compensationError.message : String(compensationError)}`
+        );
+      }
+      throw new Error(
+        `撤销记录保存失败，笔记已安全恢复到撤销前内容：${historyError instanceof Error ? historyError.message : String(historyError)}`
+      );
+    }
     new Notice(`已撤销：${snapshot.label}。`);
     return file;
   }
 
-  async renameFilePath(oldPath: string, newPath: string): Promise<void> {
-    let stackChanged = false;
-    const stack = this.persistence.getStack().map((snapshot) => {
-      if (snapshot.filePath !== oldPath) return snapshot;
-      stackChanged = true;
-      return { ...snapshot, filePath: newPath };
-    });
-    let receiptsChanged = false;
-    const receipts = this.persistence.getReceipts().map((receipt) => {
-      if (receipt.filePath !== oldPath) return receipt;
-      receiptsChanged = true;
-      return { ...receipt, filePath: newPath };
-    });
-    if (stackChanged) await this.persistence.setStack(stack);
-    if (receiptsChanged) await this.persistence.setReceipts(receipts);
+  async renameFilePath(
+    oldPath: string,
+    newPath: string,
+    includeDescendants = false
+  ): Promise<void> {
+    await this.persistence.mutateHistory((stack, receipts) => {
+      let changed = false;
+      for (const snapshot of stack) {
+        const filePath = remapVaultPath(
+          snapshot.filePath,
+          oldPath,
+          newPath,
+          includeDescendants
+        );
+        if (filePath === snapshot.filePath) continue;
+        snapshot.filePath = filePath;
+        changed = true;
+      }
+      for (const receipt of receipts) {
+        const filePath = remapVaultPath(
+          receipt.filePath,
+          oldPath,
+          newPath,
+          includeDescendants
+        );
+        if (filePath === receipt.filePath) continue;
+        receipt.filePath = filePath;
+        changed = true;
+      }
+      return changed;
+    }, (changed) => changed);
   }
 }

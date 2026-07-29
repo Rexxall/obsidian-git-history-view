@@ -1,5 +1,12 @@
-import { MarkdownView, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
-import { GitClient } from "./git/git-client";
+import {
+  MarkdownView,
+  Notice,
+  Plugin,
+  TFile,
+  TFolder,
+  WorkspaceLeaf
+} from "obsidian";
+import { GitClient, GitCommandError } from "./git/git-client";
 import type {
   DetailMode,
   DetailRequest,
@@ -11,7 +18,8 @@ import type {
   ReviewCommitSummary,
   ReviewInboxCheckpoint,
   RestoreReceipt,
-  UndoSnapshot
+  UndoSnapshot,
+  VersionMilestoneInput
 } from "./models";
 import { RestoreService } from "./restore/restore-service";
 import { DEFAULT_SETTINGS, GitNoteHistorySettingTab } from "./settings";
@@ -34,11 +42,25 @@ import {
 } from "./views/conflict-resolver-view";
 import { RestoreHistoryModal } from "./ui/restore-history-modal";
 import { contentFingerprint } from "./history/version-groups";
+import {
+  clearReviewCheckpointMilestone,
+  projectMilestonesToBookmarks,
+  setReviewCheckpointMilestone
+} from "./history/milestones";
+import {
+  CURRENT_DATA_SCHEMA_VERSION,
+  migratePluginData,
+  migrateReviewStatePath
+} from "./persistence/plugin-data";
 import { BlockAgeModal } from "./ui/block-age-modal";
 import {
   markReviewInboxItemState,
   setReviewInboxItemSnoozed
 } from "./review/review-state";
+
+function clonePlainData<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
 
 export default class GitNoteHistoryPlugin extends Plugin {
   settings: GitNoteHistorySettings = { ...DEFAULT_SETTINGS };
@@ -48,6 +70,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private restoreReceipts: RestoreReceipt[] = [];
   private fileReviewStates: Record<string, FileReviewState> = {};
   private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
+  private dataOperationQueue: Promise<void> = Promise.resolve();
 
   async onload(): Promise<void> {
     await this.loadPluginData();
@@ -55,15 +78,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.gitClient = new GitClient(this.app, () => this.settings);
     this.restoreService = new RestoreService(this.app, {
       getStack: () => this.undoStack,
-      setStack: async (stack) => {
-        this.undoStack = stack;
-        await this.savePluginData();
-      },
       getReceipts: () => this.restoreReceipts,
-      setReceipts: async (receipts) => {
-        this.restoreReceipts = receipts;
-        await this.savePluginData();
-      }
+      mutateHistory: (mutation, shouldPersist) =>
+        this.mutateRestoreHistory(mutation, shouldPersist)
     });
 
     this.registerView(
@@ -238,8 +255,41 @@ export default class GitNoteHistoryPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
-        if (!(file instanceof TFile)) return;
-        void this.restoreService.renameFilePath(oldPath, file.path);
+        if (!(file instanceof TFile) && !(file instanceof TFolder)) return;
+        const includeDescendants = file instanceof TFolder;
+        const nextPath = file.path;
+        // Reserve the review-data migration before any modal can write to the new path.
+        const reviewMigration = this.migrateVaultReviewPath(
+          oldPath,
+          nextPath,
+          includeDescendants
+        );
+        const restoreMigration = this.restoreService.renameFilePath(
+          oldPath,
+          nextPath,
+          includeDescendants
+        );
+        void (async () => {
+          const [reviewResult, restoreResult] = await Promise.allSettled([
+            reviewMigration,
+            restoreMigration
+          ]);
+          if (reviewResult.status === "rejected") {
+            const reason = reviewResult.reason;
+            new Notice(
+              `重命名后未能迁移版本里程碑：${reason instanceof Error ? reason.message : String(reason)}`,
+              9000
+            );
+          }
+          if (restoreResult.status === "rejected") {
+            const reason = restoreResult.reason;
+            new Notice(
+              `重命名后未能迁移恢复记录：${reason instanceof Error ? reason.message : String(reason)}`,
+              9000
+            );
+          }
+          this.refreshOpenViews();
+        })();
       })
     );
 
@@ -348,31 +398,145 @@ export default class GitNoteHistoryPlugin extends Plugin {
   }
 
   getFileReviewState(context: GitRepositoryContext): FileReviewState {
+    return this.getFileReviewStateFrom(this.fileReviewStates, context);
+  }
+
+  private getFileReviewStateFrom(
+    states: Record<string, FileReviewState>,
+    context: GitRepositoryContext
+  ): FileReviewState {
     const key = this.reviewStateKey(context);
-    const existing = this.fileReviewStates[key];
+    const existing = states[key];
     if (existing) return existing;
-    const state: FileReviewState = { bookmarks: {} };
-    this.fileReviewStates[key] = state;
+    const state: FileReviewState = { bookmarks: {}, milestones: {} };
+    states[key] = state;
     return state;
   }
 
-  async setBaseline(context: GitRepositoryContext, commit: GitCommitVersion | null): Promise<void> {
-    const state = this.getFileReviewState(context);
-    if (commit) {
-      state.baselineHash = commit.hash;
-      state.baselinePath = commit.historicalPath;
-    } else {
-      delete state.baselineHash;
-      delete state.baselinePath;
-    }
-    await this.savePluginData();
+  private enqueueDataOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const queued = this.dataOperationQueue.then(operation);
+    this.dataOperationQueue = queued.then(
+      () => undefined,
+      () => undefined
+    );
+    return queued;
   }
 
-  async setVersionLabel(context: GitRepositoryContext, hash: string, label: string): Promise<void> {
-    const state = this.getFileReviewState(context);
-    if (label) state.bookmarks[hash] = { label, createdAt: new Date().toISOString() };
-    else delete state.bookmarks[hash];
-    await this.savePluginData();
+  private pluginDataSnapshot(
+    fileReviewStates = this.fileReviewStates,
+    reviewInboxCheckpoints = this.reviewInboxCheckpoints,
+    undoStack = this.undoStack,
+    restoreReceipts = this.restoreReceipts
+  ): PersistedPluginData {
+    return {
+      schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
+      settings: this.settings,
+      undoStack,
+      restoreReceipts,
+      fileReviewStates,
+      reviewInboxCheckpoints
+    };
+  }
+
+  private mutateReviewData<T>(
+    mutation: (
+      states: Record<string, FileReviewState>,
+      checkpoints: Record<string, ReviewInboxCheckpoint>
+    ) => T | Promise<T>,
+    shouldPersist: (result: T) => boolean = () => true
+  ): Promise<T> {
+    return this.enqueueDataOperation(async () => {
+      const nextStates = clonePlainData(this.fileReviewStates);
+      const nextCheckpoints = clonePlainData(this.reviewInboxCheckpoints);
+      const result = await mutation(nextStates, nextCheckpoints);
+      if (!shouldPersist(result)) return result;
+      await this.saveData(this.pluginDataSnapshot(nextStates, nextCheckpoints));
+      this.fileReviewStates = nextStates;
+      this.reviewInboxCheckpoints = nextCheckpoints;
+      return result;
+    });
+  }
+
+  async setBaseline(context: GitRepositoryContext, commit: GitCommitVersion | null): Promise<void> {
+    await this.mutateReviewData((states) => {
+      const state = this.getFileReviewStateFrom(states, context);
+      if (commit) {
+        state.baselineHash = commit.hash;
+        state.baselinePath = commit.historicalPath;
+      } else {
+        delete state.baselineHash;
+        delete state.baselinePath;
+      }
+    });
+  }
+
+  async setVersionMilestone(
+    context: GitRepositoryContext,
+    commit: GitCommitVersion,
+    milestoneId: string | null,
+    milestone: VersionMilestoneInput | null
+  ): Promise<string | null> {
+    return this.mutateReviewData((states) => {
+      const state = this.getFileReviewStateFrom(states, context);
+      const milestones = state.milestones ??= {};
+      if (milestone) {
+        if (milestone.kind === "review-checkpoint") {
+          throw new Error("复查点由复查流程管理，不能手动创建。");
+        }
+        const id = milestoneId
+          ?? `milestone:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+        const existing = milestones[id];
+        const createdAt = existing?.createdAt || new Date().toISOString();
+        milestones[id] = {
+          id,
+          label: milestone.label.trim(),
+          kind: milestone.kind,
+          commitHash: commit.hash,
+          historicalPath: commit.historicalPath,
+          commitAuthoredAt: commit.authoredAt,
+          commitSubject: commit.subject,
+          occurredAt: milestone.occurredAt,
+          createdAt,
+          source: "local-user",
+          ...(milestone.note?.trim() ? { note: milestone.note.trim() } : {})
+        };
+        state.bookmarks = projectMilestonesToBookmarks(milestones);
+        return id;
+      }
+      if (milestoneId) delete milestones[milestoneId];
+      state.bookmarks = projectMilestonesToBookmarks(milestones);
+      return null;
+    });
+  }
+
+  async hydrateVersionMilestones(
+    context: GitRepositoryContext,
+    commits: readonly GitCommitVersion[]
+  ): Promise<boolean> {
+    return this.mutateReviewData((states) => {
+      const state = this.getFileReviewStateFrom(states, context);
+      const milestones = state.milestones ?? {};
+      const commitsByHash = new Map(commits.map((commit) => [commit.hash, commit]));
+      let changed = false;
+      for (const milestone of Object.values(milestones)) {
+        const commit = commitsByHash.get(milestone.commitHash);
+        if (!commit) continue;
+        if (!milestone.historicalPath) {
+          milestone.historicalPath = commit.historicalPath;
+          changed = true;
+        }
+        if (!milestone.commitAuthoredAt) {
+          milestone.commitAuthoredAt = commit.authoredAt;
+          changed = true;
+        }
+        if (!milestone.commitSubject) {
+          milestone.commitSubject = commit.subject;
+          changed = true;
+        }
+      }
+      if (changed) state.bookmarks = projectMilestonesToBookmarks(milestones);
+      return changed;
+    }, (changed) => changed);
   }
 
   async markReviewed(
@@ -380,14 +544,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
     commit: GitCommitVersion,
     workingFingerprint?: string
   ): Promise<void> {
-    const state = this.getFileReviewState(context);
-    state.reviewCheckpoint = {
-      commitHash: commit.hash,
-      historicalPath: commit.historicalPath,
-      reviewedAt: new Date().toISOString(),
-      ...(workingFingerprint ? { workingFingerprint } : {})
-    };
-    await this.savePluginData();
+    await this.mutateReviewData((states) => {
+      const state = this.getFileReviewStateFrom(states, context);
+      setReviewCheckpointMilestone(
+        state,
+        commit,
+        new Date().toISOString(),
+        workingFingerprint
+      );
+    });
   }
 
   getReviewInboxCheckpoint(repositoryRoot: string): ReviewInboxCheckpoint | undefined {
@@ -395,15 +560,16 @@ export default class GitNoteHistoryPlugin extends Plugin {
   }
 
   async setReviewInboxCheckpoint(repositoryRoot: string, commitHash: string): Promise<void> {
-    if (commitHash) {
-      this.reviewInboxCheckpoints[repositoryRoot] = {
-        commitHash,
-        reviewedAt: new Date().toISOString()
-      };
-    } else {
-      delete this.reviewInboxCheckpoints[repositoryRoot];
-    }
-    await this.savePluginData();
+    await this.mutateReviewData((_states, checkpoints) => {
+      if (commitHash) {
+        checkpoints[repositoryRoot] = {
+          commitHash,
+          reviewedAt: new Date().toISOString()
+        };
+      } else {
+        delete checkpoints[repositoryRoot];
+      }
+    });
   }
 
   async markInboxItemReviewed(
@@ -411,8 +577,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
     latestCommit?: ReviewCommitSummary,
     workingFingerprint?: string
   ): Promise<void> {
-    this.updateInboxItemReviewed(context, latestCommit, workingFingerprint);
-    await this.savePluginData();
+    await this.mutateReviewData((states) => {
+      this.updateInboxItemReviewed(
+        context,
+        latestCommit,
+        workingFingerprint,
+        new Date().toISOString(),
+        states
+      );
+    });
   }
 
   async markInboxItemsReviewed(
@@ -424,31 +597,43 @@ export default class GitNoteHistoryPlugin extends Plugin {
       workingFingerprint?: string;
     }>
   ): Promise<void> {
-    const reviewedAt = new Date().toISOString();
-    if (headHash) this.reviewInboxCheckpoints[repositoryRoot] = { commitHash: headHash, reviewedAt };
-    for (const item of items) {
-      this.updateInboxItemReviewed(item.context, item.latestCommit, item.workingFingerprint, reviewedAt);
-    }
-    await this.savePluginData();
+    await this.mutateReviewData((states, checkpoints) => {
+      const reviewedAt = new Date().toISOString();
+      if (headHash) {
+        checkpoints[repositoryRoot] = { commitHash: headHash, reviewedAt };
+      }
+      for (const item of items) {
+        this.updateInboxItemReviewed(
+          item.context,
+          item.latestCommit,
+          item.workingFingerprint,
+          reviewedAt,
+          states
+        );
+      }
+    });
   }
 
   async snoozeInboxItem(context: GitRepositoryContext, until: string | null): Promise<void> {
-    const state = this.getFileReviewState(context);
-    setReviewInboxItemSnoozed(state, until);
-    await this.savePluginData();
+    await this.mutateReviewData((states) => {
+      const state = this.getFileReviewStateFrom(states, context);
+      setReviewInboxItemSnoozed(state, until);
+    });
   }
 
   async clearReviewCheckpoint(context: GitRepositoryContext): Promise<void> {
-    const state = this.getFileReviewState(context);
-    delete state.reviewCheckpoint;
-    await this.savePluginData();
+    await this.mutateReviewData((states) => {
+      const state = this.getFileReviewStateFrom(states, context);
+      clearReviewCheckpointMilestone(state);
+    });
   }
 
   async rememberDetailMode(file: TFile, mode: DetailMode): Promise<void> {
     try {
       const context = await this.gitClient.resolveFileContext(file);
-      this.getFileReviewState(context).detailMode = mode;
-      await this.savePluginData();
+      await this.mutateReviewData((states) => {
+        this.getFileReviewStateFrom(states, context).detailMode = mode;
+      });
     } catch {
       // A view preference should never interrupt version review if Git becomes temporarily unavailable.
     }
@@ -458,27 +643,85 @@ export default class GitNoteHistoryPlugin extends Plugin {
     previousContext: GitRepositoryContext,
     nextContext: GitRepositoryContext
   ): Promise<void> {
-    const previousKey = this.reviewStateKey(previousContext);
-    const nextKey = this.reviewStateKey(nextContext);
-    if (previousKey === nextKey || !this.fileReviewStates[previousKey]) return;
-    this.fileReviewStates[nextKey] = this.fileReviewStates[previousKey];
-    delete this.fileReviewStates[previousKey];
-    await this.savePluginData();
+    await this.mutateReviewData((states) => {
+      return migrateReviewStatePath(
+        states,
+        previousContext,
+        nextContext
+      );
+    }, (changed) => changed);
   }
 
-  async savePluginData(): Promise<void> {
-    const data: PersistedPluginData = {
-      settings: this.settings,
-      undoStack: this.undoStack,
-      restoreReceipts: this.restoreReceipts,
-      fileReviewStates: this.fileReviewStates,
-      reviewInboxCheckpoints: this.reviewInboxCheckpoints
-    };
-    await this.saveData(data);
+  private migrateVaultReviewPath(
+    oldPath: string,
+    newPath: string,
+    includeDescendants: boolean
+  ): Promise<boolean> {
+    return this.mutateReviewData(async (states) => {
+      let previousContext: GitRepositoryContext;
+      let nextContext: GitRepositoryContext;
+      try {
+        [previousContext, nextContext] = await Promise.all([
+          this.gitClient.resolveVaultPathContext(oldPath),
+          this.gitClient.resolveVaultPathContext(newPath)
+        ]);
+      } catch (error) {
+        if (
+          error instanceof GitCommandError
+          && error.message === "当前笔记不在检测到的 Git 仓库中。"
+        ) return false;
+        throw error;
+      }
+      return migrateReviewStatePath(
+        states,
+        previousContext,
+        nextContext,
+        includeDescendants
+      );
+    }, (changed) => changed);
+  }
+
+  private mutateRestoreHistory<T>(
+    mutation: (stack: UndoSnapshot[], receipts: RestoreReceipt[]) => T,
+    shouldPersist: (result: T) => boolean = () => true
+  ): Promise<T> {
+    return this.enqueueDataOperation(async () => {
+      const nextStack = clonePlainData(this.undoStack);
+      const nextReceipts = clonePlainData(this.restoreReceipts);
+      const result = mutation(nextStack, nextReceipts);
+      if (!shouldPersist(result)) return result;
+      await this.saveData(this.pluginDataSnapshot(
+        this.fileReviewStates,
+        this.reviewInboxCheckpoints,
+        nextStack,
+        nextReceipts
+      ));
+      this.undoStack = nextStack;
+      this.restoreReceipts = nextReceipts;
+      return result;
+    });
+  }
+
+  savePluginData(): Promise<void> {
+    return this.enqueueDataOperation(async () => {
+      await this.saveData(this.pluginDataSnapshot());
+    });
   }
 
   private async loadPluginData(): Promise<void> {
-    const data = (await this.loadData()) as PersistedPluginData | null;
+    const rawData = await this.loadData();
+    const previousSchema = rawData && typeof rawData === "object"
+      ? (rawData as { schemaVersion?: unknown }).schemaVersion
+      : undefined;
+    if (
+      typeof previousSchema === "number"
+      && previousSchema > CURRENT_DATA_SCHEMA_VERSION
+    ) {
+      const message = `Git Note History 数据来自更新版本（schema ${previousSchema}），v${this.manifest.version} 已停止加载以避免覆盖。`;
+      new Notice(message, 10000);
+      throw new Error(message);
+    }
+    const data = migratePluginData(rawData);
     const loadedSettings = data?.settings ?? {};
     this.settings = {
       ...DEFAULT_SETTINGS,
@@ -494,8 +737,11 @@ export default class GitNoteHistoryPlugin extends Plugin {
       scope: snapshot.scope ?? "file"
     }));
     this.restoreReceipts = data?.restoreReceipts ?? [];
-    this.fileReviewStates = data?.fileReviewStates ?? {};
+    this.fileReviewStates = data.fileReviewStates ?? {};
     this.reviewInboxCheckpoints = data?.reviewInboxCheckpoints ?? {};
+    if (previousSchema !== CURRENT_DATA_SCHEMA_VERSION) {
+      await this.savePluginData();
+    }
   }
 
   private reviewStateKey(context: GitRepositoryContext): string {
@@ -506,9 +752,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
     context: GitRepositoryContext,
     latestCommit?: ReviewCommitSummary,
     workingFingerprint?: string,
-    reviewedAt = new Date().toISOString()
+    reviewedAt = new Date().toISOString(),
+    states = this.fileReviewStates
   ): void {
-    const state = this.getFileReviewState(context);
+    const state = this.getFileReviewStateFrom(states, context);
     markReviewInboxItemState(
       state,
       context.repositoryRelativePath,

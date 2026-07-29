@@ -26,8 +26,8 @@ Every iteration keeps the source, documentation, build output, install archive, 
    ```
 
    The local target file is ignored by Git. It must include the active both test vaults vault plugin directories on the development machine.
-7. Commit and push the entire iteration together. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
-8. Create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
+7. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
+8. After explicit publication approval, create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
 
    - `dist/git-note-history-<version>.zip`
    - `main.js`

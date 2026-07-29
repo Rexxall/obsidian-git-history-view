@@ -4,6 +4,7 @@ import {
   Notice,
   SearchComponent,
   TFile,
+  TFolder,
   WorkspaceLeaf,
   setIcon
 } from "obsidian";
@@ -14,10 +15,11 @@ import type {
   FileReviewState,
   GitCommitVersion,
   GitFileHistory,
+  VersionMilestone,
   VersionReference
 } from "../models";
 import { GitCommandError } from "../git/git-client";
-import { VersionLabelModal } from "../ui/label-modal";
+import { VersionMilestoneModal } from "../ui/milestone-modal";
 import {
   contentFingerprint,
   groupEffectiveVersions,
@@ -39,6 +41,21 @@ import {
   compactHistoryPath,
   type PathTransition
 } from "../history/path-history";
+import {
+  hasNamedMilestone,
+  historyWithStoredMilestones,
+  milestoneKindIcon,
+  milestoneKindLabel,
+  milestoneSearchText,
+  milestonesForCommit,
+  namedMilestoneEvents,
+  previousNamedMilestone
+} from "../history/milestones";
+import {
+  historyActivationMode,
+  isHistoryRowActivationKey
+} from "../history/version-navigation";
+import { remapVaultPath } from "../persistence/plugin-data";
 
 export const GIT_NOTE_HISTORY_VIEW_TYPE = "git-note-history-view";
 
@@ -69,6 +86,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
+  return target instanceof Element
+    && target.closest("input, textarea, button, a, select, [contenteditable='true']") !== null;
+}
+
 function statusLabel(history: GitFileHistory): string {
   const { status } = history;
   if (status.conflicted) return "存在冲突";
@@ -81,7 +103,7 @@ function statusLabel(history: GitFileHistory): string {
 
 function matchesMetadata(commit: GitCommitVersion, query: string, state: FileReviewState): boolean {
   if (!query) return true;
-  const bookmark = state.bookmarks[commit.hash]?.label ?? "";
+  const milestone = milestoneSearchText(state, commit.hash);
   const trailers = Object.values(commit.trailers).join(" ");
   return [
     commit.subject,
@@ -90,7 +112,7 @@ function matchesMetadata(commit: GitCommitVersion, query: string, state: FileRev
     commit.hash,
     commit.authoredAt,
     commit.historicalPath,
-    bookmark,
+    milestone,
     trailers
   ]
     .join(" ")
@@ -137,11 +159,16 @@ export class GitNoteHistoryView extends ItemView {
   private contentSearchFailed = 0;
   private readonly expandedGroups = new Set<string>();
   private showRawCommits = false;
+  private showNamedMilestonesOnly = false;
   private pathHistoryExpanded = false;
   private pathTransitions: PathTransition[] = [];
   private currentContent = "";
   private currentFingerprint = "";
   private refiningGroups = false;
+  private expandingMilestoneHistory = false;
+  private milestoneExpansionGeneration = 0;
+  private expandedMilestoneHistoryAttempted = false;
+  private storedMilestonesExpanded = false;
   private visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: GitNoteHistoryPlugin) {
@@ -163,7 +190,7 @@ export class GitNoteHistoryView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.contentEl.tabIndex = 0;
-    this.registerDomEvent(this.contentEl, "keydown", (event) => this.handleKeyboard(event));
+    this.registerDomEvent(this.contentEl, "keydown", (event) => this.handleKeyboard(event), { capture: true });
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
       if (!this.followActiveNote) return;
       const active = this.app.workspace.getActiveFile();
@@ -174,15 +201,21 @@ export class GitNoteHistoryView extends ItemView {
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       if (file instanceof TFile && (oldPath === this.targetFile?.path || file.path === this.targetFile?.path)) {
-        const previousContext = this.history?.context;
         this.targetFile = file;
-        void (async () => {
-          if (previousContext) {
-            const nextContext = await this.plugin.gitClient.resolveFileContext(file);
-            await this.plugin.migrateFileReviewState(previousContext, nextContext);
-          }
-          await this.refresh();
-        })();
+        void this.refresh();
+        return;
+      }
+      if (file instanceof TFolder && this.targetFile) {
+        const currentPath = this.targetFile.path;
+        const nextPath = remapVaultPath(currentPath, oldPath, file.path, true);
+        if (nextPath !== currentPath) {
+          const nextFile = this.app.vault.getFileByPath(nextPath);
+          if (nextFile instanceof TFile) this.targetFile = nextFile;
+          void this.refresh();
+        } else if (currentPath.startsWith(`${file.path}/`)) {
+          // Obsidian may update descendant TFile objects before emitting only the folder event.
+          void this.refresh();
+        }
       }
     }));
 
@@ -211,6 +244,11 @@ export class GitNoteHistoryView extends ItemView {
     this.effectiveGroups = [];
     this.pathTransitions = [];
     this.pathHistoryExpanded = false;
+    this.showNamedMilestonesOnly = false;
+    this.milestoneExpansionGeneration += 1;
+    this.expandingMilestoneHistory = false;
+    this.expandedMilestoneHistoryAttempted = false;
+    this.storedMilestonesExpanded = false;
     this.expandedGroups.clear();
     this.selectedIndex = 0;
     this.timeMachinePosition = -1;
@@ -235,6 +273,8 @@ export class GitNoteHistoryView extends ItemView {
         this.plugin.gitClient.loadFileHistory(file),
         this.app.vault.read(file)
       ]);
+      if (generation !== this.refreshGeneration) return;
+      await this.plugin.hydrateVersionMilestones(history.context, history.commits);
       if (generation !== this.refreshGeneration) return;
       this.history = history;
       this.currentContent = currentContent;
@@ -298,12 +338,29 @@ export class GitNoteHistoryView extends ItemView {
     this.renderCompareBar(container);
 
     this.renderVersionModeToggle(container);
+    const storedMilestoneMatches = this.renderStoredMilestones(container, state);
     this.renderContentLifecycle(container);
 
     const commits = this.history.commits.filter((commit) =>
       matchesSearch(commit, this.query, state, this.contentSearchMatches)
+      && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash))
     );
     if (commits.length === 0) {
+      if (storedMilestoneMatches > 0) return;
+      if (this.showNamedMilestonesOnly && !this.query) {
+        this.renderState(
+          container,
+          "bookmark",
+          "还没有命名里程碑",
+          "在重要版本的更多菜单中选择“命名这个版本”。",
+          "显示全部版本",
+          () => {
+            this.showNamedMilestonesOnly = false;
+            this.render();
+          }
+        );
+        return;
+      }
       if (this.query) {
         if (this.contentSearchLoading) {
           this.renderState(
@@ -366,6 +423,7 @@ export class GitNoteHistoryView extends ItemView {
     const groups = this.effectiveGroups.filter((group) =>
       group.commits.some((commit) =>
         matchesSearch(commit, this.query, state, this.contentSearchMatches)
+        && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash))
       )
     );
     const window = buildTimelineWindow(groups, this.visibleTimelineCount);
@@ -382,9 +440,18 @@ export class GitNoteHistoryView extends ItemView {
   }
 
   private timelineCommits(): GitCommitVersion[] {
-    return this.showRawCommits
+    const commits = this.showRawCommits
       ? (this.history?.commits ?? [])
       : this.effectiveGroups.map((group) => group.representative);
+    if (!this.showNamedMilestonesOnly || !this.history) return commits;
+    const state = this.plugin.getFileReviewState(this.history.context);
+    return commits.filter((commit) => hasNamedMilestone(state, commit.hash));
+  }
+
+  private knownMilestoneCommits(state: FileReviewState): GitCommitVersion[] {
+    return this.history
+      ? historyWithStoredMilestones(this.history.commits, state)
+      : [];
   }
 
   private async refineEffectiveGroups(generation: number): Promise<void> {
@@ -710,16 +777,48 @@ export class GitNoteHistoryView extends ItemView {
   }
 
   private renderVersionModeToggle(container: HTMLElement): void {
-    if (!this.history || this.history.commits.length === 0) return;
+    if (!this.history) return;
+    const state = this.plugin.getFileReviewState(this.history.context);
+    const milestoneEvents = namedMilestoneEvents(state);
+    if (this.history.commits.length === 0 && milestoneEvents.length === 0) return;
+    const milestoneVersionCount = new Set(
+      milestoneEvents.map((milestone) => milestone.commitHash)
+    ).size;
     const bar = container.createDiv({ cls: "git-note-history-version-mode" });
     const label = bar.createDiv();
-    label.createEl("strong", { text: this.showRawCommits ? "原始提交" : "版本" });
-    label.createSpan({
-      text: this.showRawCommits
-        ? ` ${this.history.commits.length} 条`
-        : ` ${this.effectiveGroups.length} 组${this.refiningGroups ? " · 正在识别重复内容…" : ""}`
+    label.createEl("strong", {
+      text: this.showNamedMilestonesOnly
+        ? "命名里程碑"
+        : this.showRawCommits
+          ? "原始提交"
+          : "版本"
     });
-    const toggle = bar.createEl("button", {
+    label.createSpan({
+      text: this.showNamedMilestonesOnly
+        ? ` ${milestoneVersionCount} 个版本 · ${milestoneEvents.length} 个事件`
+        : this.showRawCommits
+          ? ` ${this.history.commits.length} 条`
+          : ` ${this.effectiveGroups.length} 组${this.refiningGroups ? " · 正在识别重复内容…" : ""}`
+    });
+
+    const actions = bar.createDiv({ cls: "git-note-history-version-mode-actions" });
+    const milestones = actions.createEl("button", {
+      text: this.showNamedMilestonesOnly
+        ? "显示全部"
+        : `只看里程碑${milestoneVersionCount ? ` ${milestoneVersionCount}` : ""}`,
+      attr: { "aria-pressed": String(this.showNamedMilestonesOnly) }
+    });
+    milestones.disabled = milestoneEvents.length === 0 && !this.showNamedMilestonesOnly;
+    milestones.addEventListener("click", () => {
+      this.showNamedMilestonesOnly = !this.showNamedMilestonesOnly;
+      this.stopTimeMachinePlayback(false);
+      this.timeMachinePosition = this.timelineCommits().length;
+      this.selectedIndex = 0;
+      this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
+      this.render();
+    });
+
+    const toggle = actions.createEl("button", {
       text: this.showRawCommits ? "显示有效版本" : "显示原始提交",
       attr: { "aria-pressed": String(this.showRawCommits) }
     });
@@ -732,6 +831,220 @@ export class GitNoteHistoryView extends ItemView {
     });
   }
 
+  private renderStoredMilestones(
+    container: HTMLElement,
+    state: FileReviewState
+  ): number {
+    if (!this.history) return 0;
+    const loadedHashes = new Set(this.history.commits.map((commit) => commit.hash));
+    const stored = historyWithStoredMilestones(this.history.commits, state)
+      .slice(this.history.commits.length)
+      .filter((commit) => matchesMetadata(commit, this.query, state));
+    const locatedHashes = new Set([
+      ...loadedHashes,
+      ...stored.map((commit) => commit.hash)
+    ]);
+    const unresolvedByHash = new Map<string, VersionMilestone[]>();
+    for (const milestone of namedMilestoneEvents(state)) {
+      if (locatedHashes.has(milestone.commitHash)) continue;
+      const searchText = [
+        milestone.label,
+        milestoneKindLabel(milestone.kind),
+        milestone.note ?? "",
+        milestone.commitHash
+      ].join(" ").toLocaleLowerCase();
+      if (this.query && !searchText.includes(this.query.toLocaleLowerCase())) continue;
+      const existing = unresolvedByHash.get(milestone.commitHash) ?? [];
+      existing.push(milestone);
+      unresolvedByHash.set(milestone.commitHash, existing);
+    }
+    const total = stored.length + unresolvedByHash.size;
+    if (total === 0) return 0;
+    const showAll = this.showNamedMilestonesOnly
+      || Boolean(this.query)
+      || this.storedMilestonesExpanded;
+    const visibleStored = showAll ? stored : stored.slice(0, 3);
+    const remainingSlots = showAll ? Number.POSITIVE_INFINITY : 3 - visibleStored.length;
+    const visibleUnresolved = [...unresolvedByHash.entries()]
+      .slice(0, Math.max(0, remainingSlots));
+
+    const section = container.createDiv({
+      cls: "git-note-history-stored-milestones"
+    });
+    const heading = section.createDiv({
+      cls: "git-note-history-stored-milestones-heading"
+    });
+    const title = heading.createDiv();
+    setIcon(title.createSpan(), "archive-restore");
+    title.createSpan({ text: "当前历史列表外的里程碑" });
+    heading.createSpan({
+      text: `${total} 个版本`
+    });
+    if (total > 3 && !this.showNamedMilestonesOnly && !this.query) {
+      const toggle = heading.createEl("button", {
+        text: this.storedMilestonesExpanded ? "收起" : "显示全部"
+      });
+      toggle.addEventListener("click", () => {
+        this.storedMilestonesExpanded = !this.storedMilestonesExpanded;
+        this.render();
+      });
+    }
+
+    for (const commit of visibleStored) {
+      const milestones = milestonesForCommit(state, commit.hash, {
+        includeReviewCheckpoint: false
+      });
+      const item = section.createDiv({
+        cls: "git-note-history-stored-milestone"
+      });
+      const open = item.createEl("button", {
+        cls: "git-note-history-stored-milestone-main",
+        attr: {
+          "aria-label": `将${milestones.map((milestone) => milestone.label).join("、")}与当前工作区比较`
+        }
+      });
+      const copy = open.createSpan({
+        cls: "git-note-history-stored-milestone-copy"
+      });
+      copy.createSpan({
+        cls: "git-note-history-stored-milestone-title",
+        text: milestones.slice(0, 2).map((milestone) => milestone.label).join(" · ")
+      });
+      copy.createSpan({
+        cls: "git-note-history-stored-milestone-meta",
+        text: `${formatCommitTime(commit.authoredAt, true)} · ${commit.shortHash}`
+      });
+      open.addEventListener("click", () => void this.openAgainstWorking(commit));
+
+      const badges = item.createDiv({ cls: "git-note-history-badges" });
+      this.renderMilestoneBadges(badges, milestones, commit);
+      const more = item.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "更多里程碑操作" }
+      });
+      setIcon(more, "ellipsis");
+      more.addEventListener("click", (event) => {
+        this.openCommitMenu(event, commit, state);
+      });
+    }
+
+    for (const [hash, milestones] of visibleUnresolved) {
+      const item = section.createDiv({
+        cls: "git-note-history-stored-milestone is-unresolved"
+      });
+      const copy = item.createDiv({
+        cls: "git-note-history-stored-milestone-copy"
+      });
+      copy.createSpan({
+        cls: "git-note-history-stored-milestone-title",
+        text: milestones.slice(0, 2).map((milestone) => milestone.label).join(" · ")
+      });
+      copy.createSpan({
+        cls: "git-note-history-stored-milestone-meta",
+        text: `${hash.slice(0, 7)} · 旧标签尚未定位`
+      });
+      const more = item.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "管理无法定位的本地里程碑" }
+      });
+      setIcon(more, "ellipsis");
+      more.addEventListener("click", (event) => {
+        const menu = new Menu();
+        const commit = this.commitReferenceForMilestone(milestones[0]!);
+        this.addMilestoneMenuItems(menu, commit, state);
+        menu.showAtMouseEvent(event);
+      });
+    }
+
+    if (unresolvedByHash.size > 0) {
+      const note = section.createDiv({
+        cls: "git-note-history-stored-milestones-note"
+      });
+      note.createSpan({
+        text: this.expandedMilestoneHistoryAttempted && this.history.hasMoreHistory
+          ? "已读取最多 1000 条历史，仍无法定位这些旧标签。"
+          : this.history.hasMoreHistory
+          ? "这些旧标签可能位于尚未读取的更早历史，仍缺少路径快照。"
+          : "当前分支或改写后的 Git 历史中没有足够信息定位这些旧标签。"
+      });
+      if (this.history.hasMoreHistory && !this.expandedMilestoneHistoryAttempted) {
+        const expand = note.createEl("button", {
+          text: this.expandingMilestoneHistory
+            ? "正在读取…"
+            : "临时读取更多历史"
+        });
+        expand.disabled = this.expandingMilestoneHistory;
+        expand.addEventListener("click", () => {
+          void this.loadExpandedMilestoneHistory();
+        });
+      }
+    }
+    return total;
+  }
+
+  private commitReferenceForMilestone(
+    milestone: VersionMilestone
+  ): GitCommitVersion {
+    return {
+      hash: milestone.commitHash,
+      shortHash: milestone.commitHash.slice(0, 7),
+      authorName: "",
+      authorEmail: "",
+      authoredAt: milestone.commitAuthoredAt,
+      subject: milestone.commitSubject || milestone.label,
+      historicalPath: milestone.historicalPath,
+      changeType: "M",
+      addedLines: 0,
+      deletedLines: 0,
+      trailers: {}
+    };
+  }
+
+  private async loadExpandedMilestoneHistory(): Promise<void> {
+    const file = this.targetFile;
+    if (!file || this.expandingMilestoneHistory) return;
+    const expansionGeneration = ++this.milestoneExpansionGeneration;
+    const refreshGeneration = this.refreshGeneration;
+    this.expandingMilestoneHistory = true;
+    this.render();
+    try {
+      const history = await this.plugin.gitClient.loadFileHistory(file, 1000);
+      if (
+        expansionGeneration !== this.milestoneExpansionGeneration
+        || refreshGeneration !== this.refreshGeneration
+        || file !== this.targetFile
+      ) return;
+      await this.plugin.hydrateVersionMilestones(history.context, history.commits);
+      if (
+        expansionGeneration !== this.milestoneExpansionGeneration
+        || refreshGeneration !== this.refreshGeneration
+        || file !== this.targetFile
+      ) return;
+      this.expandedMilestoneHistoryAttempted = true;
+      this.history = history;
+      this.pathTransitions = buildPathTransitions(history.commits);
+      this.effectiveGroups = groupEffectiveVersions(
+        history.commits,
+        this.plugin.getFileReviewState(history.context),
+        this.commitContents
+      );
+      this.timeMachinePosition = Math.min(
+        this.timeMachinePosition,
+        this.timelineCommits().length
+      );
+      this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
+      void this.refineEffectiveGroups(refreshGeneration);
+      this.scheduleContentSearch();
+    } catch (error) {
+      new Notice(`读取更多历史失败：${errorMessage(error)}`, 8000);
+    } finally {
+      if (expansionGeneration === this.milestoneExpansionGeneration) {
+        this.expandingMilestoneHistory = false;
+        if (file === this.targetFile) this.render();
+      }
+    }
+  }
+
   private renderEffectiveGroupRow(
     container: HTMLElement,
     group: EffectiveVersionGroup,
@@ -741,8 +1054,25 @@ export class GitNoteHistoryView extends ItemView {
   ): void {
     const representative = group.representative;
     const row = container.createDiv({
-      cls: `git-note-history-commit git-note-history-effective-group ${index === this.selectedIndex ? "is-keyboard-selected" : ""}`,
-      attr: { tabindex: "0", role: "button", "aria-label": `${group.summary}, ${formatCommitTime(representative.authoredAt, true)}` }
+      cls: `git-note-history-commit git-note-history-effective-group ${index === this.selectedIndex ? "is-keyboard-selected" : ""}`
+    });
+    const trigger = row.createEl("button", {
+      cls: "git-note-history-row-trigger",
+      attr: {
+        type: "button",
+        "aria-label": `${group.summary}, ${formatCommitTime(representative.authoredAt, true)}`
+      }
+    });
+    trigger.createSpan({
+      cls: "git-note-history-row-trigger-label",
+      text: group.summary
+    });
+    trigger.addEventListener("focus", () => {
+      this.selectedIndex = index;
+      row.parentElement
+        ?.querySelectorAll(".git-note-history-commit.is-keyboard-selected")
+        .forEach((candidate) => candidate.classList.remove("is-keyboard-selected"));
+      row.classList.add("is-keyboard-selected");
     });
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const size = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(group.addedLines + group.deletedLines + 1) / 4)));
@@ -768,6 +1098,19 @@ export class GitNoteHistoryView extends ItemView {
       this.pathTransitions.some((transition) => transition.commit.hash === commit.hash)
     );
     if (pathChange) this.renderPathTransition(content, pathChange);
+    const milestones = group.commits.flatMap((commit) =>
+      milestonesForCommit(state, commit.hash, { includeReviewCheckpoint: false })
+    );
+    if (milestones.length > 0) {
+      const badges = content.createDiv({ cls: "git-note-history-badges" });
+      this.renderMilestoneBadges(
+        badges,
+        milestones,
+        (milestone) => group.commits.find(
+          (commit) => commit.hash === milestone.commitHash
+        )
+      );
+    }
 
     const actions = row.createDiv({ cls: "git-note-history-row-actions" });
     if (group.commits.length > 1) {
@@ -788,6 +1131,10 @@ export class GitNoteHistoryView extends ItemView {
     more.addEventListener("click", (event) => {
       event.stopPropagation();
       this.openEffectiveGroupMenu(event, group, index, visibleGroups, state);
+    });
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.openEffectiveGroupComparison(group, index, visibleGroups);
     });
     row.addEventListener("click", () => void this.openEffectiveGroupComparison(group, index, visibleGroups));
 
@@ -859,6 +1206,7 @@ export class GitNoteHistoryView extends ItemView {
         .setIcon("inbox")
         .onClick(() => void this.openCommitPair(checkpoint, group.representative)));
     }
+    this.addPreviousMilestoneCompareItems(menu, group.representative, state);
     menu.addSeparator();
     menu.addItem((item) => item
       .setTitle(state.baselineHash === group.representative.hash ? "取消比较基线" : "设为比较基线")
@@ -870,6 +1218,7 @@ export class GitNoteHistoryView extends ItemView {
         );
         this.render();
       }));
+    this.addMilestoneMenuItems(menu, group.representative, state);
     menu.showAtMouseEvent(event);
   }
 
@@ -1056,12 +1405,18 @@ export class GitNoteHistoryView extends ItemView {
 
     const actions = card.createDiv({ cls: "git-note-history-working-actions" });
     const baseline = state.baselineHash
-      ? this.history.commits.find((commit) => commit.hash === state.baselineHash)
+      ? this.knownMilestoneCommits(state)
+          .find((commit) => commit.hash === state.baselineHash)
       : undefined;
     const defaultBase = baseline ?? this.history.commits[0];
     if (defaultBase) {
       const review = actions.createEl("button", { text: baseline ? "与基线比较" : "查看当前改动" });
       review.addEventListener("click", () => void this.openAgainstWorking(defaultBase));
+    }
+    const latestMilestone = previousNamedMilestone(this.history.commits, state);
+    if (latestMilestone && latestMilestone.commit.hash !== defaultBase?.hash) {
+      const compareMilestone = actions.createEl("button", { text: "与最近里程碑比较" });
+      compareMilestone.addEventListener("click", () => void this.openAgainstWorking(latestMilestone.commit));
     }
     const workspace = actions.createEl("button", { text: "未提交笔记" });
     workspace.addEventListener("click", () => void this.plugin.activateWorkspaceReview());
@@ -1074,12 +1429,20 @@ export class GitNoteHistoryView extends ItemView {
       const baselineRow = card.createDiv({ cls: "git-note-history-baseline-row" });
       const star = baselineRow.createSpan();
       setIcon(star, "star");
-      baselineRow.createSpan({ text: `比较基线：${baseline.shortHash} ${state.bookmarks[baseline.hash]?.label ?? baseline.subject}` });
+      const baselineMilestone = milestonesForCommit(
+        state,
+        baseline.hash,
+        { includeReviewCheckpoint: false }
+      )[0];
+      baselineRow.createSpan({
+        text: `比较基线：${baseline.shortHash} ${baselineMilestone?.label ?? baseline.subject}`
+      });
     }
   }
 
   private renderTimeMachine(container: HTMLElement): void {
     if (!this.history || !this.targetFile || this.timelineCommits().length === 0) return;
+    const state = this.plugin.getFileReviewState(this.history.context);
     const chronological = [...this.timelineCommits()].reverse();
     const max = chronological.length;
     this.timeMachinePosition = Math.max(0, Math.min(max, this.timeMachinePosition));
@@ -1126,7 +1489,9 @@ export class GitNoteHistoryView extends ItemView {
     const labelRow = card.createDiv({ cls: "git-note-history-time-machine-label" });
     const versionLabel = labelRow.createSpan({
       cls: "git-note-history-time-machine-version",
-      text: selected ? `${selected.shortHash} · ${selected.subject || "无提交说明"}` : "当前工作区"
+      text: selected
+        ? `${selected.shortHash} · ${this.commitDisplayLabel(selected, state)}`
+        : "当前工作区"
     });
     const dateLabel = labelRow.createSpan({
       cls: "git-note-history-time-machine-date",
@@ -1148,7 +1513,12 @@ export class GitNoteHistoryView extends ItemView {
     });
     const marks = card.createEl("datalist", { attr: { id: listId } });
     chronological.forEach((commit, index) => {
-      if (index === 0 || ["R", "C"].includes(commit.changeType) || commit.addedLines + commit.deletedLines >= 20) {
+      if (
+        index === 0
+        || hasNamedMilestone(state, commit.hash)
+        || ["R", "C"].includes(commit.changeType)
+        || commit.addedLines + commit.deletedLines >= 20
+      ) {
         marks.createEl("option", { attr: { value: String(index), label: commit.shortHash } });
       }
     });
@@ -1158,7 +1528,9 @@ export class GitNoteHistoryView extends ItemView {
       const position = Number.parseInt(slider.value, 10);
       this.timeMachinePosition = Number.isFinite(position) ? position : max;
       const commit = chronological[this.timeMachinePosition];
-      versionLabel.setText(commit ? `${commit.shortHash} · ${commit.subject || "无提交说明"}` : "当前工作区");
+      versionLabel.setText(
+        commit ? `${commit.shortHash} · ${this.commitDisplayLabel(commit, state)}` : "当前工作区"
+      );
       dateLabel.setText(commit ? formatCommitTime(commit.authoredAt, true) : "现在");
     };
     slider.addEventListener("input", () => {
@@ -1178,6 +1550,14 @@ export class GitNoteHistoryView extends ItemView {
     open.createSpan({ text: "查看此刻" });
     open.addEventListener("click", () => void this.openTimeMachinePosition());
     footer.createSpan({ text: "现在" });
+  }
+
+  private commitDisplayLabel(commit: GitCommitVersion, state: FileReviewState): string {
+    return milestonesForCommit(
+      state,
+      commit.hash,
+      { includeReviewCheckpoint: false }
+    )[0]?.label ?? (commit.subject || "无提交说明");
   }
 
   private scheduleTimeMachinePreview(): void {
@@ -1259,8 +1639,25 @@ export class GitNoteHistoryView extends ItemView {
     state: FileReviewState
   ): void {
     const row = container.createDiv({
-      cls: `git-note-history-commit ${filteredIndex === this.selectedIndex ? "is-keyboard-selected" : ""}`,
-      attr: { tabindex: "0", role: "button", "aria-label": `${commit.subject}, ${formatCommitTime(commit.authoredAt, true)}` }
+      cls: `git-note-history-commit ${filteredIndex === this.selectedIndex ? "is-keyboard-selected" : ""}`
+    });
+    const trigger = row.createEl("button", {
+      cls: "git-note-history-row-trigger",
+      attr: {
+        type: "button",
+        "aria-label": `${commit.subject}, ${formatCommitTime(commit.authoredAt, true)}`
+      }
+    });
+    trigger.createSpan({
+      cls: "git-note-history-row-trigger-label",
+      text: commit.subject || "（无提交说明）"
+    });
+    trigger.addEventListener("focus", () => {
+      this.selectedIndex = filteredIndex;
+      row.parentElement
+        ?.querySelectorAll(".git-note-history-commit.is-keyboard-selected")
+        .forEach((candidate) => candidate.classList.remove("is-keyboard-selected"));
+      row.classList.add("is-keyboard-selected");
     });
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const dot = rail.createSpan({ cls: `git-note-history-dot change-${commit.changeType.toLowerCase()}` });
@@ -1284,8 +1681,11 @@ export class GitNoteHistoryView extends ItemView {
 
     const badges = content.createDiv({ cls: "git-note-history-badges" });
     if (state.baselineHash === commit.hash) this.addBadge(badges, "star", "比较基线", "is-baseline");
-    const bookmark = state.bookmarks[commit.hash];
-    if (bookmark) this.addBadge(badges, "bookmark", bookmark.label, "is-bookmark");
+    this.renderMilestoneBadges(
+      badges,
+      milestonesForCommit(state, commit.hash, { includeReviewCheckpoint: false }),
+      commit
+    );
     for (const [key, value] of Object.entries(commit.trailers)) {
       this.addBadge(badges, key === "agent" ? "bot" : "shield-check", value, `is-${key}`);
     }
@@ -1308,6 +1708,11 @@ export class GitNoteHistoryView extends ItemView {
       this.openCommitMenu(event, commit, state);
     });
 
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (event.metaKey || event.ctrlKey) this.toggleCompare(commit.hash);
+      else void this.openAgainstWorking(commit);
+    });
     row.addEventListener("click", (event) => {
       if (event.metaKey || event.ctrlKey) this.toggleCompare(commit.hash);
       else void this.openAgainstWorking(commit);
@@ -1363,6 +1768,157 @@ export class GitNoteHistoryView extends ItemView {
     badge.createSpan({ text });
   }
 
+  private renderMilestoneBadges(
+    container: HTMLElement,
+    milestones: VersionMilestone[],
+    commit?: GitCommitVersion | ((milestone: VersionMilestone) => GitCommitVersion | undefined)
+  ): void {
+    for (const milestone of milestones.slice(0, 2)) {
+      this.renderMilestoneBadge(
+        container,
+        milestone,
+        typeof commit === "function" ? commit(milestone) : commit
+      );
+    }
+    if (milestones.length > 2) {
+      container.createSpan({
+        cls: "git-note-history-badge git-note-history-milestone-overflow",
+        text: `+${milestones.length - 2}`,
+        attr: {
+          title: milestones.slice(2).map((milestone) => milestone.label).join("、")
+        }
+      });
+    }
+  }
+
+  private renderMilestoneBadge(
+    container: HTMLElement,
+    milestone: VersionMilestone,
+    commit?: GitCommitVersion
+  ): void {
+    const kind = milestone.kind;
+    const eventTime = formatCommitTime(milestone.occurredAt, true);
+    const tooltip = [
+      milestoneKindLabel(kind),
+      `事件时间 ${eventTime}`,
+      milestone.note ?? ""
+    ].filter(Boolean).join(" · ");
+    const badge = commit
+      ? container.createEl("button", {
+          cls: `git-note-history-badge git-note-history-milestone-badge is-${kind}`,
+          attr: {
+            type: "button",
+            title: tooltip,
+            "aria-label": `编辑里程碑「${milestone.label}」，事件时间 ${eventTime}`
+          }
+        })
+      : container.createSpan({
+          cls: `git-note-history-badge git-note-history-milestone-badge is-${kind}`,
+          attr: { title: tooltip }
+        });
+    setIcon(badge.createSpan(), milestoneKindIcon(kind));
+    badge.createSpan({ text: milestone.label });
+    if (commit) {
+      badge.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.openMilestoneEditor(commit, milestone);
+      });
+    }
+  }
+
+  private openMilestoneEditor(
+    commit: GitCommitVersion,
+    current?: VersionMilestone
+  ): void {
+    if (!this.history || !this.targetFile) return;
+    const file = this.targetFile;
+    new VersionMilestoneModal(
+      this.app,
+      current,
+      async (milestone) => {
+        const context = await this.plugin.gitClient.resolveFileContext(file);
+        await this.plugin.setVersionMilestone(
+          context,
+          commit,
+          current?.id ?? null,
+          milestone
+        );
+        this.plugin.refreshOpenViews();
+        if (
+          this.history?.context.repositoryRoot !== context.repositoryRoot
+          || this.history.context.repositoryRelativePath !== context.repositoryRelativePath
+        ) return;
+        this.effectiveGroups = groupEffectiveVersions(
+          this.history.commits,
+          this.plugin.getFileReviewState(context),
+          this.commitContents
+        );
+        this.timeMachinePosition = Math.min(
+          this.timeMachinePosition,
+          this.timelineCommits().length
+        );
+        new Notice(milestone ? `已命名为「${milestone.label}」。` : "已移除里程碑。");
+        this.render();
+      }
+    ).open();
+  }
+
+  private addMilestoneMenuItems(
+    menu: Menu,
+    commit: GitCommitVersion,
+    state: FileReviewState
+  ): void {
+    const milestones = milestonesForCommit(state, commit.hash, {
+      includeReviewCheckpoint: false
+    });
+    for (const milestone of milestones) {
+      menu.addItem((item) => item
+        .setTitle(`编辑里程碑「${milestone.label}」`)
+        .setIcon(milestoneKindIcon(milestone.kind))
+        .onClick(() => this.openMilestoneEditor(commit, milestone)));
+    }
+    menu.addItem((item) => item
+      .setTitle(milestones.length > 0 ? "再添加一个里程碑" : "命名这个版本")
+      .setIcon("bookmark-plus")
+      .onClick(() => this.openMilestoneEditor(commit)));
+  }
+
+  private addPreviousMilestoneCompareItems(
+    menu: Menu,
+    commit: GitCommitVersion,
+    state: FileReviewState
+  ): void {
+    const kinds = [
+      "sent",
+      "submitted",
+      "confirmed",
+      "exported",
+      "important-draft",
+      "custom"
+    ] as const;
+    const titles = {
+      sent: "与上次发送版比较",
+      submitted: "与上次材料提交版比较",
+      confirmed: "与上次确认版比较",
+      exported: "与上次导出版比较",
+      "important-draft": "与上个重要草稿比较",
+      custom: ""
+    };
+    for (const kind of kinds) {
+      const previous = previousNamedMilestone(
+        this.history!.commits,
+        state,
+        commit.hash,
+        kind
+      );
+      if (!previous) continue;
+      menu.addItem((item) => item
+        .setTitle(titles[kind] || `与上个里程碑「${previous.milestone.label}」比较`)
+        .setIcon(milestoneKindIcon(kind))
+        .onClick(() => void this.openCommitPair(previous.commit, commit)));
+    }
+  }
+
   private renderContentSearchMatch(container: HTMLElement, commit: GitCommitVersion): void {
     const contentMatch = this.contentSearchMatches.get(commit.hash);
     if (!contentMatch || !this.query) return;
@@ -1389,16 +1945,12 @@ export class GitNoteHistoryView extends ItemView {
     if (!this.history) return;
     const menu = new Menu();
     menu.addItem((item) => item.setTitle("与当前版本比较").setIcon("git-compare-arrows").onClick(() => void this.openAgainstWorking(commit)));
+    this.addPreviousMilestoneCompareItems(menu, commit, state);
     menu.addItem((item) => item.setTitle(state.baselineHash === commit.hash ? "取消比较基线" : "设为比较基线").setIcon("star").onClick(async () => {
       await this.plugin.setBaseline(this.history!.context, state.baselineHash === commit.hash ? null : commit);
       this.render();
     }));
-    menu.addItem((item) => item.setTitle("设置版本标签").setIcon("bookmark").onClick(() => {
-      new VersionLabelModal(this.app, state.bookmarks[commit.hash]?.label ?? "", async (label) => {
-        await this.plugin.setVersionLabel(this.history!.context, commit.hash, label);
-        this.render();
-      }).open();
-    }));
+    this.addMilestoneMenuItems(menu, commit, state);
     menu.addItem((item) => item.setTitle("复制完整 commit hash").setIcon("copy").onClick(async () => {
       await navigator.clipboard.writeText(commit.hash);
       new Notice("已复制 commit hash。");
@@ -1444,17 +1996,35 @@ export class GitNoteHistoryView extends ItemView {
   }
 
   private handleKeyboard(event: KeyboardEvent): void {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || !this.history) return;
+    const rowTrigger = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>(".git-note-history-row-trigger")
+      : null;
+    if (rowTrigger && isHistoryRowActivationKey(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      rowTrigger.click();
+      return;
+    }
+    if (
+      event.defaultPrevented
+      || event.metaKey
+      || event.ctrlKey
+      || isInteractiveKeyboardTarget(event.target)
+      || !this.history
+    ) return;
     const state = this.plugin.getFileReviewState(this.history.context);
     const filtered = this.showRawCommits
       ? this.history.commits.filter((commit) =>
           matchesSearch(commit, this.query, state, this.contentSearchMatches)
+          && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash))
         )
       : this.effectiveGroups
           .filter((group) => group.commits.some((commit) =>
             matchesSearch(commit, this.query, state, this.contentSearchMatches)
+            && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash))
           ))
           .map((group) => group.representative);
+    const activationMode = historyActivationMode(event.key);
     if (event.key.toLowerCase() === "j" || event.key === "ArrowDown") {
       event.preventDefault();
       this.selectedIndex = Math.min(filtered.length - 1, this.selectedIndex + 1);
@@ -1466,11 +2036,11 @@ export class GitNoteHistoryView extends ItemView {
       event.preventDefault();
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
       this.render();
-    } else if (["Enter", "d", "p"].includes(event.key.toLowerCase())) {
+    } else if (activationMode) {
       const commit = filtered[this.selectedIndex];
       if (!commit) return;
       event.preventDefault();
-      void this.openAgainstWorking(commit, event.key.toLowerCase() === "p" ? "preview" : undefined);
+      void this.openAgainstWorking(commit, activationMode === "preview" ? "preview" : undefined);
     }
   }
 

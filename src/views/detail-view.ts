@@ -6,15 +6,20 @@ import {
   Menu,
   Notice,
   TFile,
+  TFolder,
   WorkspaceLeaf,
   normalizePath,
   setIcon
 } from "obsidian";
+import type { FuzzyMatch } from "obsidian";
 import type GitNoteHistoryPlugin from "../main";
 import type {
   DetailMode,
   DetailRequest,
+  FileReviewState,
   GitCommitVersion,
+  GitRepositoryContext,
+  VersionMilestone,
   VersionReference
 } from "../models";
 import {
@@ -50,13 +55,17 @@ import {
   type VersionDirection
 } from "../history/version-navigation";
 import { compactHistoryPath } from "../history/path-history";
+import {
+  historyWithStoredMilestones,
+  milestoneKindIcon,
+  milestoneKindLabel,
+  milestonesForCommit,
+  previousNamedMilestone
+} from "../history/milestones";
+import { VersionMilestoneModal } from "../ui/milestone-modal";
+import { remapVaultPath } from "../persistence/plugin-data";
 
 export const GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE = "git-note-history-detail-view";
-
-function versionLabel(reference: VersionReference): string {
-  if (reference.kind === "working") return reference.label;
-  return `${reference.commit.shortHash} · ${reference.commit.subject || "无提交说明"}`;
-}
 
 function versionTitle(reference: VersionReference): string {
   return reference.kind === "working"
@@ -83,6 +92,11 @@ function versionMeta(reference: VersionReference): string {
   return `${reference.commit.shortHash} · ${timestamp}${stats ? ` · ${stats}` : ""}`;
 }
 
+function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
+  return target instanceof Element
+    && target.closest("input, textarea, button, a, select, [contenteditable='true']") !== null;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -93,6 +107,8 @@ class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
     private readonly choices: VersionReference[],
     sideLabel: string,
     private readonly selectedKey: string,
+    private readonly displayTitle: (reference: VersionReference) => string,
+    private readonly searchText: (reference: VersionReference) => string,
     private readonly onChoose: (reference: VersionReference) => void
   ) {
     super(app);
@@ -105,7 +121,24 @@ class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
 
   getItemText(reference: VersionReference): string {
     const selected = versionReferenceKey(reference) === this.selectedKey ? "✓ " : "";
-    return `${selected}${versionTitle(reference)} · ${versionMeta(reference)}`;
+    return `${selected}${this.searchText(reference)} · ${versionMeta(reference)}`;
+  }
+
+  renderSuggestion(match: FuzzyMatch<VersionReference>, element: HTMLElement): void {
+    const reference = match.item;
+    const searchDetail = this.searchText(reference);
+    const row = element.createDiv({
+      cls: "git-note-history-version-picker-item"
+    });
+    row.createDiv({
+      cls: "git-note-history-version-picker-title",
+      text: `${versionReferenceKey(reference) === this.selectedKey ? "✓ " : ""}${this.displayTitle(reference)}`
+    });
+    row.createDiv({
+      cls: "git-note-history-version-picker-meta",
+      text: `${versionMeta(reference)} · ${searchDetail}`,
+      attr: { title: searchDetail }
+    });
   }
 
   onChooseItem(reference: VersionReference): void {
@@ -137,6 +170,7 @@ export class GitHistoryDetailView extends ItemView {
   private narrowLayout = false;
   private resizeObserver: ResizeObserver | null = null;
   private historyCommits: GitCommitVersion[] = [];
+  private historyContext: GitRepositoryContext | null = null;
   private historyLoadedFor = "";
   private activeVersionSide: "base" | "target" = "target";
 
@@ -160,6 +194,7 @@ export class GitHistoryDetailView extends ItemView {
     if (this.request?.filePath !== request.filePath) {
       this.historyCommits = [];
       this.historyLoadedFor = "";
+      this.historyContext = null;
     }
     this.request = request;
     this.changesOnly = true;
@@ -176,6 +211,32 @@ export class GitHistoryDetailView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.tabIndex = 0;
     this.registerDomEvent(this.contentEl, "keydown", (event) => this.handleKeyboard(event));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      const request = this.request;
+      if (!request) return;
+      let nextPath = request.filePath;
+      if (file instanceof TFile) {
+        if (this.file !== file && request.filePath !== oldPath) return;
+        this.file = file;
+        nextPath = file.path;
+      } else if (file instanceof TFolder) {
+        nextPath = remapVaultPath(
+          request.filePath,
+          oldPath,
+          file.path,
+          true
+        );
+        if (nextPath === request.filePath) return;
+        const nextFile = this.app.vault.getFileByPath(nextPath);
+        if (nextFile instanceof TFile) this.file = nextFile;
+      } else {
+        return;
+      }
+      this.request = { ...request, filePath: nextPath };
+      this.historyLoadedFor = "";
+      this.historyContext = null;
+      void this.loadComparison();
+    }));
     this.resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? this.contentEl.clientWidth;
       const narrow = width > 0 && width < 760;
@@ -220,7 +281,13 @@ export class GitHistoryDetailView extends ItemView {
       ]);
       if (generation !== this.generation) return;
       if (history) {
+        await this.plugin.hydrateVersionMilestones(
+          history.context,
+          history.commits
+        );
+        if (generation !== this.generation) return;
         this.historyCommits = history.commits;
+        this.historyContext = history.context;
         this.historyLoadedFor = file.path;
       }
       this.baseContent = baseContent;
@@ -412,19 +479,29 @@ export class GitHistoryDetailView extends ItemView {
     if (!this.request) return;
     const reference = this.request[side];
     const other = this.request[side === "base" ? "target" : "base"];
-    const older = adjacentDistinctVersionReference(
-      this.historyCommits,
+    const isStoredSnapshot = reference.kind === "commit"
+      && !this.historyCommits.some((commit) => commit.hash === reference.commit.hash);
+    const older = isStoredSnapshot
+      ? null
+      : adjacentDistinctVersionReference(
+          this.historyCommits,
+          reference,
+          -1,
+          other
+        );
+    const newer = isStoredSnapshot
+      ? null
+      : adjacentDistinctVersionReference(
+          this.historyCommits,
+          reference,
+          1,
+          other
+        );
+    const position = versionReferencePosition(
+      this.knownHistoryCommits(),
       reference,
-      -1,
-      other
+      [other]
     );
-    const newer = adjacentDistinctVersionReference(
-      this.historyCommits,
-      reference,
-      1,
-      other
-    );
-    const position = versionReferencePosition(this.historyCommits, reference, [other]);
     const card = container.createDiv({
       cls: `git-note-history-version-card is-${side} ${this.activeVersionSide === side ? "is-active" : ""}`
     });
@@ -437,7 +514,31 @@ export class GitHistoryDetailView extends ItemView {
       text: `${position.current} / ${position.total}`
     });
     const cardActions = cardTop.createDiv({ cls: "git-note-history-version-card-actions" });
+    const state = this.historyContext
+      ? this.plugin.getFileReviewState(this.historyContext)
+      : null;
+    const milestones = reference.kind === "commit" && state
+      ? milestonesForCommit(state, reference.commit.hash, {
+          includeReviewCheckpoint: false
+        })
+      : [];
     if (reference.kind !== "working") {
+      const manageMilestones = cardActions.createEl("button", {
+        cls: "clickable-icon",
+        attr: {
+          "aria-label": milestones.length > 0
+            ? `管理${label}的 ${milestones.length} 个里程碑`
+            : `为${label}添加里程碑`,
+          title: this.historyContext
+            ? ""
+            : "未能读取这篇笔记的 Git 上下文，暂时无法保存里程碑"
+        }
+      });
+      manageMilestones.disabled = !this.historyContext;
+      setIcon(manageMilestones, milestones.length > 0 ? "bookmark-check" : "bookmark-plus");
+      manageMilestones.addEventListener("click", (event) => {
+        this.openMilestoneMenu(event, reference.commit, milestones);
+      });
       const working = cardActions.createEl("button", {
         cls: "clickable-icon",
         attr: { "aria-label": `${label}改为当前工作区` }
@@ -460,7 +561,14 @@ export class GitHistoryDetailView extends ItemView {
     const navigator = card.createDiv({ cls: "git-note-history-version-navigator" });
     const earlier = navigator.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": `${label}切换到更早版本` }
+      attr: {
+        "aria-label": `${label}切换到更早版本`,
+        title: isStoredSnapshot
+          ? "这个里程碑位于当前历史列表外，无法验证相邻版本"
+          : older === null
+            ? "没有可用的更早版本"
+            : ""
+      }
     });
     earlier.disabled = this.loading || older === null;
     setIcon(earlier, "chevron-left");
@@ -469,13 +577,16 @@ export class GitHistoryDetailView extends ItemView {
     const chooser = navigator.createEl("button", {
       cls: "git-note-history-version-chooser",
       attr: {
-        "aria-label": `选择${label}，当前为 ${versionTitle(reference)}`,
+        "aria-label": `选择${label}，当前为 ${this.versionDisplayTitle(reference)}`,
         "aria-pressed": String(this.activeVersionSide === side)
       }
     });
     chooser.disabled = this.loading;
     const chooserText = chooser.createSpan({ cls: "git-note-history-version-chooser-text" });
-    chooserText.createSpan({ cls: "git-note-history-version-title", text: versionTitle(reference) });
+    chooserText.createSpan({
+      cls: "git-note-history-version-title",
+      text: milestones[0]?.label ?? versionTitle(reference)
+    });
     chooserText.createSpan({ cls: "git-note-history-version-meta", text: versionMeta(reference) });
     const chooserIcon = chooser.createSpan({ cls: "git-note-history-version-chooser-icon" });
     setIcon(chooserIcon, "chevrons-up-down");
@@ -483,11 +594,55 @@ export class GitHistoryDetailView extends ItemView {
 
     const newerButton = navigator.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": `${label}切换到更新版本` }
+      attr: {
+        "aria-label": `${label}切换到更新版本`,
+        title: isStoredSnapshot
+          ? "这个里程碑位于当前历史列表外，无法验证相邻版本"
+          : newer === null
+            ? "没有可用的更新版本"
+            : ""
+      }
     });
     newerButton.disabled = this.loading || newer === null;
     setIcon(newerButton, "chevron-right");
     newerButton.addEventListener("click", () => this.moveVersion(side, 1));
+
+    if (milestones.length > 0) {
+      const milestoneRow = card.createDiv({ cls: "git-note-history-version-milestones" });
+      for (const milestone of milestones.slice(0, 2)) {
+        const eventTime = new Date(milestone.occurredAt);
+        const formattedEventTime = Number.isNaN(eventTime.getTime())
+          ? milestone.occurredAt
+          : new Intl.DateTimeFormat("zh-CN", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false
+            }).format(eventTime);
+        const badge = milestoneRow.createSpan({
+          cls: `git-note-history-version-milestone is-${milestone.kind}`,
+          attr: {
+            title: [
+              `事件时间 ${formattedEventTime}`,
+              milestone.note ?? ""
+            ].filter(Boolean).join(" · ")
+          }
+        });
+        setIcon(badge.createSpan(), milestoneKindIcon(milestone.kind));
+        badge.createSpan({ text: milestone.label });
+      }
+      if (milestones.length > 2) {
+        milestoneRow.createSpan({
+          cls: "git-note-history-version-milestone-overflow",
+          text: `+${milestones.length - 2}`,
+          attr: {
+            title: milestones.slice(2).map((milestone) => milestone.label).join("、")
+          }
+        });
+      }
+    }
 
     const pairedReference = this.request[side === "base" ? "target" : "base"];
     if (
@@ -511,7 +666,7 @@ export class GitHistoryDetailView extends ItemView {
     const occupiedKey = versionReferenceKey(
       this.request[side === "base" ? "target" : "base"]
     );
-    const choices = buildVersionSequence(this.historyCommits, [
+    const choices = buildVersionSequence(this.knownHistoryCommits(), [
       this.request.base,
       this.request.target
     ]).filter((reference) => versionReferenceKey(reference) !== occupiedKey).reverse();
@@ -520,9 +675,104 @@ export class GitHistoryDetailView extends ItemView {
       choices,
       side === "base" ? "左侧版本" : "右侧版本",
       versionReferenceKey(current),
+      (reference) => this.versionDisplayTitle(reference),
+      (reference) => this.versionSearchText(reference),
       (reference) => this.setVersionReference(side, reference)
     ).open();
     this.render();
+  }
+
+  private versionDisplayTitle(reference: VersionReference): string {
+    if (reference.kind === "working" || !this.historyContext) {
+      return versionTitle(reference);
+    }
+    const state = this.plugin.getFileReviewState(this.historyContext);
+    return milestonesForCommit(
+      state,
+      reference.commit.hash,
+      { includeReviewCheckpoint: false }
+    )[0]?.label ?? versionTitle(reference);
+  }
+
+  private versionSearchText(reference: VersionReference): string {
+    if (reference.kind === "working" || !this.historyContext) {
+      return versionTitle(reference);
+    }
+    const state = this.plugin.getFileReviewState(this.historyContext);
+    const milestones = milestonesForCommit(
+      state,
+      reference.commit.hash,
+      { includeReviewCheckpoint: false }
+    );
+    return [
+      versionTitle(reference),
+      reference.commit.shortHash,
+      reference.commit.historicalPath,
+      this.historyCommits.some((commit) => commit.hash === reference.commit.hash)
+        ? ""
+        : "历史列表外",
+      ...milestones.flatMap((milestone) => [
+        milestone.label,
+        milestoneKindLabel(milestone.kind),
+        milestone.note ?? ""
+      ])
+    ].filter(Boolean).join(" · ");
+  }
+
+  private versionReceiptLabel(reference: VersionReference): string {
+    return reference.kind === "working"
+      ? reference.label
+      : `${reference.commit.shortHash} · ${this.versionDisplayTitle(reference)}`;
+  }
+
+  private knownHistoryCommits(): GitCommitVersion[] {
+    if (!this.historyContext) return this.historyCommits;
+    return historyWithStoredMilestones(
+      this.historyCommits,
+      this.plugin.getFileReviewState(this.historyContext)
+    );
+  }
+
+  private openMilestoneMenu(
+    event: MouseEvent,
+    commit: GitCommitVersion,
+    milestones: VersionMilestone[]
+  ): void {
+    const menu = new Menu();
+    for (const milestone of milestones) {
+      menu.addItem((item) => item
+        .setTitle(`编辑里程碑「${milestone.label}」`)
+        .setIcon(milestoneKindIcon(milestone.kind))
+        .onClick(() => this.openMilestoneEditor(commit, milestone)));
+    }
+    menu.addItem((item) => item
+      .setTitle(milestones.length > 0 ? "再添加一个里程碑" : "命名这个版本")
+      .setIcon("bookmark-plus")
+      .onClick(() => this.openMilestoneEditor(commit)));
+    menu.showAtMouseEvent(event);
+  }
+
+  private openMilestoneEditor(
+    commit: GitCommitVersion,
+    current?: VersionMilestone
+  ): void {
+    if (!this.historyContext || !this.file) return;
+    const file = this.file;
+    new VersionMilestoneModal(this.app, current, async (milestone) => {
+      const context = await this.plugin.gitClient.resolveFileContext(file);
+      await this.plugin.setVersionMilestone(
+        context,
+        commit,
+        current?.id ?? null,
+        milestone
+      );
+      this.plugin.refreshOpenViews();
+      new Notice(milestone ? `已命名为「${milestone.label}」。` : "已移除里程碑。");
+      if (this.file !== file) return;
+      this.historyContext = context;
+      this.historyLoadedFor = file.path;
+      this.render();
+    }).open();
   }
 
   private setVersionReference(side: "base" | "target", reference: VersionReference): void {
@@ -540,10 +790,15 @@ export class GitHistoryDetailView extends ItemView {
 
   private moveVersion(side: "base" | "target", direction: VersionDirection): void {
     if (!this.request) return;
+    const current = this.request[side];
+    if (
+      current.kind === "commit"
+      && !this.historyCommits.some((commit) => commit.hash === current.commit.hash)
+    ) return;
     const other = this.request[side === "base" ? "target" : "base"];
     const reference = adjacentDistinctVersionReference(
       this.historyCommits,
-      this.request[side],
+      current,
       direction,
       other
     );
@@ -564,9 +819,14 @@ export class GitHistoryDetailView extends ItemView {
 
   private previousToTarget(): VersionReference | null {
     if (!this.request) return null;
+    const target = this.request.target;
+    if (
+      target.kind === "commit"
+      && !this.historyCommits.some((commit) => commit.hash === target.commit.hash)
+    ) return null;
     return adjacentVersionReference(
       this.historyCommits,
-      this.request.target,
+      target,
       -1,
       [this.request.base]
     );
@@ -746,6 +1006,46 @@ export class GitHistoryDetailView extends ItemView {
           this.render();
         }));
       menu.addSeparator();
+    }
+    if (this.request && this.historyContext) {
+      const state = this.plugin.getFileReviewState(this.historyContext);
+      const targetHash = this.request.target.kind === "commit"
+        ? this.request.target.commit.hash
+        : undefined;
+      const titles = {
+        sent: "与上次发送版比较",
+        submitted: "与上次材料提交版比较",
+        confirmed: "与上次确认版比较",
+        exported: "与上次导出版比较",
+        "important-draft": "与上个重要草稿比较",
+        custom: ""
+      } as const;
+      for (const kind of [
+        "sent",
+        "submitted",
+        "confirmed",
+        "exported",
+        "important-draft",
+        "custom"
+      ] as const) {
+        const previous = previousNamedMilestone(
+          this.historyCommits,
+          state,
+          targetHash,
+          kind
+        );
+        if (
+          !previous
+          || versionReferenceKey(this.request.base) === previous.commit.hash
+        ) continue;
+        menu.addItem((item) => item
+          .setTitle(titles[kind] || `与上个里程碑「${previous.milestone.label}」比较`)
+          .setIcon(milestoneKindIcon(kind))
+          .onClick(() => this.setVersionReference("base", {
+            kind: "commit",
+            commit: previous.commit
+          })));
+      }
     }
     if (this.request?.base.kind === "commit") {
       menu.addItem((item) => item
@@ -1005,7 +1305,10 @@ export class GitHistoryDetailView extends ItemView {
     const header = pane.createDiv({ cls: "git-note-history-preview-header" });
     header.createSpan({ cls: "git-note-history-preview-role", text: role });
     const identity = header.createDiv({ cls: "git-note-history-preview-identity" });
-    identity.createSpan({ cls: "git-note-history-preview-title", text: versionTitle(reference) });
+    identity.createSpan({
+      cls: "git-note-history-preview-title",
+      text: this.versionDisplayTitle(reference)
+    });
     identity.createSpan({ cls: "git-note-history-preview-meta", text: versionMeta(reference) });
     const body = pane.createDiv({
       cls: "git-note-history-preview-document markdown-preview-view"
@@ -1182,7 +1485,7 @@ export class GitHistoryDetailView extends ItemView {
       currentContent,
       targetContent: this.baseContent,
       label: `恢复整篇到 ${commit.shortHash}`,
-      sourceLabel: versionLabel(this.request.base),
+      sourceLabel: this.versionReceiptLabel(this.request.base),
       scope: "file",
       confirmText: "确认恢复整篇",
       onSaveCopy: () => this.saveBaseAsCopy(),
@@ -1190,7 +1493,7 @@ export class GitHistoryDetailView extends ItemView {
         try {
           if (await this.plugin.restoreService.restore(file, this.baseContent, {
             label: `恢复整篇到 ${commit.shortHash}`,
-            sourceLabel: versionLabel(this.request!.base),
+            sourceLabel: this.versionReceiptLabel(this.request!.base),
             scope: "file",
             expectedCurrentContent: currentContent
           })) {
@@ -1230,14 +1533,14 @@ export class GitHistoryDetailView extends ItemView {
       currentContent,
       targetContent,
       label: `恢复变更块 ${hunkNumber}`,
-      sourceLabel: versionLabel(this.request.base),
+      sourceLabel: this.versionReceiptLabel(this.request.base),
       scope: "hunk",
       confirmText: "确认恢复此块",
       onConfirm: async () => {
         try {
           if (await this.plugin.restoreService.restore(file, targetContent, {
             label: `恢复变更块 ${hunkNumber}`,
-            sourceLabel: versionLabel(this.request!.base),
+            sourceLabel: this.versionReceiptLabel(this.request!.base),
             scope: "hunk",
             expectedCurrentContent: currentContent
           })) {
@@ -1259,7 +1562,12 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private handleKeyboard(event: KeyboardEvent): void {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (
+      event.defaultPrevented
+      || event.metaKey
+      || event.ctrlKey
+      || isInteractiveKeyboardTarget(event.target)
+    ) return;
     if (event.key === "Escape" && this.focusMode) {
       event.preventDefault();
       this.setFocusMode(false);

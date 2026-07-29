@@ -28,6 +28,8 @@ import {
   adjacentDistinctVersionReference,
   adjacentVersionReference,
   buildVersionSequence,
+  historyActivationMode,
+  isHistoryRowActivationKey,
   versionReferencePosition
 } from "../src/history/version-navigation";
 import { buildChangeMap } from "../src/diff/change-map";
@@ -60,13 +62,33 @@ import {
   compactHistoryPath
 } from "../src/history/path-history";
 import {
+  hasNamedMilestone,
+  milestoneSearchText,
+  milestonesForCommit,
+  namedMilestoneCommits,
+  previousNamedMilestone,
+  setReviewCheckpointMilestone,
+  storedMilestoneCommitSnapshots
+} from "../src/history/milestones";
+import {
+  CURRENT_DATA_SCHEMA_VERSION,
+  mergeFileReviewStates,
+  migratePluginData,
+  migrateReviewStatePath,
+  remapVaultPath,
+  reviewStateKey
+} from "../src/persistence/plugin-data";
+import {
   parseCommittedNameStatus,
   parseLatestCommitByPath
 } from "../src/git/parse-log";
 import type {
   GitCommitVersion,
   GitCommittedChange,
+  FileReviewState,
+  GitRepositoryContext,
   ReviewInboxItem,
+  VersionMilestone,
   GitWorkspaceChange
 } from "../src/models";
 
@@ -407,6 +429,373 @@ describe("note path history", () => {
   });
 });
 
+describe("named version milestones", () => {
+  const milestone = (
+    id: string,
+    hash: string,
+    kind: VersionMilestone["kind"],
+    label: string,
+    occurredAt = "2026-07-29T03:00:00.000Z"
+  ): VersionMilestone => ({
+    id,
+    kind,
+    label,
+    commitHash: hash,
+    historicalPath: "Note.md",
+    commitAuthoredAt: "2026-07-28T03:00:00.000Z",
+    commitSubject: "Update note",
+    occurredAt,
+    createdAt: "2026-07-29T03:05:00.000Z",
+    source: "local-user"
+  });
+
+  it("migrates legacy labels and review checkpoints into an idempotent schema", () => {
+    const legacy = {
+      settings: { maxCommits: 100 },
+      fileReviewStates: {
+        "repo\u001fNote.md": {
+          bookmarks: {
+            aaaaaaaa: {
+              label: "已发送",
+              createdAt: "2026-07-28T10:00:00+09:00"
+            }
+          },
+          reviewCheckpoint: {
+            commitHash: "bbbbbbbb",
+            historicalPath: "Note.md",
+            reviewedAt: "2026-07-29T10:00:00+09:00",
+            workingFingerprint: "fingerprint"
+          }
+        }
+      }
+    };
+
+    const first = migratePluginData(legacy);
+    const second = migratePluginData(first);
+    const state = second.fileReviewStates!["repo\u001fNote.md"]!;
+    const milestones = Object.values(state.milestones ?? {});
+
+    expect(second.schemaVersion).toBe(CURRENT_DATA_SCHEMA_VERSION);
+    expect(second).toEqual(first);
+    expect(milestones).toHaveLength(2);
+    expect(milestones).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "legacy-bookmark:aaaaaaaa",
+        kind: "sent",
+        commitHash: "aaaaaaaa",
+        source: "legacy-bookmark"
+      }),
+      expect.objectContaining({
+        kind: "review-checkpoint",
+        commitHash: "bbbbbbbb",
+        source: "review-checkpoint"
+      })
+    ]));
+    expect(state.reviewCheckpointId).toBe(state.reviewCheckpoint?.milestoneId);
+  });
+
+  it("leaves data from a future schema untouched", () => {
+    const future = {
+      schemaVersion: CURRENT_DATA_SCHEMA_VERSION + 1,
+      futureOnly: { retained: true },
+      fileReviewStates: {
+        note: {
+          futureStateField: "keep-me"
+        }
+      }
+    };
+
+    expect(migratePluginData(future)).toEqual(future);
+  });
+
+  it("does not re-import schema v2 bookmark projections as duplicate milestones", () => {
+    const state: FileReviewState = {
+      bookmarks: {
+        aaaaaaaa: {
+          label: "申请 PDF",
+          createdAt: "2026-07-29T03:05:00.000Z",
+          kind: "exported",
+          historicalPath: "Note.md"
+        }
+      },
+      milestones: {
+        sent: milestone("sent", "aaaaaaaa", "sent", "发给导师"),
+        exported: milestone("exported", "aaaaaaaa", "exported", "申请 PDF")
+      }
+    };
+    const once = migratePluginData({
+      schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
+      fileReviewStates: { note: state }
+    });
+    const twice = migratePluginData(once);
+
+    expect(Object.keys(twice.fileReviewStates!.note!.milestones ?? {}).sort())
+      .toEqual(["exported", "sent"]);
+    expect(twice).toEqual(once);
+  });
+
+  it("allows multiple real-world events on the same commit", () => {
+    const state: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        sent: milestone("sent", "aaaaaaaa", "sent", "发给导师"),
+        exported: milestone("exported", "aaaaaaaa", "exported", "申请 PDF")
+      }
+    };
+
+    expect(milestonesForCommit(state, "aaaaaaaa", {
+      includeReviewCheckpoint: false
+    }).map((item) => item.kind)).toEqual(["exported", "sent"]);
+    expect(hasNamedMilestone(state, "aaaaaaaa")).toBe(true);
+    expect(milestoneSearchText(state, "aaaaaaaa")).toContain("申请 PDF");
+  });
+
+  it("finds the previous event by Git order instead of backfilled event time", () => {
+    const newest = commit("cccccccc", "2026-07-29T12:00:00+09:00", "Newest");
+    const middle = commit("bbbbbbbb", "2026-07-28T12:00:00+09:00", "Middle");
+    const oldest = commit("aaaaaaaa", "2026-07-27T12:00:00+09:00", "Oldest");
+    const state: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        middle: milestone("middle", middle.hash, "sent", "后补记发送", "2026-07-01T00:00:00.000Z"),
+        oldest: milestone("oldest", oldest.hash, "sent", "更早版本", "2026-07-30T00:00:00.000Z")
+      }
+    };
+
+    expect(previousNamedMilestone(
+      [newest, middle, oldest],
+      state,
+      newest.hash,
+      "sent"
+    )?.commit.hash).toBe(middle.hash);
+    expect(previousNamedMilestone(
+      [newest, middle, oldest],
+      state,
+      "not-in-loaded-history",
+      "sent"
+    )).toBeUndefined();
+    expect(namedMilestoneCommits([newest, middle, oldest], state).map((item) => item.hash))
+      .toEqual([middle.hash, oldest.hash]);
+  });
+
+  it("keeps stored milestone snapshots reachable beyond the history read limit", () => {
+    const visible = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Visible");
+    const old = milestone("old", "aaaaaaaa", "sent", "发给导师");
+    old.commitAuthoredAt = "2026-06-01T03:00:00.000Z";
+    old.commitSubject = "Older delivery";
+    const state: FileReviewState = {
+      bookmarks: {},
+      milestones: { old }
+    };
+
+    expect(storedMilestoneCommitSnapshots(state, [visible])).toEqual([
+      expect.objectContaining({
+        hash: "aaaaaaaa",
+        subject: "Older delivery",
+        historicalPath: "Note.md"
+      })
+    ]);
+    expect(storedMilestoneCommitSnapshots(state, [
+      visible,
+      commit("aaaaaaaa", "2026-06-01T12:00:00+09:00", "Already loaded")
+    ])).toEqual([]);
+  });
+
+  it("keeps identical milestone versions as separate effective groups", () => {
+    const newest = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Auto backup");
+    const older = commit("aaaaaaaa", "2026-07-29T11:50:00+09:00", "Auto backup");
+    const state: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        sent: milestone("sent", older.hash, "sent", "已发送")
+      }
+    };
+    const contents = new Map([
+      [newest.hash, "# Same\n"],
+      [older.hash, "# Same\n"]
+    ]);
+
+    expect(groupEffectiveVersions([newest, older], state, contents)).toHaveLength(2);
+  });
+
+  it("moves the system review milestone instead of accumulating checkpoints", () => {
+    const state: FileReviewState = { bookmarks: {}, milestones: {} };
+    const first = commit("aaaaaaaa", "2026-07-28T12:00:00+09:00", "First");
+    const second = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Second");
+
+    setReviewCheckpointMilestone(state, first, "2026-07-28T13:00:00.000Z");
+    setReviewCheckpointMilestone(state, second, "2026-07-29T13:00:00.000Z", "working");
+
+    const checkpoints = Object.values(state.milestones ?? {}).filter(
+      (item) => item.kind === "review-checkpoint"
+    );
+    expect(checkpoints).toHaveLength(1);
+    expect(checkpoints[0]).toMatchObject({
+      commitHash: second.hash,
+      workingFingerprint: "working"
+    });
+    expect(state.reviewCheckpoint?.milestoneId).toBe(state.reviewCheckpointId);
+  });
+
+  it("merges rename states without overwriting milestones at the destination path", () => {
+    const source: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        sent: milestone("sent", "aaaaaaaa", "sent", "已发送")
+      }
+    };
+    const target: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        confirmed: milestone("confirmed", "bbbbbbbb", "confirmed", "已确认")
+      }
+    };
+
+    const merged = mergeFileReviewStates(source, target);
+    expect(Object.keys(merged.milestones ?? {})).toEqual(["sent", "confirmed"]);
+    expect(Object.keys(merged.bookmarks)).toEqual(["aaaaaaaa", "bbbbbbbb"]);
+  });
+
+  it("preserves both rename milestones when their stored IDs collide", () => {
+    const source: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        shared: milestone("shared", "aaaaaaaa", "sent", "已发送")
+      }
+    };
+    const target: FileReviewState = {
+      bookmarks: {},
+      milestones: {
+        shared: milestone("shared", "bbbbbbbb", "confirmed", "已确认")
+      }
+    };
+
+    const merged = mergeFileReviewStates(source, target);
+    expect(Object.values(merged.milestones ?? {}).map((item) => item.label).sort())
+      .toEqual(["已发送", "已确认"]);
+    expect(Object.keys(merged.milestones ?? {})).toEqual([
+      "shared",
+      "shared:merged:2"
+    ]);
+  });
+
+  it("remaps only an exact path or a true folder descendant", () => {
+    expect(remapVaultPath("Notes/Old.md", "Notes/Old.md", "Notes/New.md"))
+      .toBe("Notes/New.md");
+    expect(remapVaultPath("Notes/Old/note.md", "Notes/Old", "Archive/New", true))
+      .toBe("Archive/New/note.md");
+    expect(remapVaultPath("Notes/Older/note.md", "Notes/Old", "Archive/New", true))
+      .toBe("Notes/Older/note.md");
+    expect(remapVaultPath("Notes/Old/note.md", "Notes/Old", "Archive/New"))
+      .toBe("Notes/Old/note.md");
+  });
+
+  it("moves every folder review state and merges destination collisions", () => {
+    const context = (
+      repositoryRelativePath: string
+    ): GitRepositoryContext => ({
+      vaultRoot: "/vault",
+      repositoryRoot: "/repo",
+      repositoryRelativePath
+    });
+    const sourceKey = reviewStateKey(context("Notes/Old/note.md"));
+    const destinationKey = reviewStateKey(context("Archive/New/note.md"));
+    const unrelatedKey = reviewStateKey(context("Notes/Older/note.md"));
+    const states: Record<string, FileReviewState> = {
+      [sourceKey]: {
+        bookmarks: {},
+        milestones: {
+          shared: milestone("shared", "aaaaaaaa", "sent", "已发送")
+        }
+      },
+      [destinationKey]: {
+        bookmarks: {},
+        milestones: {
+          shared: milestone("shared", "bbbbbbbb", "confirmed", "已确认")
+        }
+      },
+      [unrelatedKey]: {
+        bookmarks: {},
+        milestones: {
+          stable: milestone("stable", "cccccccc", "custom", "不应移动")
+        }
+      }
+    };
+
+    expect(migrateReviewStatePath(
+      states,
+      context("Notes/Old"),
+      context("Archive/New"),
+      true
+    )).toBe(true);
+    expect(states[sourceKey]).toBeUndefined();
+    expect(Object.values(states[destinationKey]?.milestones ?? {})
+      .map((item) => item.label)
+      .sort()).toEqual(["已发送", "已确认"]);
+    expect(states[unrelatedKey]?.milestones?.stable?.label).toBe("不应移动");
+  });
+
+  it("keeps only the truly latest review checkpoint when rename states merge", () => {
+    const source: FileReviewState = { bookmarks: {}, milestones: {} };
+    const target: FileReviewState = { bookmarks: {}, milestones: {} };
+    const sourceCommit = commit("aaaaaaaa", "2026-07-29T11:00:00+09:00", "Source");
+    const targetCommit = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Target");
+    setReviewCheckpointMilestone(
+      source,
+      sourceCommit,
+      "2026-07-29T14:00:00+09:00"
+    );
+    source.reviewCheckpointId = "source-checkpoint";
+    source.reviewCheckpoint!.milestoneId = "source-checkpoint";
+    source.milestones!["source-checkpoint"] = {
+      ...source.milestones!["review-checkpoint"]!,
+      id: "source-checkpoint"
+    };
+    delete source.milestones!["review-checkpoint"];
+    setReviewCheckpointMilestone(
+      target,
+      targetCommit,
+      "2026-07-29T05:30:00.000Z"
+    );
+    target.reviewCheckpointId = "target-checkpoint";
+    target.reviewCheckpoint!.milestoneId = "target-checkpoint";
+    target.milestones!["target-checkpoint"] = {
+      ...target.milestones!["review-checkpoint"]!,
+      id: "target-checkpoint"
+    };
+    delete target.milestones!["review-checkpoint"];
+
+    const merged = mergeFileReviewStates(source, target);
+    const checkpoints = Object.values(merged.milestones ?? {}).filter(
+      (item) => item.kind === "review-checkpoint"
+    );
+
+    expect(checkpoints).toHaveLength(1);
+    expect(merged.reviewCheckpoint).toMatchObject({
+      commitHash: targetCommit.hash,
+      milestoneId: "target-checkpoint",
+      reviewedAt: "2026-07-29T05:30:00.000Z"
+    });
+    expect(checkpoints[0]?.commitHash).toBe(merged.reviewCheckpoint?.commitHash);
+  });
+
+  it("drops malformed milestone data without preventing plugin startup", () => {
+    const data = migratePluginData({
+      fileReviewStates: {
+        broken: {
+          bookmarks: { bad: 42 },
+          milestones: {
+            missingHash: { id: "missingHash", label: "Broken" },
+            valid: milestone("valid", "aaaaaaaa", "custom", "Kept")
+          }
+        }
+      }
+    });
+
+    expect(Object.keys(data.fileReviewStates!.broken!.milestones ?? {})).toEqual(["valid"]);
+  });
+});
+
 describe("partial hunk restore", () => {
   it("restores one separated hunk without reverting another", () => {
     const padding = Array.from({ length: 12 }, (_, index) => `same ${index}`).join("\n");
@@ -663,6 +1052,20 @@ describe("version navigation", () => {
   const older = commit("11111111", "2026-07-20T10:00:00+09:00", "Older");
   const newer = commit("22222222", "2026-07-21T10:00:00+09:00", "Newer");
   const working = { kind: "working", label: "当前工作区" } as const;
+
+  it("normalizes keyboard activation keys regardless of casing", () => {
+    expect(historyActivationMode("Enter")).toBe("detail");
+    expect(historyActivationMode("enter")).toBe("detail");
+    expect(historyActivationMode("Return")).toBe("detail");
+    expect(historyActivationMode("d")).toBe("detail");
+    expect(historyActivationMode("P")).toBe("preview");
+    expect(historyActivationMode("Tab")).toBeNull();
+    expect(isHistoryRowActivationKey("Enter")).toBe(true);
+    expect(isHistoryRowActivationKey("Return")).toBe(true);
+    expect(isHistoryRowActivationKey(" ")).toBe(true);
+    expect(isHistoryRowActivationKey("space")).toBe(true);
+    expect(isHistoryRowActivationKey("d")).toBe(false);
+  });
 
   it("orders commits from oldest to working tree", () => {
     const sequence = buildVersionSequence([newer, older]);

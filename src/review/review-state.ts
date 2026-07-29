@@ -2,6 +2,7 @@ import type {
   FileReviewState,
   ReviewCommitSummary
 } from "../models";
+import { setReviewCheckpointMilestone } from "../history/milestones";
 
 export function markReviewInboxItemState(
   state: FileReviewState,
@@ -11,12 +12,17 @@ export function markReviewInboxItemState(
   reviewedAt = new Date().toISOString()
 ): void {
   if (latestCommit) {
-    state.reviewCheckpoint = {
-      commitHash: latestCommit.hash,
-      historicalPath,
+    setReviewCheckpointMilestone(
+      state,
+      {
+        hash: latestCommit.hash,
+        historicalPath,
+        authoredAt: latestCommit.authoredAt,
+        subject: latestCommit.subject
+      },
       reviewedAt,
-      ...(workingFingerprint ? { workingFingerprint } : {})
-    };
+      workingFingerprint
+    );
   }
   if (workingFingerprint) {
     state.reviewedWorkingFingerprint = workingFingerprint;

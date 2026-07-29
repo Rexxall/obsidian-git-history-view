@@ -1,6 +1,23 @@
 import type { GitCommitVersion, VersionReference } from "../models";
 
 export type VersionDirection = -1 | 1;
+export type HistoryActivationMode = "detail" | "preview";
+
+export function historyActivationMode(key: string): HistoryActivationMode | null {
+  const normalizedKey = key.toLowerCase();
+  if (normalizedKey === "p") return "preview";
+  if (normalizedKey === "enter" || normalizedKey === "return" || normalizedKey === "d") return "detail";
+  return null;
+}
+
+export function isHistoryRowActivationKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase();
+  return normalizedKey === "enter"
+    || normalizedKey === "return"
+    || normalizedKey === "space"
+    || normalizedKey === "spacebar"
+    || key === " ";
+}
 
 export function versionReferenceKey(reference: VersionReference): string {
   return reference.kind === "working" ? "working" : reference.commit.hash;

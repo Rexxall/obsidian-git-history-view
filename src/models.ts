@@ -104,14 +104,48 @@ export interface GitConflictVersions {
   working: string;
 }
 
+export type VersionMilestoneKind =
+  | "sent"
+  | "submitted"
+  | "confirmed"
+  | "exported"
+  | "important-draft"
+  | "custom"
+  | "review-checkpoint";
+
+/** @deprecated Kept as a v1 data projection for downgrade compatibility. */
 export interface VersionBookmark {
   label: string;
   createdAt: string;
+  kind?: VersionMilestoneKind;
+  note?: string;
+  historicalPath?: string;
+}
+
+export interface VersionMilestoneInput {
+  label: string;
+  kind: VersionMilestoneKind;
+  note?: string;
+  occurredAt: string;
+}
+
+export interface VersionMilestone extends VersionMilestoneInput {
+  id: string;
+  commitHash: string;
+  historicalPath: string;
+  commitAuthoredAt: string;
+  commitSubject: string;
+  createdAt: string;
+  source: "local-user" | "legacy-bookmark" | "review-checkpoint";
+  workingFingerprint?: string;
 }
 
 export interface FileReviewState {
   baselineHash?: string;
   baselinePath?: string;
+  milestones?: Record<string, VersionMilestone>;
+  reviewCheckpointId?: string;
+  /** @deprecated v1 projection; milestones is the source of truth in schema v2. */
   bookmarks: Record<string, VersionBookmark>;
   detailMode?: DetailMode;
   reviewCheckpoint?: ReviewCheckpoint;
@@ -125,6 +159,7 @@ export interface ReviewCheckpoint {
   historicalPath: string;
   reviewedAt: string;
   workingFingerprint?: string;
+  milestoneId?: string;
 }
 
 export interface EffectiveVersionGroup {
@@ -186,6 +221,7 @@ export interface RestoreOptions {
 }
 
 export interface PersistedPluginData {
+  schemaVersion?: number;
   settings?: Partial<GitNoteHistorySettings>;
   /** @deprecated Migrated to undoStack on load. */
   undoSnapshot?: UndoSnapshot | null;

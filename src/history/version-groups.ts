@@ -3,6 +3,9 @@ import type {
   FileReviewState,
   GitCommitVersion
 } from "../models";
+import {
+  milestonesForCommit
+} from "./milestones";
 
 const SESSION_WINDOW_MS = 45 * 60 * 1000;
 const MAX_GROUP_CHANGE_SIZE = 160;
@@ -32,8 +35,8 @@ function changeSize(commit: GitCommitVersion): number {
 
 function isSpecial(commit: GitCommitVersion, state: FileReviewState): boolean {
   return ["R", "C"].includes(commit.changeType)
-    || Boolean(state.bookmarks[commit.hash])
-    || state.reviewCheckpoint?.commitHash === commit.hash;
+    || state.reviewCheckpoint?.commitHash === commit.hash
+    || milestonesForCommit(state, commit.hash).length > 0;
 }
 
 function canJoin(
@@ -43,6 +46,9 @@ function canJoin(
   state: FileReviewState,
   contents?: ReadonlyMap<string, string>
 ): { join: boolean; duplicate: boolean; whitespaceOnly: boolean } {
+  if (isSpecial(newer, state) || isSpecial(older, state)) {
+    return { join: false, duplicate: false, whitespaceOnly: false };
+  }
   const newerContent = contents?.get(newer.hash);
   const olderContent = contents?.get(older.hash);
   const exactDuplicate = newerContent !== undefined && olderContent !== undefined && newerContent === olderContent;
@@ -52,9 +58,6 @@ function canJoin(
     && normalizedContent(newerContent) === normalizedContent(olderContent);
   if (exactDuplicate || whitespaceOnly) {
     return { join: true, duplicate: exactDuplicate, whitespaceOnly };
-  }
-  if (isSpecial(newer, state) || isSpecial(older, state)) {
-    return { join: false, duplicate: false, whitespaceOnly: false };
   }
   const closeInTime = Math.abs(authoredTime(newer) - authoredTime(older)) <= SESSION_WINDOW_MS;
   const sameAuthor = newer.authorEmail === older.authorEmail || newer.authorName === older.authorName;
@@ -75,8 +78,10 @@ function summarize(
   whitespaceOnlyCount: number
 ): string {
   const representative = commits[0]!;
-  const bookmark = state.bookmarks[representative.hash]?.label;
-  if (bookmark) return bookmark;
+  const milestone = milestonesForCommit(state, representative.hash, {
+    includeReviewCheckpoint: false
+  })[0];
+  if (milestone) return milestone.label;
   if (representative.changeType === "R") return "重命名笔记";
   if (representative.changeType === "C") return "从其他笔记复制";
   if (commits.length > 1) {
