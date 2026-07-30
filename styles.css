@@ -9514,6 +9514,239 @@ button.git-note-history-graph-machine-relation:hover {
   background: var(--background-secondary);
 }
 
+.git-history-health-view {
+  --health-line: color-mix(in srgb, var(--background-modifier-border) 75%, transparent);
+  padding: 24px clamp(18px, 4vw, 48px) 48px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-green) 4%, transparent), transparent 220px),
+    var(--background-primary);
+}
+
+.git-history-health-header,
+.git-history-health-summary,
+.git-history-health-diagnostics,
+.git-history-health-signal {
+  width: min(980px, 100%);
+  margin-inline: auto;
+}
+
+.git-history-health-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.git-history-health-header h2 {
+  margin: 3px 0 0;
+  letter-spacing: -0.025em;
+}
+
+.git-history-health-eyebrow,
+.git-history-health-path,
+.git-history-health-rule-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-history-health-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.git-history-health-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--health-line);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.git-history-health-metric strong {
+  color: var(--text-normal);
+  font-size: 1.6em;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-history-health-metric span {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-history-health-diagnostics,
+.git-history-health-signal {
+  margin-bottom: 28px;
+}
+
+.git-history-health-diagnostics h3,
+.git-history-health-section-header h3 {
+  margin: 0;
+  font-size: var(--font-ui-large);
+}
+
+.git-history-health-diagnostic {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--health-line);
+  border-left: 3px solid var(--text-faint);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background-secondary) 74%, transparent);
+}
+
+.git-history-health-diagnostic.is-warning {
+  border-left-color: var(--color-orange);
+}
+
+.git-history-health-diagnostic.is-error {
+  border-left-color: var(--color-red);
+}
+
+.git-history-health-diagnostic.is-ok {
+  border-left-color: var(--color-green);
+}
+
+.git-history-health-diagnostic.is-info {
+  border-left-color: var(--color-blue);
+}
+
+.git-history-health-diagnostic strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.git-history-health-suggestion {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-history-health-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.git-history-health-profiles,
+.git-history-health-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.git-history-health-profiles button[aria-pressed="true"],
+.git-history-health-filters button[aria-pressed="true"] {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.git-history-health-rule-note {
+  margin: 8px 0 12px;
+}
+
+.git-history-health-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.git-history-health-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 13px;
+  color: var(--text-normal);
+  text-align: left;
+  border: 1px solid var(--health-line);
+  border-radius: 9px;
+  background: var(--background-secondary);
+}
+
+.git-history-health-row:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.git-history-health-kind {
+  min-width: 72px;
+  padding: 3px 7px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+  border-radius: 999px;
+  background: var(--background-modifier-hover);
+}
+
+.git-history-health-row[data-kind="content"] .git-history-health-kind {
+  color: var(--color-green);
+}
+
+.git-history-health-row[data-kind="unknown"] .git-history-health-kind {
+  color: var(--color-orange);
+}
+
+.git-history-health-row-copy {
+  min-width: 0;
+}
+
+.git-history-health-row-copy strong,
+.git-history-health-row-reason {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-history-health-row-reason {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-history-health-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 120px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .git-history-health-view {
+    padding: 16px 12px 36px;
+  }
+
+  .git-history-health-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .git-history-health-section-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .git-history-health-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .git-history-health-kind {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
 @media (max-width: 700px) {
   .git-review-annotations-view {
     padding: 16px 12px;

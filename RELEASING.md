@@ -100,9 +100,20 @@ The install archive must contain exactly:
 
 ## v0.7.4 local acceptance
 
-- [x] `npm run release:check` passes with 221 tests across 23 files, the production build, and package verification.
+- [x] The production build, annotation-focused tests, real Git-notes integration test, and package verification pass.
+- [ ] At the exact v0.7.4 commit, the complete Vitest run did not finish: the main-plugin isolation test lacked mocks for the newly imported annotation UI. v0.7.5 adds those mocks and its complete 233-test release check covers the combined v0.7.4 and v0.7.5 source.
 - [x] `dist/git-note-history-0.7.4.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `48362ac87391c992d9c21e860506ec177c34b2388a235c6b251497f40d82b326`.
 - [x] both test vaults installs match the tracked build. Their pre-load `data.json` hashes match the 0.7.3 installation backups exactly.
 - [x] Real temporary Git tests confirm missing-note handling, dedicated-ref writes, preservation of unrelated note text, managed-marker replacement, annotation decoding, and unchanged HEAD / status.
 - [ ] Obsidian 1.12.7 checks in both test vaults: commands and menus, current-version and block annotation, historical-version annotation, status editing and deletion, Markdown package copy, Git notes warning, narrow layout, and light/dark rendering.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.7.5 local acceptance
+
+- [x] `npm run release:check` passes with 233 tests across 25 files, the production build, and package verification. This run includes the v0.7.4 annotation suites and the corrected main-plugin isolation test.
+- [x] `dist/git-note-history-0.7.5.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `0091f6f94e5ccc7c56d41e2f16af623314a0d2036bbfd9f0e09e84d377ef5054`.
+- [x] both test vaults installs match the tracked build. Their current `data.json` hashes match the v0.7.4 installation backups exactly.
+- [x] Pure tests cover timestamp and generated fields, property ordering, line endings, strict whitespace, YAML comments, substantive changes, ignore-revs, missing content, truncated history, and separate repository-health diagnostics.
+- [x] A real repository with a bare upstream confirms ahead / behind and `.git-blame-ignore-revs` detection while HEAD and status remain unchanged.
+- [ ] Obsidian 1.12.7 checks in both test vaults: command, file-menu and history shortcuts; diagnostics; balanced / strict / raw profiles; raw revision comparison; settings persistence; narrow layout; and light/dark rendering.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.

@@ -1,9 +1,9 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "minAppVersion": "1.8.0",
-  "description": "Review note history, block provenance, annotations, knowledge-graph changes, and recovery impact across Git and local sources.",
+  "description": "Review note history, signal quality, repository health, provenance, annotations, and recovery impact.",
   "author": "Rexxall",
   "isDesktopOnly": true
 }

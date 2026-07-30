@@ -150,6 +150,11 @@ import {
   GIT_REVIEW_ANNOTATIONS_VIEW_TYPE,
   GitReviewAnnotationsView
 } from "./views/review-annotations-view";
+import {
+  GIT_HISTORY_HEALTH_VIEW_TYPE,
+  GitHistoryHealthView
+} from "./views/history-health-view";
+import type { GitHistoryHealthSnapshot } from "./health/types";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -204,6 +209,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingProvenanceLensLeaf: Promise<WorkspaceLeaf> | null = null;
   private reviewAnnotationsOpenGeneration = 0;
   private pendingReviewAnnotationsLeaf: Promise<WorkspaceLeaf> | null = null;
+  private historyHealthOpenGeneration = 0;
+  private pendingHistoryHealthLeaf: Promise<WorkspaceLeaf> | null = null;
   private readonly pendingHistoricalSandboxCreates = new Map<
     string,
     Promise<HistoricalSandboxRecord>
@@ -278,6 +285,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerView(
       GIT_REVIEW_ANNOTATIONS_VIEW_TYPE,
       (leaf) => new GitReviewAnnotationsView(leaf, this)
+    );
+    this.registerView(
+      GIT_HISTORY_HEALTH_VIEW_TYPE,
+      (leaf) => new GitHistoryHealthView(leaf, this)
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -521,6 +532,17 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-current-note-history-health",
+      name: "打开当前笔记的历史健康中心",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) void this.openHistoryHealth(file);
+        return available;
+      }
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -582,6 +604,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
             .setTitle("打开版本批注")
             .setIcon("message-square-text")
             .onClick(() => void this.openReviewAnnotations(file))
+        );
+        menu.addItem((item) =>
+          item
+            .setTitle("检查历史健康")
+            .setIcon("activity")
+            .onClick(() => void this.openHistoryHealth(file))
         );
       })
     );
@@ -748,6 +776,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingProvenanceLensLeaf = null;
     this.reviewAnnotationsOpenGeneration += 1;
     this.pendingReviewAnnotationsLeaf = null;
+    this.historyHealthOpenGeneration += 1;
+    this.pendingHistoryHealthLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
@@ -760,6 +790,80 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_REVIEW_ANNOTATIONS_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_HISTORY_HEALTH_VIEW_TYPE);
+  }
+
+  async openHistoryHealth(file: TFile): Promise<void> {
+    if (this.isUnloading || file.extension !== "md") return;
+    const generation = ++this.historyHealthOpenGeneration;
+    const pending = this.pendingHistoryHealthLeaf;
+    const leafPromise = pending ?? (async () => {
+      const existing = this.app.workspace
+        .getLeavesOfType(GIT_HISTORY_HEALTH_VIEW_TYPE)
+        .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+      if (existing) return existing;
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_HISTORY_HEALTH_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    if (!pending) this.pendingHistoryHealthLeaf = leafPromise;
+    let leaf: WorkspaceLeaf;
+    try {
+      leaf = await leafPromise;
+    } finally {
+      if (this.pendingHistoryHealthLeaf === leafPromise) {
+        this.pendingHistoryHealthLeaf = null;
+      }
+    }
+    if (this.isUnloading) {
+      leaf.detach();
+      return;
+    }
+    if (generation !== this.historyHealthOpenGeneration) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (generation !== this.historyHealthOpenGeneration || this.isUnloading) return;
+    if (leaf.view instanceof GitHistoryHealthView) await leaf.view.setFile(file);
+  }
+
+  async openHealthSignalComparison(
+    file: TFile,
+    snapshot: GitHistoryHealthSnapshot,
+    index: number
+  ): Promise<void> {
+    const target = snapshot.history.commits[index];
+    if (!target) throw new Error("找不到这条 Git revision。");
+    const older = snapshot.history.commits[index + 1];
+    if (older) {
+      await this.openDetail({
+        filePath: file.path,
+        repositoryRoot: snapshot.context.repositoryRoot,
+        base: { kind: "commit", commit: older },
+        target: { kind: "commit", commit: target },
+        initialMode: "side-by-side",
+        readOnly: true,
+        allowRecoveryCollection: false
+      });
+      return;
+    }
+    const targetContent = await this.gitClient.getFileContent(
+      snapshot.context.repositoryRoot,
+      target.hash,
+      target.historicalPath
+    );
+    await this.openDetail({
+      filePath: file.path,
+      repositoryRoot: snapshot.context.repositoryRoot,
+      base: { kind: "working", label: "文件尚不存在" },
+      target: { kind: "commit", commit: target },
+      initialMode: "side-by-side",
+      readOnly: true,
+      allowRecoveryCollection: false,
+      baseContentOverride: "",
+      targetContentOverride: targetContent
+    });
   }
 
   async openReviewAnnotations(file: TFile): Promise<void> {
@@ -1996,6 +2100,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(GIT_REVIEW_ANNOTATIONS_VIEW_TYPE)) {
       if (leaf.view instanceof GitReviewAnnotationsView) void leaf.view.refresh();
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(GIT_HISTORY_HEALTH_VIEW_TYPE)) {
+      if (leaf.view instanceof GitHistoryHealthView) void leaf.view.refresh();
+    }
+  }
+
+  getLocalSnapshotCount(filePath?: string): number {
+    return Object.values(this.localSnapshots)
+      .filter((snapshot) => !filePath || snapshot.filePath === filePath)
+      .length;
   }
 
   getFileReviewState(context: GitRepositoryContext): FileReviewState {
@@ -2748,7 +2861,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
       ...loadedSettings,
       reviewExcludedPaths: Array.isArray(loadedSettings.reviewExcludedPaths)
         ? loadedSettings.reviewExcludedPaths
-        : DEFAULT_SETTINGS.reviewExcludedPaths
+        : DEFAULT_SETTINGS.reviewExcludedPaths,
+      historyIgnoredProperties: Array.isArray(loadedSettings.historyIgnoredProperties)
+        ? loadedSettings.historyIgnoredProperties
+        : DEFAULT_SETTINGS.historyIgnoredProperties,
+      historyGeneratedProperties: Array.isArray(loadedSettings.historyGeneratedProperties)
+        ? loadedSettings.historyGeneratedProperties
+        : DEFAULT_SETTINGS.historyGeneratedProperties
     };
     const legacy = data?.undoSnapshot;
     this.undoStack = (data?.undoStack ?? (legacy ? [legacy] : [])).map((snapshot, index) => ({

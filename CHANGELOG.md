@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.5
+
+- Added a central read-only history health center with command-palette, file-menu, and history-sidebar entry points.
+- The signal view classifies exact duplicates, configured maintenance properties, generated properties, line-ending/trailing-space/property-order changes, strict whitespace-only formatting, `.git-blame-ignore-revs` references, substantive content, and unreadable versions with a reason for every decision.
+- Balanced, strict, and raw-Git profiles are stored per Vault. Ignored and generated Frontmatter field lists are editable in settings; comments beside ignored fields remain significant and cannot be silently filtered.
+- Raw Git revisions are always one click away. Filtering changes only the health view and never rewrites commits, blame, the normal timeline, or saved note content.
+- Repository health reports shallow and partial clones, missing reachable objects for the note, LFS pointer content, bounded history windows, upstream absence, ahead/behind state, uncommitted work, plugin-local snapshots, object format, and ignore-revs availability.
+- Every diagnostic distinguishes evidence from a scoped limitation and offers a read-only repair suggestion. The plugin does not fetch, pull LFS, stage, commit, push, change remotes, or configure upstreams.
+- Signal inspection reads at most 120 revisions with a 2 MB content limit per version and preserves unreadable or truncated boundaries as unknown instead of treating them as noise.
+
 ## 0.7.4
 
 - Added a central per-note annotation workbench and commands for annotating either the current working version or the Markdown block under the cursor/selection without changing the note or commit.

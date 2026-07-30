@@ -39,7 +39,11 @@ const settings: GitNoteHistorySettings = {
   ignoreWhitespace: false,
   showCommitStats: true,
   reviewExcludedPaths: [],
-  sandboxStorageRoot: ""
+  sandboxStorageRoot: "",
+  historySignalProfile: "balanced",
+  historyIgnoredProperties: [],
+  historyGeneratedProperties: [],
+  useBlameIgnoreRevs: true
 };
 
 const repositories: string[] = [];

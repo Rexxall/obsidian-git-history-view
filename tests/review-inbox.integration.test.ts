@@ -38,7 +38,11 @@ const settings: GitNoteHistorySettings = {
   ignoreWhitespace: false,
   showCommitStats: true,
   reviewExcludedPaths: ["backup", "backups", ".trash", ".obsidian", "node_modules"],
-  sandboxStorageRoot: ""
+  sandboxStorageRoot: "",
+  historySignalProfile: "balanced",
+  historyIgnoredProperties: [],
+  historyGeneratedProperties: [],
+  useBlameIgnoreRevs: true
 };
 
 describe("review inbox with a real temporary Git vault", () => {

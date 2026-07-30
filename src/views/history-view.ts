@@ -1372,6 +1372,15 @@ export class GitNoteHistoryView extends ItemView {
       annotations.addEventListener("click", () => {
         void this.plugin.openReviewAnnotations(this.targetFile!);
       });
+
+      const health = controls.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "打开历史健康中心" }
+      });
+      setIcon(health, "activity");
+      health.addEventListener("click", () => {
+        void this.plugin.openHistoryHealth(this.targetFile!);
+      });
     }
 
     const refresh = controls.createEl("button", {

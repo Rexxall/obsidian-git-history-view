@@ -2,6 +2,7 @@ import type { HistoricalSandboxRecord } from "./sandbox/types";
 import type { RecoveryBasketSource } from "./recovery-basket/types";
 import type { LocalHistorySnapshot } from "./history-sources/local-snapshots";
 import type { ReviewAnnotation } from "./annotations/types";
+import type { HistorySignalProfile } from "./health/types";
 
 export interface GitCommitVersion {
   hash: string;
@@ -192,6 +193,10 @@ export interface GitNoteHistorySettings {
   showCommitStats: boolean;
   reviewExcludedPaths: string[];
   sandboxStorageRoot: string;
+  historySignalProfile: HistorySignalProfile;
+  historyIgnoredProperties: string[];
+  historyGeneratedProperties: string[];
+  useBlameIgnoreRevs: boolean;
 }
 
 export interface UndoSnapshot {

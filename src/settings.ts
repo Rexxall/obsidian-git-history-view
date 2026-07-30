@@ -14,7 +14,18 @@ export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
   ignoreWhitespace: false,
   showCommitStats: true,
   reviewExcludedPaths: ["backup", "backups", ".trash", ".obsidian", "node_modules"],
-  sandboxStorageRoot: ""
+  sandboxStorageRoot: "",
+  historySignalProfile: "balanced",
+  historyIgnoredProperties: ["updated", "modified", "last-modified", "last_modified", "mtime"],
+  historyGeneratedProperties: [
+    "checksum",
+    "content-hash",
+    "content_hash",
+    "generated",
+    "generated-at",
+    "generated_at"
+  ],
+  useBlameIgnoreRevs: true
 };
 
 export class GitNoteHistorySettingTab extends PluginSettingTab {
@@ -81,6 +92,63 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
             await this.plugin.savePluginData();
           })
       );
+
+    new Setting(containerEl)
+      .setName("历史信噪比预设")
+      .setDesc("平衡模式只隐藏确定的元数据、生成字段和格式噪音；严格模式还折叠纯空白重排；原始模式不隐藏任何 Git revision。")
+      .addDropdown((dropdown) => dropdown
+        .addOption("balanced", "平衡")
+        .addOption("strict", "严格")
+        .addOption("raw", "原始 Git")
+        .setValue(this.plugin.settings.historySignalProfile)
+        .onChange(async (value) => {
+          this.plugin.settings.historySignalProfile = value as GitNoteHistorySettings["historySignalProfile"];
+          await this.plugin.savePluginData();
+          this.plugin.refreshOpenViews();
+        }));
+
+    new Setting(containerEl)
+      .setName("忽略的时间与维护属性")
+      .setDesc("每行一个 Frontmatter 顶层属性。只有正文及其他属性完全一致时，相关 revision 才会归为噪音。")
+      .addTextArea((text) => text
+        .setValue(this.plugin.settings.historyIgnoredProperties.join("\n"))
+        .setPlaceholder("updated\nmodified")
+        .onChange(async (value) => {
+          this.plugin.settings.historyIgnoredProperties = value
+            .split(/\r?\n/)
+            .map((item) => item.trim().toLocaleLowerCase())
+            .filter(Boolean)
+            .slice(0, 64);
+          await this.plugin.savePluginData();
+          this.plugin.refreshOpenViews();
+        }));
+
+    new Setting(containerEl)
+      .setName("自动生成属性")
+      .setDesc("每行一个生成字段。健康中心会与普通维护属性分开解释。")
+      .addTextArea((text) => text
+        .setValue(this.plugin.settings.historyGeneratedProperties.join("\n"))
+        .setPlaceholder("checksum\ngenerated-at")
+        .onChange(async (value) => {
+          this.plugin.settings.historyGeneratedProperties = value
+            .split(/\r?\n/)
+            .map((item) => item.trim().toLocaleLowerCase())
+            .filter(Boolean)
+            .slice(0, 64);
+          await this.plugin.savePluginData();
+          this.plugin.refreshOpenViews();
+        }));
+
+    new Setting(containerEl)
+      .setName("参考 .git-blame-ignore-revs")
+      .setDesc("把仓库明确列出的 revision 作为可解释噪音参考；原始 Git 模式仍会显示它们。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.useBlameIgnoreRevs)
+        .onChange(async (value) => {
+          this.plugin.settings.useBlameIgnoreRevs = value;
+          await this.plugin.savePluginData();
+          this.plugin.refreshOpenViews();
+        }));
 
     new Setting(containerEl)
       .setName("显示作者邮箱")

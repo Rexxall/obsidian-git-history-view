@@ -57,6 +57,7 @@ import {
   type BlameLine,
   type ProvenanceLensSnapshot
 } from "../provenance/provenance-lens";
+import type { GitHistoryHealthSnapshot } from "../health/types";
 
 const LOG_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%B%x1d";
 const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
@@ -74,6 +75,7 @@ const WORK_EVENT_ANALYSIS_LIMITS = {
 } as const;
 const PROVENANCE_LENS_MAX_BYTES = 2 * 1024 * 1024;
 const PROVENANCE_LENS_MAX_COMMITS = 240;
+const HISTORY_HEALTH_MAX_COMMITS = 120;
 
 function parseWorkEventCommitLog(raw: string): WorkEventCommit[] {
   const commits: WorkEventCommit[] = [];
@@ -267,6 +269,104 @@ export class GitClient {
       commits,
       hasMoreHistory: limitedHistory.hasMore,
       workingTreeStats
+    };
+  }
+
+  async loadHistoryHealth(file: TFile): Promise<GitHistoryHealthSnapshot> {
+    const history = await this.loadFileHistory(file, Math.min(
+      HISTORY_HEALTH_MAX_COMMITS,
+      this.getSettings().maxCommits
+    ));
+    const context = history.context;
+    const safe = async (args: string[]): Promise<string> => {
+      try {
+        return await this.runGit(context.repositoryRoot, args);
+      } catch {
+        return "";
+      }
+    };
+    const [
+      headOutput,
+      shallowOutput,
+      objectFormatOutput,
+      upstreamOutput,
+      promisorOutput,
+      partialCloneOutput,
+      ignoreFileOutput,
+      defaultIgnoreRevsOutput,
+      missingResult,
+      currentContent
+    ] = await Promise.all([
+      safe(["rev-parse", "HEAD"]),
+      safe(["rev-parse", "--is-shallow-repository"]),
+      safe(["rev-parse", "--show-object-format"]),
+      safe(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]),
+      safe(["config", "--get-regexp", "^remote\\..*\\.promisor$"]),
+      safe(["config", "--get", "extensions.partialClone"]),
+      safe(["config", "--get", "blame.ignoreRevsFile"]),
+      safe(["show", "HEAD:.git-blame-ignore-revs"]),
+      this.runGit(context.repositoryRoot, [
+        "rev-list",
+        "--objects",
+        "--missing=print",
+        "HEAD",
+        "--",
+        context.repositoryRelativePath
+      ]).then(
+        (output) => ({ output, error: "" }),
+        (error: unknown) => ({
+          output: "",
+          error: error instanceof Error ? error.message : String(error)
+        })
+      ),
+      file.stat.size <= 2 * 1024 * 1024
+        ? this.app.vault.read(file).catch(() => "")
+        : Promise.resolve("")
+    ]);
+    const upstream = upstreamOutput.trim();
+    let ahead = 0;
+    let behind = 0;
+    if (upstream) {
+      const counts = (await safe([
+        "rev-list",
+        "--left-right",
+        "--count",
+        `${upstream}...HEAD`
+      ])).trim().split(/\s+/);
+      behind = Number.parseInt(counts[0] ?? "0", 10) || 0;
+      ahead = Number.parseInt(counts[1] ?? "0", 10) || 0;
+    }
+    const ignoreFile = ignoreFileOutput.trim();
+    const ignoreText = !ignoreFile || ignoreFile === ".git-blame-ignore-revs"
+      ? defaultIgnoreRevsOutput
+      : "";
+    const ignoreRevs = ignoreText
+      .split(/\r?\n/)
+      .map((line) => line.replace(/#.*/, "").trim())
+      .filter((line) => /^[0-9a-f]{7,64}$/i.test(line))
+      .map((line) => line.toLowerCase())
+      .slice(0, 1000);
+    return {
+      context,
+      history,
+      headHash: headOutput.trim(),
+      ...(upstream ? { upstream } : {}),
+      ahead,
+      behind,
+      shallow: shallowOutput.trim() === "true",
+      partialClone: Boolean(promisorOutput.trim() || partialCloneOutput.trim()),
+      objectFormat: objectFormatOutput.trim() || "unknown",
+      missingObjects: missingResult.output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("?"))
+        .slice(0, 100),
+      ignoreRevs,
+      ignoreRevsConfigured: Boolean(ignoreFile || defaultIgnoreRevsOutput.trim()),
+      currentLfsPointer: currentContent.startsWith(
+        "version https://git-lfs.github.com/spec/v1"
+      ),
+      ...(missingResult.error ? { repositoryError: missingResult.error } : {})
     };
   }
 

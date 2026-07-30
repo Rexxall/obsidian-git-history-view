@@ -93,6 +93,18 @@ const provenanceLensMocks = vi.hoisted(() => {
   return { ProvenanceLensViewMock };
 });
 
+const historyHealthMocks = vi.hoisted(() => {
+  class HistoryHealthViewMock {
+    readonly files: unknown[] = [];
+
+    async setFile(file: unknown): Promise<void> {
+      this.files.push(file);
+    }
+  }
+
+  return { HistoryHealthViewMock };
+});
+
 vi.mock("obsidian", () => ({
   MarkdownView: class {},
   Notice: class {},
@@ -121,6 +133,17 @@ vi.mock("../src/views/knowledge-graph-view", () => ({
 vi.mock("../src/views/provenance-lens-view", () => ({
   GIT_PROVENANCE_LENS_VIEW_TYPE: "git-provenance-lens",
   GitProvenanceLensView: provenanceLensMocks.ProvenanceLensViewMock
+}));
+vi.mock("../src/ui/review-annotation-modal", () => ({
+  ReviewAnnotationModal: class {}
+}));
+vi.mock("../src/views/review-annotations-view", () => ({
+  GIT_REVIEW_ANNOTATIONS_VIEW_TYPE: "git-review-annotations",
+  GitReviewAnnotationsView: class {}
+}));
+vi.mock("../src/views/history-health-view", () => ({
+  GIT_HISTORY_HEALTH_VIEW_TYPE: "git-history-health",
+  GitHistoryHealthView: historyHealthMocks.HistoryHealthViewMock
 }));
 vi.mock("../src/views/detail-view", () => ({
   GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE: "git-note-history-detail",
@@ -210,7 +233,9 @@ function pluginWithWorkspace(workspace: object): GitNoteHistoryPlugin {
     recoveryBasketOpenGeneration: 0,
     pendingRecoveryBasketLeaf: null,
     provenanceLensOpenGeneration: 0,
-    pendingProvenanceLensLeaf: null
+    pendingProvenanceLensLeaf: null,
+    historyHealthOpenGeneration: 0,
+    pendingHistoryHealthLeaf: null
   });
   return plugin;
 }
@@ -432,6 +457,76 @@ describe("provenance-lens view opening", () => {
     };
     const plugin = pluginWithWorkspace(workspace);
     const pending = plugin.openProvenanceLens(
+      { path: "First.md", extension: "md" } as never
+    );
+
+    plugin.onunload();
+    viewReady.resolve();
+    await pending;
+
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+    expect(view.files).toEqual([]);
+    expect(leaf.detach).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("history-health view opening", () => {
+  it("reuses one pending leaf and applies only the latest note", async () => {
+    const rootSplit = {};
+    const view = new historyHealthMocks.HistoryHealthViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      detach: vi.fn(),
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {})
+    };
+    const plugin = pluginWithWorkspace(workspace);
+    const first = { path: "First.md", extension: "md" };
+    const latest = { path: "Latest.md", extension: "md" };
+
+    const firstOpen = plugin.openHistoryHealth(first as never);
+    const latestOpen = plugin.openHistoryHealth(latest as never);
+
+    expect(workspace.getLeaf).toHaveBeenCalledTimes(1);
+    viewReady.resolve();
+    await Promise.all([firstOpen, latestOpen]);
+
+    expect(workspace.revealLeaf).toHaveBeenCalledTimes(1);
+    expect(view.files).toEqual([latest]);
+  });
+
+  it("invalidates a pending open when the plugin unloads", async () => {
+    const rootSplit = {};
+    const view = new historyHealthMocks.HistoryHealthViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      detach: vi.fn(),
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {}),
+      detachLeavesOfType: vi.fn()
+    };
+    const plugin = pluginWithWorkspace(workspace);
+    const pending = plugin.openHistoryHealth(
       { path: "First.md", extension: "md" } as never
     );
 
