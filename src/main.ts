@@ -104,6 +104,18 @@ import {
   GIT_HISTORICAL_SANDBOX_VIEW_TYPE,
   GitHistoricalSandboxView
 } from "./views/historical-sandbox-view";
+import type { LocalHistorySnapshot } from "./history-sources/local-snapshots";
+import { LocalSnapshotStore } from "./history-sources/local-snapshots";
+import { HistorySourceBus, providerHandoffProbe } from "./history-sources/history-source-bus";
+import type {
+  HistorySourceAdapter,
+  HistorySourceSnapshot,
+  HistorySourceVersion
+} from "./history-sources/types";
+import {
+  GIT_HISTORY_SOURCE_VIEW_TYPE,
+  GitHistorySourceView
+} from "./views/history-source-view";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -134,6 +146,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private restoreReceipts: RestoreReceipt[] = [];
   private recoveryBaskets: Record<string, RecoveryBasketState> = {};
   private historicalSandboxes: Record<string, HistoricalSandboxRecord> = {};
+  private localSnapshots: Record<string, LocalHistorySnapshot> = {};
   private historicalSandboxManager!: HistoricalSandboxManager;
   private fileReviewStates: Record<string, FileReviewState> = {};
   private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
@@ -148,6 +161,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingRecoveryBasketLeaf: Promise<WorkspaceLeaf> | null = null;
   private historicalSandboxOpenGeneration = 0;
   private pendingHistoricalSandboxLeaf: Promise<WorkspaceLeaf> | null = null;
+  private historySourceOpenGeneration = 0;
+  private pendingHistorySourceLeaf: Promise<WorkspaceLeaf> | null = null;
   private readonly pendingHistoricalSandboxCreates = new Map<
     string,
     Promise<HistoricalSandboxRecord>
@@ -206,6 +221,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerView(
       GIT_HISTORICAL_SANDBOX_VIEW_TYPE,
       (leaf) => new GitHistoricalSandboxView(leaf, this)
+    );
+    this.registerView(
+      GIT_HISTORY_SOURCE_VIEW_TYPE,
+      (leaf) => new GitHistorySourceView(leaf, this)
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -370,6 +389,17 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-current-note-history-sources",
+      name: "查看当前笔记的全部历史来源",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) void this.openHistorySources(file);
+        return available;
+      }
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -408,6 +438,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
             .setIcon("history")
             .onClick(() => void this.activateHistoryView(file))
         );
+        menu.addItem((item) =>
+          item
+            .setTitle("查看全部历史来源")
+            .setIcon("layers-3")
+            .onClick(() => void this.openHistorySources(file))
+        );
       })
     );
     this.registerEvent(
@@ -431,11 +467,22 @@ export default class GitNoteHistoryPlugin extends Plugin {
           nextPath,
           includeDescendants
         );
+        const localSnapshotMigration = this.renameLocalSnapshotsPath(
+          oldPath,
+          nextPath,
+          includeDescendants
+        );
         void (async () => {
-          const [reviewResult, restoreResult, basketResult] = await Promise.allSettled([
+          const [
+            reviewResult,
+            restoreResult,
+            basketResult,
+            localSnapshotResult
+          ] = await Promise.allSettled([
             reviewMigration,
             restoreMigration,
-            basketMigration
+            basketMigration,
+            localSnapshotMigration
           ]);
           if (reviewResult.status === "rejected") {
             const reason = reviewResult.reason;
@@ -455,6 +502,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
             const reason = basketResult.reason;
             new Notice(
               `重命名后未能迁移恢复篮子：${reason instanceof Error ? reason.message : String(reason)}`,
+              9000
+            );
+          }
+          if (localSnapshotResult.status === "rejected") {
+            const reason = localSnapshotResult.reason;
+            new Notice(
+              `重命名后未能迁移本地快照：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
@@ -533,6 +587,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingRecoveryBasketLeaf = null;
     this.historicalSandboxOpenGeneration += 1;
     this.pendingHistoricalSandboxLeaf = null;
+    this.historySourceOpenGeneration += 1;
+    this.pendingHistorySourceLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
@@ -541,6 +597,295 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_TRACE_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_HISTORICAL_SANDBOX_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE);
+  }
+
+  async openHistorySources(file: TFile): Promise<void> {
+    const generation = ++this.historySourceOpenGeneration;
+    const pending = this.pendingHistorySourceLeaf;
+    const leafPromise = pending ?? (async () => {
+      const existing = this.app.workspace
+        .getLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE)[0];
+      if (existing) return existing;
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_HISTORY_SOURCE_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    if (!pending) this.pendingHistorySourceLeaf = leafPromise;
+    let leaf: WorkspaceLeaf;
+    try {
+      leaf = await leafPromise;
+    } finally {
+      if (this.pendingHistorySourceLeaf === leafPromise) {
+        this.pendingHistorySourceLeaf = null;
+      }
+    }
+    if (generation !== this.historySourceOpenGeneration || this.isUnloading) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (generation !== this.historySourceOpenGeneration || this.isUnloading) return;
+    if (leaf.view instanceof GitHistorySourceView) await leaf.view.setFile(file);
+  }
+
+  async loadHistorySources(
+    file: TFile,
+    signal?: AbortSignal
+  ): Promise<HistorySourceSnapshot> {
+    const currentContent = await this.app.vault.read(file);
+    const localStore = new LocalSnapshotStore(this.localSnapshots);
+    const adapters: HistorySourceAdapter[] = [
+      {
+        descriptor: {
+          kind: "workspace",
+          label: "当前工作区",
+          description: "当前磁盘上的笔记内容，不是长期历史。",
+          access: "direct",
+          confidence: "snapshot",
+          capabilities: {
+            listVersions: true,
+            readContent: true,
+            compare: false,
+            restore: false,
+            capture: false,
+            delete: false
+          },
+          boundary: "每次刷新都会重新读取；不会把当前内容冒充为已提交版本。"
+        },
+        async probe(context) {
+          return {
+            descriptor: this.descriptor,
+            available: true,
+            status: "ready",
+            summary: "作为所有比较的当前端点。",
+            versions: [{
+              id: "current",
+              source: "workspace",
+              label: "当前工作区",
+              capturedAt: context.currentModifiedAt ?? new Date().toISOString(),
+              contentFingerprint: contentFingerprint(context.currentContent),
+              contentAvailable: true,
+              comparisonAvailable: false,
+              restoreAvailable: false
+            }]
+          };
+        }
+      },
+      {
+        descriptor: {
+          kind: "git",
+          label: "Git 历史",
+          description: "仓库中可复核的 commit 版本和路径历史。",
+          access: "direct",
+          confidence: "exact",
+          capabilities: {
+            listVersions: true,
+            readContent: true,
+            compare: true,
+            restore: true,
+            capture: false,
+            delete: false
+          },
+          retentionLabel: "由仓库对象和远端备份决定",
+          boundary: "只执行只读 Git 查询；不会 checkout、reset、stash 或写入索引。"
+        },
+        probe: async () => {
+          const history = await this.gitClient.loadFileHistory(file);
+          return {
+            descriptor: adapters[1]!.descriptor,
+            available: true,
+            status: history.commits.length ? "ready" : "empty",
+            summary: history.commits.length
+              ? `${history.commits.length} 个已读取 commit${history.hasMoreHistory ? "，仍有更早历史" : ""}。`
+              : "这篇笔记还没有可读取的 Git commit。",
+            versions: history.commits.map((commit) => ({
+              id: commit.hash,
+              source: "git" as const,
+              label: commit.subject || "无提交说明",
+              capturedAt: commit.authoredAt,
+              detail: commit.shortHash,
+              contentAvailable: true,
+              comparisonAvailable: true,
+              restoreAvailable: true,
+              sourceReference: commit.hash
+            }))
+          };
+        }
+      },
+      {
+        descriptor: {
+          kind: "local-snapshot",
+          label: "插件本地快照",
+          description: "手动保存的当前笔记副本，独立于 Git commit。",
+          access: "direct",
+          confidence: "snapshot",
+          capabilities: {
+            listVersions: true,
+            readContent: true,
+            compare: true,
+            restore: true,
+            capture: true,
+            delete: true
+          },
+          retentionLabel: "每篇最多 12 个，总计最多 96 个 / 12 MB",
+          boundary: "仅保存在插件本地数据中；不会生成 backup 笔记或污染 Vault 最新版本判断。"
+        },
+        async probe() {
+          const records = localStore.list(file.path);
+          return {
+            descriptor: this.descriptor,
+            available: true,
+            status: records.length ? "ready" : "empty",
+            summary: records.length
+              ? `${records.length} 个手动快照。相同内容不会重复保存。`
+              : "还没有手动快照。",
+            versions: records.map((record) => ({
+              id: record.id,
+              source: "local-snapshot" as const,
+              label: record.label,
+              capturedAt: record.capturedAt,
+              detail: "本地快照",
+              contentFingerprint: record.contentFingerprint,
+              contentAvailable: true,
+              comparisonAvailable: true,
+              restoreAvailable: true,
+              sourceReference: record.id
+            }))
+          };
+        }
+      }
+    ];
+    for (const descriptor of [
+      {
+        kind: "file-recovery" as const,
+        label: "File Recovery",
+        description: "Obsidian 核心插件维护的本地恢复快照。",
+        boundary: "插件不读取 File Recovery 的私有存储；请在 Obsidian 设置 → 文件恢复中查看和恢复。"
+      },
+      {
+        kind: "sync" as const,
+        label: "Obsidian Sync",
+        description: "Obsidian Sync 保存的云端版本历史。",
+        boundary: "插件不读取账号或 Sync 私有数据；请在文件菜单的版本历史或 Sync 历史中查看。"
+      }
+    ]) {
+      const sourceDescriptor: HistorySourceAdapter["descriptor"] = {
+        ...descriptor,
+        access: "handoff",
+        confidence: "provider-managed",
+        capabilities: {
+          listVersions: false,
+          readContent: false,
+          compare: false,
+          restore: false,
+          capture: false,
+          delete: false
+        },
+        retentionLabel: descriptor.kind === "sync"
+          ? "由当前 Sync 套餐决定"
+          : "由 File Recovery 设置决定"
+      };
+      adapters.push({
+        descriptor: sourceDescriptor,
+        async probe() {
+          return providerHandoffProbe(
+            sourceDescriptor,
+            true,
+            "使用 Obsidian 原生入口查看；这里不显示未读取的版本数量。"
+          );
+        }
+      });
+    }
+    return new HistorySourceBus(adapters).inspect({
+      filePath: file.path,
+      fileName: file.basename,
+      currentContent,
+      currentModifiedAt: new Date(file.stat.mtime).toISOString()
+    }, signal);
+  }
+
+  captureLocalSnapshot(
+    file: TFile,
+    label?: string
+  ): Promise<{ record: LocalHistorySnapshot; created: boolean }> {
+    return this.mutateLocalSnapshots(async (store) => {
+      const content = await this.app.vault.read(file);
+      return store.capture({
+        filePath: file.path,
+        content,
+        ...(label ? { label } : {}),
+        sourceModifiedAt: new Date(file.stat.mtime).toISOString()
+      });
+    });
+  }
+
+  deleteLocalSnapshot(id: string): Promise<boolean> {
+    return this.mutateLocalSnapshots((store) => Boolean(store.remove(id)));
+  }
+
+  async openHistorySourceVersion(
+    file: TFile,
+    version: HistorySourceVersion
+  ): Promise<void> {
+    if (version.source === "git") {
+      const history = await this.gitClient.loadFileHistory(file);
+      const commit = history.commits.find(
+        (candidate) => candidate.hash === version.sourceReference
+      );
+      if (!commit) throw new Error("这个 Git 版本已不在当前读取窗口，请刷新后重试。");
+      await this.openDetail({
+        filePath: file.path,
+        repositoryRoot: history.context.repositoryRoot,
+        base: { kind: "commit", commit },
+        target: { kind: "working", label: "当前工作区" }
+      });
+      return;
+    }
+    if (version.source !== "local-snapshot") {
+      throw new Error("这个来源需要在原生界面中查看。");
+    }
+    const record = this.localSnapshots[
+      version.sourceReference ?? version.id.replace(/^local-snapshot:/u, "")
+    ];
+    if (!record || record.filePath !== file.path) {
+      throw new Error("本地快照已被删除或不属于当前笔记。");
+    }
+    const context = await this.gitClient.resolveFileContext(file);
+    const pseudoHash = Array.from(record.id)
+      .map((character) => character.charCodeAt(0).toString(16).padStart(2, "0"))
+      .join("")
+      .padEnd(40, "0")
+      .slice(0, 40);
+    const commit: GitCommitVersion = {
+      hash: pseudoHash,
+      shortHash: "本地",
+      authorName: "",
+      authorEmail: "",
+      authoredAt: record.capturedAt,
+      subject: `本地快照 · ${record.label}`,
+      historicalPath: context.repositoryRelativePath,
+      changeType: "M",
+      addedLines: 0,
+      deletedLines: 0,
+      trailers: {}
+    };
+    await this.openDetail({
+      filePath: file.path,
+      repositoryRoot: context.repositoryRoot,
+      base: { kind: "commit", commit },
+      target: { kind: "working", label: "当前工作区" },
+      initialMode: "unified",
+      allowRecoveryCollection: true,
+      recoverySourceOverride: {
+        versionKey: `local-snapshot:${record.id}`,
+        label: `本地快照 · ${record.label}`,
+        historicalPath: context.repositoryRelativePath,
+        authoredAt: record.capturedAt,
+        subject: record.label
+      },
+      baseContentOverride: record.content
+    });
   }
 
   async activateWorkspaceReview(): Promise<void> {
@@ -1305,6 +1650,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE)) {
       if (leaf.view instanceof GitRecoveryBasketView) void leaf.view.refresh();
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE)) {
+      if (leaf.view instanceof GitHistorySourceView) void leaf.view.refresh();
+    }
   }
 
   getFileReviewState(context: GitRepositoryContext): FileReviewState {
@@ -1338,7 +1686,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     undoStack = this.undoStack,
     restoreReceipts = this.restoreReceipts,
     recoveryBaskets = this.recoveryBaskets,
-    historicalSandboxes = this.historicalSandboxes
+    historicalSandboxes = this.historicalSandboxes,
+    localSnapshots = this.localSnapshots
   ): PersistedPluginData {
     return {
       schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
@@ -1347,6 +1696,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       restoreReceipts,
       recoveryBaskets,
       historicalSandboxes,
+      localSnapshots,
       fileReviewStates,
       reviewInboxCheckpoints
     };
@@ -1368,6 +1718,50 @@ export default class GitNoteHistoryPlugin extends Plugin {
       ));
       this.historicalSandboxes = next;
       return result;
+    });
+  }
+
+  private mutateLocalSnapshots<T>(
+    mutation: (
+      store: LocalSnapshotStore,
+      records: Record<string, LocalHistorySnapshot>
+    ) => T | Promise<T>
+  ): Promise<T> {
+    return this.enqueueDataOperation(async () => {
+      const next = clonePlainData(this.localSnapshots);
+      const result = await mutation(new LocalSnapshotStore(next), next);
+      await this.saveData(this.pluginDataSnapshot(
+        this.fileReviewStates,
+        this.reviewInboxCheckpoints,
+        this.undoStack,
+        this.restoreReceipts,
+        this.recoveryBaskets,
+        this.historicalSandboxes,
+        next
+      ));
+      this.localSnapshots = next;
+      return result;
+    });
+  }
+
+  private renameLocalSnapshotsPath(
+    oldPath: string,
+    newPath: string,
+    includeDescendants: boolean
+  ): Promise<boolean> {
+    return this.mutateLocalSnapshots((_store, records) => {
+      let changed = false;
+      for (const record of Object.values(records)) {
+        const nextPath = record.filePath === oldPath
+          ? newPath
+          : includeDescendants && record.filePath.startsWith(`${oldPath}/`)
+            ? `${newPath}${record.filePath.slice(oldPath.length)}`
+            : record.filePath;
+        if (nextPath === record.filePath) continue;
+        record.filePath = nextPath;
+        changed = true;
+      }
+      return changed;
     });
   }
 
@@ -1792,6 +2186,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.restoreReceipts = data?.restoreReceipts ?? [];
     this.recoveryBaskets = data?.recoveryBaskets ?? {};
     this.historicalSandboxes = data?.historicalSandboxes ?? {};
+    this.localSnapshots = data?.localSnapshots ?? {};
     this.fileReviewStates = data.fileReviewStates ?? {};
     this.reviewInboxCheckpoints = data?.reviewInboxCheckpoints ?? {};
     if (previousSchema !== CURRENT_DATA_SCHEMA_VERSION) {

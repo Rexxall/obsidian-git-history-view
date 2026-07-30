@@ -151,6 +151,10 @@ vi.mock("../src/views/historical-sandbox-view", () => ({
   GIT_HISTORICAL_SANDBOX_VIEW_TYPE: "git-historical-sandbox",
   GitHistoricalSandboxView: historicalSandboxMocks.HistoricalSandboxViewMock
 }));
+vi.mock("../src/views/history-source-view", () => ({
+  GIT_HISTORY_SOURCE_VIEW_TYPE: "git-history-sources",
+  GitHistorySourceView: class {}
+}));
 vi.mock("../src/knowledge-trace/version-materializer", () => ({
   KnowledgeVersionMaterializer: class {}
 }));

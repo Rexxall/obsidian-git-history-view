@@ -1,5 +1,6 @@
 import type { HistoricalSandboxRecord } from "./sandbox/types";
 import type { RecoveryBasketSource } from "./recovery-basket/types";
+import type { LocalHistorySnapshot } from "./history-sources/local-snapshots";
 
 export interface GitCommitVersion {
   hash: string;
@@ -233,6 +234,7 @@ export interface PersistedPluginData {
   restoreReceipts?: RestoreReceipt[];
   recoveryBaskets?: Record<string, RecoveryBasketState>;
   historicalSandboxes?: Record<string, HistoricalSandboxRecord>;
+  localSnapshots?: Record<string, LocalHistorySnapshot>;
   fileReviewStates?: Record<string, FileReviewState>;
   reviewInboxCheckpoints?: Record<string, ReviewInboxCheckpoint>;
 }

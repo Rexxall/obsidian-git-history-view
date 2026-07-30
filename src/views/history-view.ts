@@ -1334,6 +1334,15 @@ export class GitNoteHistoryView extends ItemView {
       trace.addEventListener("click", () => {
         this.plugin.openKnowledgeTraceSetup(this.targetFile!);
       });
+
+      const sources = controls.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "查看全部历史来源" }
+      });
+      setIcon(sources, "layers-3");
+      sources.addEventListener("click", () => {
+        void this.plugin.openHistorySources(this.targetFile!);
+      });
     }
 
     const refresh = controls.createEl("button", {

@@ -508,6 +508,37 @@ describe("named version milestones", () => {
     expect(migratePluginData(future)).toEqual(future);
   });
 
+  it("migrates schema v4 local snapshots and rejects tampered content", () => {
+    const validContent = "Saved locally";
+    const migrated = migratePluginData({
+      schemaVersion: 4,
+      localSnapshots: {
+        valid: {
+          schemaVersion: 1,
+          id: "valid",
+          filePath: "Notes/A.md",
+          label: "Before rewrite",
+          capturedAt: "2026-07-30T05:00:00.000Z",
+          content: validContent,
+          contentFingerprint: contentFingerprint(validContent)
+        },
+        tampered: {
+          schemaVersion: 1,
+          id: "tampered",
+          filePath: "Notes/A.md",
+          label: "Broken",
+          capturedAt: "2026-07-30T04:00:00.000Z",
+          content: "changed",
+          contentFingerprint: contentFingerprint("original")
+        }
+      }
+    });
+
+    expect(migrated.schemaVersion).toBe(CURRENT_DATA_SCHEMA_VERSION);
+    expect(Object.keys(migrated.localSnapshots ?? {})).toEqual(["valid"]);
+    expect(migratePluginData(migrated)).toEqual(migrated);
+  });
+
   it("does not re-import schema v2 bookmark projections as duplicate milestones", () => {
     const state: FileReviewState = {
       bookmarks: {

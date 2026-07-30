@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1
+
+- Added a pluggable history-source bus with explicit capabilities, access mode, confidence, retention, and provider-boundary metadata.
+- Added a central source view that keeps Git commits, the current workspace, plugin-local snapshots, File Recovery, and Obsidian Sync visibly distinct instead of flattening unlike histories into one false timeline.
+- Directly readable Git and local-snapshot versions share one chronological comparison list; one failing source no longer hides the other available sources.
+- Added manual plugin-local snapshots with content deduplication, fingerprint validation, rename migration, per-file and global capacity limits, comparison, recovery-basket collection, and confirmed deletion.
+- File Recovery and Sync remain provider-managed handoffs. The plugin does not inspect their private stores or claim that unavailable version metadata was read.
+
 ## 0.7.0
 
 - Added isolated historical Vault capsules backed by locked, detached Git worktrees; creating one never checks out or rewrites the current Vault.
