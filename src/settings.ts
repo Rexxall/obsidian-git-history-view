@@ -13,7 +13,8 @@ export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
   density: "comfortable",
   ignoreWhitespace: false,
   showCommitStats: true,
-  reviewExcludedPaths: ["backup", "backups", ".trash", ".obsidian", "node_modules"]
+  reviewExcludedPaths: ["backup", "backups", ".trash", ".obsidian", "node_modules"],
+  sandboxStorageRoot: ""
 };
 
 export class GitNoteHistorySettingTab extends PluginSettingTab {
@@ -35,6 +36,7 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.gitExecutable = value.trim() || "git";
             await this.plugin.savePluginData();
+            this.plugin.reloadHistoricalSandboxManager();
           })
       );
 

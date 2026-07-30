@@ -1,4 +1,6 @@
+import path from "node:path";
 import {
+  FileSystemAdapter,
   MarkdownView,
   Notice,
   Plugin,
@@ -92,6 +94,16 @@ import {
   GIT_RECOVERY_BASKET_VIEW_TYPE,
   GitRecoveryBasketView
 } from "./views/recovery-basket-view";
+import { HistoricalSandboxManager } from "./sandbox/sandbox-manager";
+import type {
+  HistoricalSandboxInspection,
+  HistoricalSandboxPatchExport,
+  HistoricalSandboxRecord
+} from "./sandbox/types";
+import {
+  GIT_HISTORICAL_SANDBOX_VIEW_TYPE,
+  GitHistoricalSandboxView
+} from "./views/historical-sandbox-view";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -110,6 +122,9 @@ function workEventSnapshotLabel(capturedAt: string): string {
   return `工作区快照 · ${time}`;
 }
 
+const MAX_ACTIVE_HISTORICAL_SANDBOXES = 8;
+const MAX_TOTAL_HISTORICAL_SANDBOXES = 24;
+
 export default class GitNoteHistoryPlugin extends Plugin {
   settings: GitNoteHistorySettings = { ...DEFAULT_SETTINGS };
   gitClient!: GitClient;
@@ -118,6 +133,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private undoStack: UndoSnapshot[] = [];
   private restoreReceipts: RestoreReceipt[] = [];
   private recoveryBaskets: Record<string, RecoveryBasketState> = {};
+  private historicalSandboxes: Record<string, HistoricalSandboxRecord> = {};
+  private historicalSandboxManager!: HistoricalSandboxManager;
   private fileReviewStates: Record<string, FileReviewState> = {};
   private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
   private dataOperationQueue: Promise<void> = Promise.resolve();
@@ -129,6 +146,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingKnowledgeTraceLeaf: Promise<WorkspaceLeaf> | null = null;
   private recoveryBasketOpenGeneration = 0;
   private pendingRecoveryBasketLeaf: Promise<WorkspaceLeaf> | null = null;
+  private historicalSandboxOpenGeneration = 0;
+  private pendingHistoricalSandboxLeaf: Promise<WorkspaceLeaf> | null = null;
+  private readonly pendingHistoricalSandboxCreates = new Map<
+    string,
+    Promise<HistoricalSandboxRecord>
+  >();
   private isUnloading = false;
 
   async onload(): Promise<void> {
@@ -136,6 +159,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     await this.loadPluginData();
 
     this.gitClient = new GitClient(this.app, () => this.settings);
+    this.historicalSandboxManager = this.createHistoricalSandboxManager();
     this.knowledgeVersionMaterializer = new KnowledgeVersionMaterializer(
       this.gitClient
     );
@@ -179,12 +203,19 @@ export default class GitNoteHistoryPlugin extends Plugin {
       GIT_RECOVERY_BASKET_VIEW_TYPE,
       (leaf) => new GitRecoveryBasketView(leaf, this)
     );
+    this.registerView(
+      GIT_HISTORICAL_SANDBOX_VIEW_TYPE,
+      (leaf) => new GitHistoricalSandboxView(leaf, this)
+    );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
       void this.activateHistoryView(this.app.workspace.getActiveFile());
     });
     this.addRibbonIcon("list-checks", "打开复查收件箱", () => {
       void this.activateWorkspaceReview();
+    });
+    this.addRibbonIcon("boxes", "打开历史沙盒", () => {
+      void this.openHistoricalSandboxManager();
     });
 
     this.addCommand({
@@ -333,6 +364,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-historical-sandbox-manager",
+      name: "打开历史沙盒管理器",
+      callback: () => void this.openHistoricalSandboxManager()
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -427,6 +464,61 @@ export default class GitNoteHistoryPlugin extends Plugin {
     );
 
     this.addSettingTab(new GitNoteHistorySettingTab(this.app, this));
+    void this.showHistoricalSandboxIdentity();
+  }
+
+  private createHistoricalSandboxManager(): HistoricalSandboxManager {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      throw new Error("历史沙盒只支持使用本地文件系统的桌面 Vault。");
+    }
+    const pluginDirectory = path.resolve(
+      adapter.getBasePath(),
+      this.manifest.dir
+        ?? path.join(this.app.vault.configDir, "plugins", this.manifest.id)
+    );
+    return new HistoricalSandboxManager({
+      gitExecutable: this.settings.gitExecutable,
+      ...(this.settings.sandboxStorageRoot
+        ? { storageRoot: this.settings.sandboxStorageRoot }
+        : {}),
+      bundleSource: {
+        pluginId: this.manifest.id,
+        pluginVersion: this.manifest.version,
+        directory: pluginDirectory
+      }
+    });
+  }
+
+  reloadHistoricalSandboxManager(): void {
+    this.historicalSandboxManager = this.createHistoricalSandboxManager();
+  }
+
+  private async showHistoricalSandboxIdentity(): Promise<void> {
+    const markerPath = `${this.app.vault.configDir}/.git-note-history-sandbox.json`;
+    try {
+      if (!(await this.app.vault.adapter.exists(markerPath))) return;
+      const raw = await this.app.vault.adapter.read(markerPath);
+      const record = JSON.parse(raw) as Partial<HistoricalSandboxRecord>;
+      if (
+        record.schemaVersion !== 1
+        || (record.mode !== "capsule" && record.mode !== "editable")
+        || !record.source?.shortHash
+      ) return;
+      const label = record.mode === "capsule"
+        ? `只读时间胶囊 · ${record.source.shortHash}`
+        : `可编辑历史沙盒 · ${record.source.shortHash}`;
+      const status = this.addStatusBarItem();
+      status.addClass("git-note-history-sandbox-status");
+      status.setText(label);
+      status.setAttribute(
+        "title",
+        "这是隔离的历史 Vault，不是当前主工作区。"
+      );
+      new Notice(`${label}：这是隔离的历史 Vault。`, 8000);
+    } catch {
+      // A malformed marker must not prevent the plugin from loading.
+    }
   }
 
   onunload(): void {
@@ -439,6 +531,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingKnowledgeTraceLeaf = null;
     this.recoveryBasketOpenGeneration += 1;
     this.pendingRecoveryBasketLeaf = null;
+    this.historicalSandboxOpenGeneration += 1;
+    this.pendingHistoricalSandboxLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
@@ -446,6 +540,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(GIT_WORK_EVENT_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_TRACE_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_HISTORICAL_SANDBOX_VIEW_TYPE);
   }
 
   async activateWorkspaceReview(): Promise<void> {
@@ -658,6 +753,381 @@ export default class GitNoteHistoryPlugin extends Plugin {
     }
   }
 
+  async openHistoricalSandboxManager(): Promise<void> {
+    if (this.isUnloading) return;
+    const generation = ++this.historicalSandboxOpenGeneration;
+    const leaf = await this.ensureHistoricalSandboxLeaf();
+    if (!leaf || this.isUnloading) {
+      leaf?.detach();
+      return;
+    }
+    if (generation !== this.historicalSandboxOpenGeneration) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (
+      this.isUnloading
+      || generation !== this.historicalSandboxOpenGeneration
+    ) return;
+    if (leaf.view instanceof GitHistoricalSandboxView) {
+      await leaf.view.refresh();
+    }
+  }
+
+  private async ensureHistoricalSandboxLeaf(): Promise<WorkspaceLeaf | null> {
+    if (this.isUnloading) return null;
+    const pending = this.pendingHistoricalSandboxLeaf;
+    if (pending) return pending;
+    const existing = this.app.workspace
+      .getLeavesOfType(GIT_HISTORICAL_SANDBOX_VIEW_TYPE)
+      .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+    if (existing) return existing;
+    const leafPromise = (async (): Promise<WorkspaceLeaf> => {
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_HISTORICAL_SANDBOX_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    this.pendingHistoricalSandboxLeaf = leafPromise;
+    try {
+      return await leafPromise;
+    } finally {
+      if (this.pendingHistoricalSandboxLeaf === leafPromise) {
+        this.pendingHistoricalSandboxLeaf = null;
+      }
+    }
+  }
+
+  async createHistoricalSandbox(
+    context: GitRepositoryContext,
+    commit: GitCommitVersion
+  ): Promise<HistoricalSandboxRecord> {
+    const key = `${context.repositoryRoot}\u0000${commit.hash}`;
+    const pending = this.pendingHistoricalSandboxCreates.get(key);
+    if (pending) return pending;
+    const operation = this.createHistoricalSandboxOnce(context, commit);
+    this.pendingHistoricalSandboxCreates.set(key, operation);
+    try {
+      return await operation;
+    } finally {
+      if (this.pendingHistoricalSandboxCreates.get(key) === operation) {
+        this.pendingHistoricalSandboxCreates.delete(key);
+      }
+    }
+  }
+
+  private async createHistoricalSandboxOnce(
+    context: GitRepositoryContext,
+    commit: GitCommitVersion
+  ): Promise<HistoricalSandboxRecord> {
+    const existing = Object.values(this.historicalSandboxes).find(
+      (record) =>
+        record.lifecycle === "active"
+        && record.source.repositoryRoot === context.repositoryRoot
+        && record.source.commitHash === commit.hash
+    );
+    if (existing) {
+      await this.openHistoricalSandboxManager();
+      return clonePlainData(existing);
+    }
+    const records = Object.values(this.historicalSandboxes);
+    if (
+      records.filter((record) => record.lifecycle === "active").length
+      >= MAX_ACTIVE_HISTORICAL_SANDBOXES
+    ) {
+      throw new Error(
+        `同时最多保留 ${MAX_ACTIVE_HISTORICAL_SANDBOXES} 个使用中的历史沙盒；请先归档或删除一个。`
+      );
+    }
+    if (records.length >= MAX_TOTAL_HISTORICAL_SANDBOXES) {
+      throw new Error(
+        `最多管理 ${MAX_TOTAL_HISTORICAL_SANDBOXES} 个历史沙盒；请先删除不再需要的沙盒。`
+      );
+    }
+    const record = await this.historicalSandboxManager.createCapsule({
+      repositoryRoot: context.repositoryRoot,
+      vaultRoot: context.vaultRoot,
+      commitHash: commit.hash,
+      shortHash: commit.shortHash,
+      commitSubject: commit.subject,
+      commitAuthoredAt: commit.authoredAt,
+      anchorRepositoryPath: commit.historicalPath
+    });
+    if (this.isUnloading) {
+      await this.historicalSandboxManager.remove(record).catch(() => undefined);
+      throw new Error("插件正在卸载，已取消创建历史沙盒。");
+    }
+    try {
+      await this.mutateHistoricalSandboxes((records) => {
+        records[record.id] = clonePlainData(record);
+      });
+    } catch (error) {
+      await this.historicalSandboxManager.remove(record).catch(() => undefined);
+      throw error;
+    }
+    await this.openHistoricalSandboxManager();
+    return clonePlainData(record);
+  }
+
+  getHistoricalSandboxes(): HistoricalSandboxRecord[] {
+    return Object.values(this.historicalSandboxes)
+      .map((record) => clonePlainData(record))
+      .sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt)
+        || right.createdAt.localeCompare(left.createdAt)
+      );
+  }
+
+  async inspectHistoricalSandboxes(): Promise<HistoricalSandboxInspection[]> {
+    const records = this.getHistoricalSandboxes();
+    return Promise.all(
+      records.map((record) => this.historicalSandboxManager.inspect(record))
+    );
+  }
+
+  async upgradeHistoricalSandbox(id: string): Promise<HistoricalSandboxRecord> {
+    const record = this.requireHistoricalSandbox(id);
+    const next = await this.historicalSandboxManager.upgradeToEditable(record);
+    try {
+      await this.mutateHistoricalSandboxes((records) => {
+        records[id] = clonePlainData(next);
+      });
+    } catch (error) {
+      await this.historicalSandboxManager.downgradeToCapsule(next)
+        .catch(() => undefined);
+      throw error;
+    }
+    return clonePlainData(next);
+  }
+
+  async setHistoricalSandboxArchived(
+    id: string,
+    archived: boolean
+  ): Promise<HistoricalSandboxRecord> {
+    const record = this.requireHistoricalSandbox(id);
+    const next = await this.historicalSandboxManager.setArchived(record, archived);
+    try {
+      await this.mutateHistoricalSandboxes((records) => {
+        records[id] = clonePlainData(next);
+      });
+    } catch (error) {
+      await this.historicalSandboxManager.setArchived(next, !archived)
+        .catch(() => undefined);
+      throw error;
+    }
+    return clonePlainData(next);
+  }
+
+  async exportHistoricalSandboxPatch(
+    id: string
+  ): Promise<HistoricalSandboxPatchExport> {
+    return this.historicalSandboxManager.exportPatch(
+      this.requireHistoricalSandbox(id)
+    );
+  }
+
+  async openHistoricalSandboxFileComparison(
+    id: string,
+    repositoryPath: string
+  ): Promise<void> {
+    const record = this.requireHistoricalSandbox(id);
+    const inspection = await this.historicalSandboxManager.inspect(record);
+    if (inspection.availability !== "ready") {
+      throw new Error("沙盒状态异常，不能读取实验文件。");
+    }
+    if (!inspection.changedPaths.includes(repositoryPath)) {
+      throw new Error("这个文件不在沙盒的已跟踪改动中。");
+    }
+    const vaultPath = this.sandboxRepositoryPathToVaultPath(
+      record,
+      repositoryPath
+    );
+    if (!vaultPath.toLocaleLowerCase().endsWith(".md")) {
+      throw new Error("恢复篮子目前只接收 Markdown 文件。");
+    }
+    const file = this.app.vault.getFileByPath(vaultPath);
+    if (!file || file.extension !== "md") {
+      throw new Error("当前 Vault 中没有对应笔记；若它是新文件，请使用“复制到当前 Vault”。");
+    }
+    const [sandbox, currentContent] = await Promise.all([
+      this.historicalSandboxManager.readMarkdownFile(record, repositoryPath),
+      this.app.vault.read(file)
+    ]);
+    if (sandbox.content === currentContent) {
+      throw new Error("沙盒文件与当前笔记内容相同，无需带回。");
+    }
+    const sourceCommit: GitCommitVersion = {
+      hash: record.source.commitHash,
+      shortHash: record.source.shortHash,
+      authorName: "",
+      authorEmail: "",
+      authoredAt: record.source.commitAuthoredAt || record.createdAt,
+      subject: `沙盒实验 · ${record.name}`,
+      historicalPath: repositoryPath,
+      changeType: "M",
+      addedLines: 0,
+      deletedLines: 0,
+      trailers: {}
+    };
+    await this.openDetail({
+      filePath: file.path,
+      repositoryRoot: record.source.repositoryRoot,
+      base: { kind: "commit", commit: sourceCommit },
+      target: { kind: "working", label: "当前工作区" },
+      initialMode: "unified",
+      readOnly: true,
+      allowRecoveryCollection: true,
+      recoverySourceOverride: {
+        versionKey: `sandbox:${record.id}:${repositoryPath}`,
+        label: `沙盒实验 · ${record.name}`,
+        commitHash: record.source.commitHash,
+        shortHash: record.source.shortHash,
+        historicalPath: repositoryPath,
+        authoredAt: record.source.commitAuthoredAt,
+        subject: record.source.commitSubject
+      },
+      baseContentOverride: sandbox.content,
+      targetContentOverride: currentContent
+    });
+  }
+
+  async copyHistoricalSandboxNewNote(
+    id: string,
+    repositoryPath: string
+  ): Promise<TFile> {
+    const record = this.requireHistoricalSandbox(id);
+    const inspection = await this.historicalSandboxManager.inspect(record);
+    if (
+      inspection.availability !== "ready"
+      || !inspection.untrackedPaths.includes(repositoryPath)
+    ) {
+      throw new Error("这个文件不再是沙盒中的新文件，请刷新后重试。");
+    }
+    const vaultPath = this.sandboxRepositoryPathToVaultPath(
+      record,
+      repositoryPath
+    );
+    if (!vaultPath.toLocaleLowerCase().endsWith(".md")) {
+      throw new Error("目前只允许把新的 Markdown 笔记复制回当前 Vault。");
+    }
+    if (this.app.vault.getAbstractFileByPath(vaultPath)) {
+      throw new Error("当前 Vault 已存在同路径文件，未进行覆盖。");
+    }
+    const sandbox = await this.historicalSandboxManager.readMarkdownFile(
+      record,
+      repositoryPath
+    );
+    const parentPath = vaultPath.split("/").slice(0, -1).join("/");
+    if (parentPath) await this.ensureVaultFolder(parentPath);
+    if (this.app.vault.getAbstractFileByPath(vaultPath)) {
+      throw new Error("创建目录期间目标路径出现了文件，未进行覆盖。");
+    }
+    const file = await this.app.vault.create(vaultPath, sandbox.content);
+    await this.app.workspace.getLeaf("tab").openFile(file);
+    this.refreshOpenViews();
+    return file;
+  }
+
+  async removeHistoricalSandbox(id: string): Promise<void> {
+    const record = this.requireHistoricalSandbox(id);
+    const inspection = await this.historicalSandboxManager.inspect(record);
+    if (inspection.availability !== "missing") {
+      await this.historicalSandboxManager.remove(record);
+    }
+    await this.mutateHistoricalSandboxes((records) => {
+      delete records[id];
+    });
+  }
+
+  async forgetHistoricalSandboxRecord(id: string): Promise<void> {
+    const record = this.requireHistoricalSandbox(id);
+    const inspection = await this.historicalSandboxManager.inspect(record);
+    if (
+      inspection.availability !== "missing"
+      && inspection.availability !== "untrusted"
+    ) {
+      throw new Error("沙盒目录仍可安全管理，不能只移除记录。");
+    }
+    await this.mutateHistoricalSandboxes((records) => {
+      delete records[id];
+    });
+  }
+
+  async guideFirstSandboxOpen(
+    record: HistoricalSandboxRecord
+  ): Promise<void> {
+    await navigator.clipboard.writeText(record.vaultPath);
+    window.open("obsidian://choose-vault", "_blank");
+    new Notice(
+      "沙盒路径已复制。请在 Vault 选择器中点“将文件夹作为 Vault 打开”，粘贴这个目录；这是 Obsidian 对首次注册文件夹的安全限制。",
+      12000
+    );
+  }
+
+  async openRegisteredSandbox(
+    record: HistoricalSandboxRecord
+  ): Promise<void> {
+    const anchor = record.source.anchorRepositoryPath
+      ? path.join(record.rootPath, record.source.anchorRepositoryPath)
+      : record.vaultPath;
+    const target = path.relative(record.vaultPath, anchor).startsWith("..")
+      ? record.vaultPath
+      : anchor;
+    window.open(
+      `obsidian://open?path=${encodeURIComponent(target)}`,
+      "_blank"
+    );
+    const next = await this.historicalSandboxManager.markOpened(record);
+    await this.mutateHistoricalSandboxes((records) => {
+      records[record.id] = clonePlainData(next);
+    });
+  }
+
+  private requireHistoricalSandbox(id: string): HistoricalSandboxRecord {
+    const record = this.historicalSandboxes[id];
+    if (!record) throw new Error("找不到这个历史沙盒记录。");
+    return clonePlainData(record);
+  }
+
+  private sandboxRepositoryPathToVaultPath(
+    record: HistoricalSandboxRecord,
+    repositoryPath: string
+  ): string {
+    const normalized = repositoryPath.replace(/\\/gu, "/");
+    if (
+      !normalized
+      || normalized.startsWith("/")
+      || normalized === ".."
+      || normalized.startsWith("../")
+      || normalized.includes("/../")
+    ) {
+      throw new Error("沙盒文件路径越过了 Vault 边界。");
+    }
+    const vaultPrefix = record.vaultRelativePath
+      .split(path.sep)
+      .join("/")
+      .replace(/\/+$/u, "");
+    if (!vaultPrefix) return normalized;
+    if (!normalized.startsWith(`${vaultPrefix}/`)) {
+      throw new Error("这个沙盒文件位于当前 Vault 之外。");
+    }
+    return normalized.slice(vaultPrefix.length + 1);
+  }
+
+  private async ensureVaultFolder(folderPath: string): Promise<void> {
+    const segments = folderPath.split("/").filter(Boolean);
+    let current = "";
+    for (const segment of segments) {
+      current = current ? `${current}/${segment}` : segment;
+      const existing = this.app.vault.getAbstractFileByPath(current);
+      if (existing instanceof TFolder) continue;
+      if (existing) {
+        throw new Error(`无法创建目录：${current} 已被同名文件占用。`);
+      }
+      await this.app.vault.createFolder(current);
+    }
+  }
+
   private async runKnowledgeTrace(
     setup: KnowledgeTraceSetupValue,
     signal: AbortSignal
@@ -867,7 +1337,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     reviewInboxCheckpoints = this.reviewInboxCheckpoints,
     undoStack = this.undoStack,
     restoreReceipts = this.restoreReceipts,
-    recoveryBaskets = this.recoveryBaskets
+    recoveryBaskets = this.recoveryBaskets,
+    historicalSandboxes = this.historicalSandboxes
   ): PersistedPluginData {
     return {
       schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
@@ -875,9 +1346,29 @@ export default class GitNoteHistoryPlugin extends Plugin {
       undoStack,
       restoreReceipts,
       recoveryBaskets,
+      historicalSandboxes,
       fileReviewStates,
       reviewInboxCheckpoints
     };
+  }
+
+  private mutateHistoricalSandboxes<T>(
+    mutation: (records: Record<string, HistoricalSandboxRecord>) => T | Promise<T>
+  ): Promise<T> {
+    return this.enqueueDataOperation(async () => {
+      const next = clonePlainData(this.historicalSandboxes);
+      const result = await mutation(next);
+      await this.saveData(this.pluginDataSnapshot(
+        this.fileReviewStates,
+        this.reviewInboxCheckpoints,
+        this.undoStack,
+        this.restoreReceipts,
+        this.recoveryBaskets,
+        next
+      ));
+      this.historicalSandboxes = next;
+      return result;
+    });
   }
 
   private mutateReviewData<T>(
@@ -1300,6 +1791,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     }));
     this.restoreReceipts = data?.restoreReceipts ?? [];
     this.recoveryBaskets = data?.recoveryBaskets ?? {};
+    this.historicalSandboxes = data?.historicalSandboxes ?? {};
     this.fileReviewStates = data.fileReviewStates ?? {};
     this.reviewInboxCheckpoints = data?.reviewInboxCheckpoints ?? {};
     if (previousSchema !== CURRENT_DATA_SCHEMA_VERSION) {

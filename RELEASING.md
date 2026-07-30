@@ -71,3 +71,12 @@ The install archive must contain exactly:
 - [x] both test vaults installs match the tracked build and preserve their existing `data.json`.
 - [x] Obsidian 1.12.7 checks pass in both Vaults. Projects confirms the command entry and empty recovery workbench on a real note. the second test vault confirms collection from history, property-level collection with ignored blank lines enabled, item metadata, conflict analysis, merged Markdown preview, apply gating, and clean basket removal. No QA item was written into a note.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.7.0 local acceptance
+
+- [x] `npm run release:check` passes with 185 tests across 16 files, the production build, `git diff --check`, and package verification.
+- [x] `dist/git-note-history-0.7.0.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `97f55ae55f6e9fa02258ec6e6f2da4d345114adb875749c1185919d1e638d16f`.
+- [x] both test vaults installs match the tracked build, retain their local data, and load schema v4.
+- [x] Obsidian 1.12.7 in Projects confirms the historical-sandbox entry, creation from a real full commit, a locked detached worktree, read-only note permissions, the manager card, and first-open guidance without changing the current Vault. the second test vault confirms the entry after a clean application reload.
+- [x] Real temporary Git repository tests cover editable upgrade, experiment changes, frozen comparison, recovery-basket collection, new-note no-overwrite copy, binary patch export, archive, deletion, symlink rejection, untrusted markers, capacity limits, and persistence migration.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.

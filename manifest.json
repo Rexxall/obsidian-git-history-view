@@ -1,9 +1,9 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "minAppVersion": "1.8.0",
-  "description": "Collect changes from Git history, preview one recovery plan, trace knowledge boundaries, and restore Markdown safely.",
+  "description": "Explore Git history, open isolated historical Vault sandboxes, collect changes, and restore Markdown safely.",
   "author": "Rexxall",
   "isDesktopOnly": true
 }

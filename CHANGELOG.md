@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Added isolated historical Vault capsules backed by locked, detached Git worktrees; creating one never checks out or rewrites the current Vault.
+- Historical capsules start with operating-system read-only note content, a persistent identity banner, and a rebuilt minimal `.obsidian` configuration that disables historical community plugins and loads only the current Git Note History bundle.
+- Added a central sandbox manager for integrity checks, explicit editable upgrades, active and archived lifecycle states, missing or untrusted record handling, patch export, and guarded deletion.
+- Added a safe first-open flow that respects Obsidian's registered-Vault limitation, plus direct URI opening after registration.
+- Editable sandbox Markdown can be compared against the current note as a frozen experiment; selected hunks or YAML properties go through the existing recovery basket, while new notes require an explicit no-overwrite copy confirmation.
+- Added schema v4 persistence, duplicate-creation coalescing, active and total sandbox limits, symlink and path-boundary checks, 2 MB Markdown read limits, and real-repository lifecycle regression tests.
+
 ## 0.6.3
 
 - Added a central recovery basket that collects change hunks and individual YAML properties from multiple Git versions of the same note.

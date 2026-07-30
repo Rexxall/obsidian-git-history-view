@@ -430,13 +430,19 @@ export class GitHistoryDetailView extends ItemView {
       restore.addEventListener("click", () => void this.confirmFullRestore());
     }
     if (this.request.readOnly) {
-      const snapshotTitle = "内容固定为发起对比时的快照，不提供恢复、另存或里程碑编辑";
+      const snapshotTitle = this.request.allowRecoveryCollection
+        ? "内容固定为沙盒核对时的快照；只能把选中的修改加入恢复篮子"
+        : "内容固定为发起对比时的快照，不提供恢复、另存或里程碑编辑";
       const badge = actions.createSpan({
         cls: "git-note-history-read-only-badge",
         attr: { title: snapshotTitle }
       });
       setIcon(badge.createSpan(), "lock-keyhole");
-      badge.createSpan({ text: "冻结快照 · 只读" });
+      badge.createSpan({
+        text: this.request.allowRecoveryCollection
+          ? "冻结沙盒实验 · 仅收集"
+          : "冻结快照 · 只读"
+      });
     }
 
     if (this.loading) {
@@ -1342,35 +1348,47 @@ export class GitHistoryDetailView extends ItemView {
     const request = this.request;
     const file = this.file;
     const generation = this.contentGeneration;
-    const canRestoreHunk = !this.ignoreFrontmatter
+    const canPrepareHunk = !this.ignoreFrontmatter
       && !this.ignoreBlankLines
       && baseContent === this.baseContent
       && targetContent === this.targetContent
-      && !request?.readOnly
       && request?.target.kind === "working"
       && file !== null
       && this.hasCurrentContent();
+    const canRestoreHunk = canPrepareHunk && !request?.readOnly;
+    const canCollectHunk = canPrepareHunk && this.canCollectToRecoveryBasket();
     renderUnifiedDiff(container, baseContent, targetContent, {
       ignoreWhitespace: this.plugin.settings.ignoreWhitespace,
       ignoreBlankLines: this.ignoreBlankLines,
-      ...(canRestoreHunk
+      ...(canRestoreHunk || canCollectHunk
         ? {
-            onRestoreHunk: async (targetContent: string, hunkNumber: number) => {
-              if (!request || !file) return;
-              await this.confirmHunkRestore(targetContent, hunkNumber, {
-                request,
-                file,
-                generation
-              });
-            },
-            onAddHunkToBasket: async (target: HunkRestoreTarget) => {
-              if (!request || !file) return;
-              await this.addHunkToRecoveryBasket(target, {
-                request,
-                file,
-                generation
-              });
-            },
+            ...(canRestoreHunk
+              ? {
+                  onRestoreHunk: async (
+                    targetContent: string,
+                    hunkNumber: number
+                  ) => {
+                    if (!request || !file) return;
+                    await this.confirmHunkRestore(targetContent, hunkNumber, {
+                      request,
+                      file,
+                      generation
+                    });
+                  }
+                }
+              : {}),
+            ...(canCollectHunk
+              ? {
+                  onAddHunkToBasket: async (target: HunkRestoreTarget) => {
+                    if (!request || !file) return;
+                    await this.addHunkToRecoveryBasket(target, {
+                      request,
+                      file,
+                      generation
+                    });
+                  }
+                }
+              : {}),
             onLocateLine: async (line: number) => this.locateCurrentLine(line)
           }
         : {})
@@ -1833,7 +1851,7 @@ export class GitHistoryDetailView extends ItemView {
   private canCollectToRecoveryBasket(): boolean {
     return Boolean(
       this.request
-      && !this.request.readOnly
+      && (!this.request.readOnly || this.request.allowRecoveryCollection)
       && this.request.base.kind === "commit"
       && this.request.target.kind === "working"
       && this.file
@@ -1842,6 +1860,9 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private recoveryBasketSource(request: DetailRequest): RecoveryBasketSource {
+    if (request.recoverySourceOverride) {
+      return { ...request.recoverySourceOverride };
+    }
     if (request.base.kind !== "commit") {
       throw new Error("恢复篮子只能从 Git 历史版本收集内容。");
     }

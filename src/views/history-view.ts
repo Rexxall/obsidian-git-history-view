@@ -20,6 +20,7 @@ import type {
 } from "../models";
 import { GitCommandError } from "../git/git-client";
 import { VersionMilestoneModal } from "../ui/milestone-modal";
+import { ConfirmActionModal } from "../ui/confirm-modal";
 import {
   contentFingerprint,
   groupEffectiveVersions,
@@ -1204,6 +1205,10 @@ export class GitNoteHistoryView extends ItemView {
           )
         }
       })));
+    menu.addItem((item) => item
+      .setTitle("创建只读时间胶囊")
+      .setIcon("boxes")
+      .onClick(() => this.confirmHistoricalSandbox(group.representative)));
     menu.addSeparator();
     menu.addItem((item) => item
       .setTitle("查看这组变化")
@@ -1248,6 +1253,40 @@ export class GitNoteHistoryView extends ItemView {
       target: { kind: "commit", commit: target },
       initialMode: this.plugin.settings.defaultDetailMode
     });
+  }
+
+  private async createHistoricalSandbox(
+    commit: GitCommitVersion
+  ): Promise<void> {
+    if (!this.history) return;
+    try {
+      const before = this.plugin.getHistoricalSandboxes().length;
+      const record = await this.plugin.createHistoricalSandbox(
+        this.history.context,
+        commit
+      );
+      const reused = this.plugin.getHistoricalSandboxes().length === before;
+      new Notice(
+        reused
+          ? `已打开现有时间胶囊「${record.name}」。`
+          : `只读时间胶囊「${record.name}」已创建。`
+      );
+    } catch (error) {
+      new Notice(
+        `创建历史沙盒失败：${error instanceof Error ? error.message : String(error)}`,
+        10000
+      );
+    }
+  }
+
+  private confirmHistoricalSandbox(commit: GitCommitVersion): void {
+    new ConfirmActionModal(
+      this.app,
+      "创建整套历史 Vault 的只读时间胶囊？",
+      `将从 ${commit.shortHash} 创建一个隔离 Git worktree，可能需要复制较多附件并占用磁盘空间。当前 Vault 不会 checkout；历史社区插件会被禁用。`,
+      "创建时间胶囊",
+      () => this.createHistoricalSandbox(commit)
+    ).open();
   }
 
   private renderHeader(container: HTMLElement): void {
@@ -2006,6 +2045,10 @@ export class GitNoteHistoryView extends ItemView {
           aggregation: "commit"
         }
       })));
+    menu.addItem((item) => item
+      .setTitle("创建只读时间胶囊")
+      .setIcon("boxes")
+      .onClick(() => this.confirmHistoricalSandbox(commit)));
     menu.addSeparator();
     menu.addItem((item) => item.setTitle("与当前版本比较").setIcon("git-compare-arrows").onClick(() => void this.openAgainstWorking(commit)));
     this.addPreviousMilestoneCompareItems(menu, commit, state);

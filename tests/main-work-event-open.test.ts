@@ -69,6 +69,18 @@ const recoveryBasketMocks = vi.hoisted(() => {
   return { RecoveryBasketViewMock };
 });
 
+const historicalSandboxMocks = vi.hoisted(() => {
+  class HistoricalSandboxViewMock {
+    refreshCount = 0;
+
+    async refresh(): Promise<void> {
+      this.refreshCount += 1;
+    }
+  }
+
+  return { HistoricalSandboxViewMock };
+});
+
 vi.mock("obsidian", () => ({
   MarkdownView: class {},
   Notice: class {},
@@ -134,6 +146,10 @@ vi.mock("../src/views/knowledge-trace-view", () => ({
 vi.mock("../src/views/recovery-basket-view", () => ({
   GIT_RECOVERY_BASKET_VIEW_TYPE: "git-recovery-basket",
   GitRecoveryBasketView: recoveryBasketMocks.RecoveryBasketViewMock
+}));
+vi.mock("../src/views/historical-sandbox-view", () => ({
+  GIT_HISTORICAL_SANDBOX_VIEW_TYPE: "git-historical-sandbox",
+  GitHistoricalSandboxView: historicalSandboxMocks.HistoricalSandboxViewMock
 }));
 vi.mock("../src/knowledge-trace/version-materializer", () => ({
   KnowledgeVersionMaterializer: class {}

@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   FileReviewState,
   GitRepositoryContext,
@@ -20,8 +21,9 @@ import {
   MAX_RECOVERY_BASKET_ITEMS
 } from "../recovery-basket/planner";
 import { contentFingerprint } from "../history/version-groups";
+import type { HistoricalSandboxRecord } from "../sandbox/types";
 
-export const CURRENT_DATA_SCHEMA_VERSION = 3;
+export const CURRENT_DATA_SCHEMA_VERSION = 4;
 export const REVIEW_STATE_KEY_SEPARATOR = "\u001f";
 
 export function reviewStateKey(context: GitRepositoryContext): string {
@@ -168,6 +170,83 @@ function normalizeRecoveryBaskets(value: unknown): Record<string, RecoveryBasket
       continue;
     }
     result[basket.filePath] = basket;
+  }
+  return result;
+}
+
+function normalizeHistoricalSandboxes(
+  value: unknown
+): Record<string, HistoricalSandboxRecord> {
+  const result: Record<string, HistoricalSandboxRecord> = {};
+  for (const [key, raw] of Object.entries(objectRecord(value))) {
+    if (!raw || typeof raw !== "object") continue;
+    const candidate = raw as Partial<HistoricalSandboxRecord>;
+    const source = candidate.source;
+    const createdAt = normalizedIso(candidate.createdAt);
+    const updatedAt = normalizedIso(candidate.updatedAt);
+    const lastOpenedAt = normalizedIso(candidate.lastOpenedAt);
+    if (
+      candidate.schemaVersion !== 1
+      || typeof candidate.id !== "string"
+      || !candidate.id
+      || key !== candidate.id
+      || typeof candidate.name !== "string"
+      || !candidate.name.trim()
+      || typeof candidate.rootPath !== "string"
+      || !path.isAbsolute(candidate.rootPath)
+      || typeof candidate.vaultPath !== "string"
+      || !path.isAbsolute(candidate.vaultPath)
+      || typeof candidate.vaultRelativePath !== "string"
+      || candidate.vaultRelativePath === ".."
+      || candidate.vaultRelativePath.startsWith(`..${path.sep}`)
+      || path.isAbsolute(candidate.vaultRelativePath)
+      || (candidate.mode !== "capsule" && candidate.mode !== "editable")
+      || (candidate.lifecycle !== "active" && candidate.lifecycle !== "archived")
+      || !source
+      || typeof source !== "object"
+      || typeof source.repositoryRoot !== "string"
+      || !path.isAbsolute(source.repositoryRoot)
+      || typeof source.vaultRoot !== "string"
+      || !path.isAbsolute(source.vaultRoot)
+      || typeof source.commitHash !== "string"
+      || !/^[0-9a-f]{40,64}$/iu.test(source.commitHash)
+      || typeof source.shortHash !== "string"
+      || typeof source.commitSubject !== "string"
+      || typeof source.commitAuthoredAt !== "string"
+      || !createdAt
+      || !updatedAt
+    ) continue;
+    const relativeVault = path.relative(candidate.rootPath, candidate.vaultPath);
+    if (
+      relativeVault !== candidate.vaultRelativePath
+      || relativeVault === ".."
+      || relativeVault.startsWith(`..${path.sep}`)
+      || path.isAbsolute(relativeVault)
+    ) continue;
+    result[candidate.id] = {
+      schemaVersion: 1,
+      id: candidate.id,
+      name: candidate.name.trim().slice(0, 80),
+      rootPath: path.resolve(candidate.rootPath),
+      vaultPath: path.resolve(candidate.vaultPath),
+      vaultRelativePath: candidate.vaultRelativePath,
+      mode: candidate.mode,
+      lifecycle: candidate.lifecycle,
+      source: {
+        repositoryRoot: path.resolve(source.repositoryRoot),
+        vaultRoot: path.resolve(source.vaultRoot),
+        commitHash: source.commitHash.toLowerCase(),
+        shortHash: source.shortHash.slice(0, 12),
+        commitSubject: source.commitSubject,
+        commitAuthoredAt: source.commitAuthoredAt,
+        ...(typeof source.anchorRepositoryPath === "string"
+          ? { anchorRepositoryPath: source.anchorRepositoryPath }
+          : {})
+      },
+      createdAt,
+      updatedAt,
+      ...(lastOpenedAt ? { lastOpenedAt } : {})
+    };
   }
   return result;
 }
@@ -321,7 +400,8 @@ export function migratePluginData(value: unknown): PersistedPluginData {
     ...(candidate as PersistedPluginData),
     schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
     fileReviewStates,
-    recoveryBaskets: normalizeRecoveryBaskets(candidate.recoveryBaskets)
+    recoveryBaskets: normalizeRecoveryBaskets(candidate.recoveryBaskets),
+    historicalSandboxes: normalizeHistoricalSandboxes(candidate.historicalSandboxes)
   };
 }
 

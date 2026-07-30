@@ -308,4 +308,34 @@ describe("detail view content leases", () => {
     });
     expect(render).toHaveBeenCalled();
   });
+
+  it("allows a frozen sandbox comparison to collect into the recovery basket with its sandbox provenance", () => {
+    const { view, request: detailRequest } = detailFixture();
+    const sandboxSource = {
+      versionKey: "sandbox:af14013cc1c494d95163:Note.md",
+      label: "历史沙盒 · 82ba8ccb",
+      commitHash: "82ba8ccb4f3092a6a093a66a02c62d052d89b41a",
+      shortHash: "82ba8ccb",
+      historicalPath: "Note.md",
+      authoredAt: "2026-07-30T01:05:10+09:00",
+      subject: "Historical sandbox change"
+    };
+    Object.assign(detailRequest, {
+      readOnly: true,
+      allowRecoveryCollection: true,
+      recoverySourceOverride: sandboxSource
+    });
+
+    expect((view as unknown as {
+      canCollectToRecoveryBasket: () => boolean;
+    }).canCollectToRecoveryBasket()).toBe(true);
+    expect((view as unknown as {
+      recoveryBasketSource: (request: DetailRequest) => typeof sandboxSource;
+    }).recoveryBasketSource(detailRequest)).toEqual(sandboxSource);
+
+    delete detailRequest.allowRecoveryCollection;
+    expect((view as unknown as {
+      canCollectToRecoveryBasket: () => boolean;
+    }).canCollectToRecoveryBasket()).toBe(false);
+  });
 });

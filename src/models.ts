@@ -1,3 +1,6 @@
+import type { HistoricalSandboxRecord } from "./sandbox/types";
+import type { RecoveryBasketSource } from "./recovery-basket/types";
+
 export interface GitCommitVersion {
   hash: string;
   shortHash: string;
@@ -186,6 +189,7 @@ export interface GitNoteHistorySettings {
   ignoreWhitespace: boolean;
   showCommitStats: boolean;
   reviewExcludedPaths: string[];
+  sandboxStorageRoot: string;
 }
 
 export interface UndoSnapshot {
@@ -228,6 +232,7 @@ export interface PersistedPluginData {
   undoStack?: UndoSnapshot[];
   restoreReceipts?: RestoreReceipt[];
   recoveryBaskets?: Record<string, RecoveryBasketState>;
+  historicalSandboxes?: Record<string, HistoricalSandboxRecord>;
   fileReviewStates?: Record<string, FileReviewState>;
   reviewInboxCheckpoints?: Record<string, ReviewInboxCheckpoint>;
 }
@@ -243,6 +248,8 @@ export interface DetailRequest {
   target: VersionReference;
   initialMode?: DetailMode;
   readOnly?: boolean;
+  allowRecoveryCollection?: boolean;
+  recoverySourceOverride?: RecoveryBasketSource;
   baseContentOverride?: string;
   targetContentOverride?: string;
 }
