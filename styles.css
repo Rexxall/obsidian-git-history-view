@@ -5952,3 +5952,1418 @@ button.git-work-event-file.is-anchor:not([aria-current="true"]) {
     display: none;
   }
 }
+
+/* Knowledge trace */
+
+.git-knowledge-trace-view {
+  --gkt-border: var(--background-modifier-border);
+  --gkt-soft-border: color-mix(in srgb, var(--background-modifier-border) 68%, transparent);
+  --gkt-accent-soft: color-mix(in srgb, var(--interactive-accent) 9%, transparent);
+  --gkt-green-soft: color-mix(in srgb, var(--color-green) 9%, transparent);
+  --gkt-red-soft: color-mix(in srgb, var(--color-red) 8%, transparent);
+  --gkt-orange-soft: color-mix(in srgb, var(--color-orange) 9%, transparent);
+  container-type: inline-size;
+  height: 100%;
+  min-height: 0;
+  padding: 0 0 48px !important;
+  overflow: auto;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.git-knowledge-trace-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 108px;
+  padding: 18px max(22px, calc((100% - 1120px) / 2));
+  border-bottom: 1px solid var(--gkt-border);
+  background:
+    linear-gradient(
+      118deg,
+      color-mix(in srgb, var(--interactive-accent) 5%, var(--background-primary)),
+      var(--background-primary) 44%
+    );
+}
+
+.git-knowledge-trace-identity {
+  min-width: 0;
+}
+
+.git-knowledge-trace-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.045em;
+}
+
+.git-knowledge-trace-eyebrow > span:first-child svg {
+  width: 14px;
+  height: 14px;
+  color: var(--interactive-accent);
+}
+
+.git-knowledge-trace-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 19px;
+  margin-left: 2px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--gkt-accent-soft);
+  color: var(--interactive-accent);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+  letter-spacing: 0;
+}
+
+.git-knowledge-trace-readonly svg {
+  width: 11px;
+  height: 11px;
+}
+
+.git-knowledge-trace-identity h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: 21px;
+  font-weight: 670;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-file-path {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-assertion {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-top: 9px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.git-knowledge-trace-assertion code {
+  max-width: min(680px, 75%);
+  padding: 3px 8px;
+  overflow: hidden;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.git-knowledge-trace-header-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.git-knowledge-trace-header-actions button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-knowledge-trace-frozen,
+.git-knowledge-trace-conclusion,
+.git-knowledge-trace-manual-focus,
+.git-knowledge-trace-boundaries,
+.git-knowledge-trace-timeline,
+.git-knowledge-trace-warnings {
+  width: min(1120px, calc(100% - 44px));
+  margin-inline: auto;
+}
+
+.git-knowledge-trace-frozen {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background-secondary) 64%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-knowledge-trace-frozen.is-stale {
+  border-color: color-mix(in srgb, var(--color-orange) 30%, var(--gkt-border));
+  background: var(--gkt-orange-soft);
+}
+
+.git-knowledge-trace-frozen-icon {
+  display: grid;
+  color: var(--interactive-accent);
+  place-items: center;
+}
+
+.git-knowledge-trace-frozen.is-stale .git-knowledge-trace-frozen-icon {
+  color: var(--color-orange);
+}
+
+.git-knowledge-trace-frozen-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.git-knowledge-trace-frozen-copy {
+  min-width: 0;
+}
+
+.git-knowledge-trace-frozen-copy strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+}
+
+.git-knowledge-trace-frozen-copy > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-frozen-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-frozen-context code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+}
+
+.git-knowledge-trace-conclusion {
+  --gkt-conclusion-color: var(--interactive-accent);
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 13px;
+  padding: 17px 18px;
+  border: 1px solid var(--gkt-border);
+  border-left: 3px solid var(--gkt-conclusion-color);
+  border-radius: 10px;
+  background: var(--background-primary-alt);
+}
+
+.git-knowledge-trace-conclusion.is-confirmed {
+  --gkt-conclusion-color: var(--color-green);
+}
+
+.git-knowledge-trace-conclusion.is-repeated {
+  --gkt-conclusion-color: var(--color-orange);
+}
+
+.git-knowledge-trace-conclusion.is-manual {
+  --gkt-conclusion-color: var(--interactive-accent);
+}
+
+.git-knowledge-trace-conclusion.is-unknown,
+.git-knowledge-trace-conclusion.is-empty {
+  --gkt-conclusion-color: var(--text-faint);
+}
+
+.git-knowledge-trace-conclusion-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--gkt-conclusion-color) 10%, transparent);
+  color: var(--gkt-conclusion-color);
+  place-items: center;
+}
+
+.git-knowledge-trace-conclusion-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.git-knowledge-trace-conclusion-copy {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.45;
+}
+
+.git-knowledge-trace-conclusion-copy h3 {
+  margin: 0 0 3px;
+  color: var(--text-normal);
+  font-size: 15px;
+  font-weight: var(--font-semibold);
+}
+
+.git-knowledge-trace-probe-summary {
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.git-knowledge-trace-limited {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--color-orange);
+  font-size: 11px;
+}
+
+.git-knowledge-trace-limited svg {
+  width: 13px;
+  height: 13px;
+}
+
+.git-knowledge-trace-metrics {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background-secondary) 62%, transparent);
+}
+
+.git-knowledge-trace-metric {
+  display: grid;
+  min-width: 58px;
+  padding: 7px 10px 6px;
+  border-left: 1px solid var(--gkt-soft-border);
+  place-items: center;
+}
+
+.git-knowledge-trace-metric:first-child {
+  border-left: 0;
+}
+
+.git-knowledge-trace-metric-value {
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.git-knowledge-trace-metric-label {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.git-knowledge-trace-boundaries,
+.git-knowledge-trace-manual-focus,
+.git-knowledge-trace-timeline {
+  margin-top: 22px;
+}
+
+.git-knowledge-trace-boundaries > h3,
+.git-knowledge-trace-section-heading h3 {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: var(--font-semibold);
+}
+
+.git-knowledge-trace-boundary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.git-knowledge-trace-boundary {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-secondary) 40%, transparent);
+}
+
+.git-knowledge-trace-boundary.is-verified {
+  border-color: color-mix(in srgb, var(--color-green) 25%, var(--gkt-border));
+  background:
+    linear-gradient(135deg, var(--gkt-green-soft), transparent 48%),
+    var(--background-primary-alt);
+}
+
+.git-knowledge-trace-boundary.is-candidate {
+  border-style: dashed;
+}
+
+.git-knowledge-trace-boundary.is-manual {
+  border-color: color-mix(in srgb, var(--interactive-accent) 24%, var(--gkt-border));
+  background:
+    linear-gradient(135deg, var(--gkt-accent-soft), transparent 48%),
+    var(--background-primary-alt);
+}
+
+.git-knowledge-trace-boundary.is-transition {
+  border-color: color-mix(in srgb, var(--color-orange) 22%, var(--gkt-border));
+  background:
+    linear-gradient(135deg, var(--gkt-orange-soft), transparent 48%),
+    var(--background-primary-alt);
+}
+
+.git-knowledge-trace-boundary.is-transition .git-knowledge-trace-boundary-title svg {
+  color: var(--color-orange);
+}
+
+.git-knowledge-trace-boundary-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.git-knowledge-trace-boundary-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--interactive-accent);
+}
+
+.git-knowledge-trace-boundary.is-verified .git-knowledge-trace-boundary-title svg {
+  color: var(--color-green);
+}
+
+.git-knowledge-trace-boundary-title strong {
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+}
+
+.git-knowledge-trace-boundary-direction {
+  margin-left: auto;
+  color: var(--text-faint);
+}
+
+.git-knowledge-trace-boundary-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0;
+}
+
+.git-knowledge-trace-boundary-arrow {
+  display: grid;
+  color: var(--text-faint);
+  place-items: center;
+}
+
+.git-knowledge-trace-boundary-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-knowledge-trace-boundary-version {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 7px;
+  background: var(--background-primary);
+}
+
+.git-knowledge-trace-boundary-version-label {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-boundary-copy {
+  min-height: 46px;
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+}
+
+.git-knowledge-trace-boundary > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  margin-top: 1px;
+}
+
+.git-knowledge-trace-boundary > button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-knowledge-trace-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.git-knowledge-trace-version-list {
+  margin: 9px 0 0;
+  padding: 0;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--background-primary-alt);
+  list-style: none;
+}
+
+.git-knowledge-trace-version-group {
+  border-bottom: 1px solid var(--gkt-soft-border);
+  list-style: none;
+}
+
+.git-knowledge-trace-version-group:last-child {
+  border-bottom: 0;
+}
+
+.git-knowledge-trace-version-group > details > summary {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 8px 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.git-knowledge-trace-version-group > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.git-knowledge-trace-version-group > details > summary:hover {
+  background: color-mix(in srgb, var(--background-secondary) 43%, transparent);
+}
+
+.git-knowledge-trace-version-group-marker {
+  display: grid;
+  color: var(--text-faint);
+  place-items: center;
+}
+
+.git-knowledge-trace-version-group-marker svg {
+  width: 16px;
+  height: 16px;
+}
+
+.git-knowledge-trace-version-group.is-holds .git-knowledge-trace-version-group-marker {
+  color: var(--color-green);
+}
+
+.git-knowledge-trace-version-group.is-does-not-hold .git-knowledge-trace-version-group-marker {
+  color: var(--color-red);
+}
+
+.git-knowledge-trace-version-group-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.git-knowledge-trace-version-group-copy strong {
+  color: var(--text-normal);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+}
+
+.git-knowledge-trace-version-group-copy span {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-version-group-count {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.git-knowledge-trace-version-group-chevron {
+  display: grid;
+  color: var(--text-faint);
+  transition: transform 140ms ease;
+  place-items: center;
+}
+
+.git-knowledge-trace-version-group-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-knowledge-trace-version-group > details[open] > summary .git-knowledge-trace-version-group-chevron {
+  transform: rotate(90deg);
+}
+
+.git-knowledge-trace-version-group > details[open] > summary {
+  border-bottom: 1px solid var(--gkt-soft-border);
+}
+
+.git-knowledge-trace-version-group-list {
+  margin: 0;
+  padding: 0 0 0 14px;
+  background: color-mix(in srgb, var(--background-secondary) 28%, transparent);
+  list-style: none;
+}
+
+.git-knowledge-trace-version-group-list .git-knowledge-trace-version:last-child {
+  border-bottom: 0;
+}
+
+.git-knowledge-trace-version {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 24px minmax(0, 1fr);
+  align-items: start;
+  min-height: 56px;
+  padding: 10px 13px 10px 7px;
+  border-bottom: 1px solid var(--gkt-soft-border);
+}
+
+.git-knowledge-trace-version:last-child {
+  border-bottom: 0;
+}
+
+.git-knowledge-trace-version:hover {
+  background: color-mix(in srgb, var(--background-secondary) 43%, transparent);
+}
+
+.git-knowledge-trace-version-index {
+  padding-top: 3px;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.git-knowledge-trace-version-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--background-primary-alt);
+  color: var(--text-faint);
+  place-items: center;
+}
+
+.git-knowledge-trace-version-marker::after {
+  position: absolute;
+  z-index: -1;
+  top: 20px;
+  bottom: -37px;
+  left: 9px;
+  width: 1px;
+  background: var(--gkt-soft-border);
+  content: "";
+}
+
+.git-knowledge-trace-version:last-child .git-knowledge-trace-version-marker::after {
+  display: none;
+}
+
+.git-knowledge-trace-version-marker svg {
+  width: 15px;
+  height: 15px;
+}
+
+.git-knowledge-trace-version.is-holds .git-knowledge-trace-version-marker {
+  color: var(--color-green);
+}
+
+.git-knowledge-trace-version.is-does-not-hold .git-knowledge-trace-version-marker {
+  color: var(--color-red);
+}
+
+.git-knowledge-trace-version.is-working {
+  background:
+    linear-gradient(90deg, var(--gkt-accent-soft), transparent 35%),
+    var(--background-primary-alt);
+}
+
+.git-knowledge-trace-version-copy {
+  min-width: 0;
+}
+
+.git-knowledge-trace-version-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.git-knowledge-trace-version-title > strong {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: 12px;
+  font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--background-secondary);
+  color: var(--text-faint);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-version-badge.is-working,
+.git-knowledge-trace-version-badge.is-candidate {
+  color: var(--interactive-accent);
+  background: var(--gkt-accent-soft);
+}
+
+.git-knowledge-trace-version-badge.is-verified {
+  color: var(--color-green);
+  background: var(--gkt-green-soft);
+}
+
+.git-knowledge-trace-version-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.git-knowledge-trace-version-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  margin-top: 4px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.git-knowledge-trace-version-meta code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.git-knowledge-trace-outcome {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+}
+
+.git-knowledge-trace-outcome.is-holds,
+.git-knowledge-trace-boundary-version.is-holds .git-knowledge-trace-outcome {
+  color: var(--color-green);
+}
+
+.git-knowledge-trace-outcome.is-does-not-hold,
+.git-knowledge-trace-boundary-version.is-does-not-hold .git-knowledge-trace-outcome {
+  color: var(--color-red);
+}
+
+.git-knowledge-trace-version-subject,
+.git-knowledge-trace-version-evidence,
+.git-knowledge-trace-version-explanation,
+.git-knowledge-trace-version-reason {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.git-knowledge-trace-version-evidence,
+.git-knowledge-trace-version-explanation {
+  padding: 5px 7px 6px;
+  border-left: 2px solid color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+  border-radius: 0 5px 5px 0;
+  background: color-mix(in srgb, var(--background-secondary) 55%, transparent);
+}
+
+.git-knowledge-trace-version-evidence summary,
+.git-knowledge-trace-version-explanation summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 10px;
+  list-style-position: inside;
+}
+
+.git-knowledge-trace-version-evidence[open] summary,
+.git-knowledge-trace-version-explanation[open] summary {
+  color: var(--text-muted);
+}
+
+.git-knowledge-trace-version-evidence pre {
+  max-height: 180px;
+  margin: 6px 0 0;
+  padding: 7px 8px;
+  overflow: auto;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 5px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.git-knowledge-trace-version-explanation > div {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.git-knowledge-trace-version-reason {
+  color: var(--color-orange);
+}
+
+.git-knowledge-trace-manual-progress {
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.git-knowledge-trace-manual-focus {
+  margin-top: 22px;
+}
+
+.git-knowledge-trace-manual-focus-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+  margin-top: 9px;
+  padding: 15px 16px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 28%, var(--gkt-border));
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, var(--gkt-accent-soft), transparent 50%),
+    var(--background-primary-alt);
+}
+
+.git-knowledge-trace-manual-focus-card.is-complete {
+  grid-template-columns: 24px minmax(0, 1fr);
+  color: var(--color-green);
+}
+
+.git-knowledge-trace-manual-focus-card.is-complete > span svg {
+  width: 18px;
+  height: 18px;
+}
+
+.git-knowledge-trace-manual-focus-card.is-complete strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-normal);
+  font-size: 12px;
+}
+
+.git-knowledge-trace-manual-focus-card.is-complete div div {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.git-knowledge-trace-manual-focus-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  min-width: 0;
+}
+
+.git-knowledge-trace-manual-focus-identity strong {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-manual-focus-identity > span:last-child {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.git-knowledge-trace-manual-focus-step {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--gkt-accent-soft);
+  color: var(--interactive-accent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-knowledge-trace-manual-focus-card .git-knowledge-trace-manual-preview {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.git-knowledge-trace-manual-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+button.git-knowledge-trace-manual-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 25px;
+  margin-top: 7px;
+  padding: 2px 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+button.git-knowledge-trace-manual-jump svg {
+  width: 12px;
+  height: 12px;
+}
+
+button.git-knowledge-trace-manual-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+button.git-knowledge-trace-manual-choice svg {
+  width: 12px;
+  height: 12px;
+}
+
+button.git-knowledge-trace-manual-choice:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+button.git-knowledge-trace-manual-choice.is-selected {
+  background: var(--background-primary);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 12%, transparent);
+  color: var(--interactive-accent);
+}
+
+button.git-knowledge-trace-manual-choice.is-holds.is-selected {
+  color: var(--color-green);
+}
+
+button.git-knowledge-trace-manual-choice.is-does-not-hold.is-selected {
+  color: var(--color-red);
+}
+
+.git-knowledge-trace-manual-preview {
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.git-knowledge-trace-manual-preview summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--text-faint);
+}
+
+.git-knowledge-trace-manual-preview[open] summary {
+  color: var(--text-muted);
+}
+
+.git-knowledge-trace-manual-preview pre {
+  max-height: 320px;
+  margin: 7px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 7px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.git-knowledge-trace-timeline-empty {
+  margin-top: 9px;
+  padding: 22px;
+  border: 1px dashed var(--gkt-border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  text-align: center;
+}
+
+.git-knowledge-trace-warnings {
+  margin-top: 13px;
+  padding: 0 11px;
+  border: 1px solid var(--gkt-soft-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-secondary) 50%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-knowledge-trace-warnings summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.git-knowledge-trace-warnings summary::-webkit-details-marker {
+  display: none;
+}
+
+.git-knowledge-trace-warnings summary svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-orange);
+}
+
+.git-knowledge-trace-warnings ul {
+  margin: 0 0 10px 21px;
+  padding: 0;
+}
+
+.git-knowledge-trace-state {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 520px);
+  align-items: start;
+  justify-content: center;
+  gap: 10px;
+  width: min(760px, calc(100% - 44px));
+  margin: 52px auto;
+  padding: 26px;
+  border: 1px dashed var(--gkt-border);
+  border-radius: 11px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.git-knowledge-trace-state > span:first-child {
+  color: var(--text-faint);
+}
+
+.git-knowledge-trace-state > span:first-child svg {
+  width: 20px;
+  height: 20px;
+}
+
+.git-knowledge-trace-state strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-normal);
+}
+
+.git-knowledge-trace-state button {
+  margin-top: 12px;
+}
+
+.git-knowledge-trace-state.is-error > span:first-child {
+  color: var(--color-red);
+}
+
+.git-knowledge-trace-state.is-loading > span:first-child {
+  animation: git-knowledge-trace-spin 900ms linear infinite;
+}
+
+@keyframes git-knowledge-trace-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Knowledge trace setup */
+
+.git-knowledge-trace-setup-modal {
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+}
+
+.git-knowledge-trace-setup-modal .modal-content {
+  padding-top: 4px;
+}
+
+.git-knowledge-trace-setup-intro,
+.git-knowledge-trace-control-note,
+.git-knowledge-trace-manual-note {
+  display: flex;
+  gap: 7px;
+  padding: 9px 11px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-secondary) 58%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+
+.git-knowledge-trace-setup-intro strong,
+.git-knowledge-trace-control-note strong,
+.git-knowledge-trace-manual-note strong {
+  flex: 0 0 auto;
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+}
+
+.git-knowledge-trace-manual-note {
+  border-color: color-mix(in srgb, var(--color-orange) 24%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--color-orange) 6%, transparent);
+}
+
+.git-knowledge-trace-setup-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-knowledge-trace-setup-file-label {
+  color: var(--text-faint);
+}
+
+.git-knowledge-trace-setup-file-path {
+  overflow: hidden;
+  color: var(--text-normal);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-knowledge-trace-assertion-kinds {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: var(--background-secondary);
+}
+
+button.git-knowledge-trace-assertion-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-knowledge-trace-assertion-kind-icon {
+  display: grid;
+  place-items: center;
+}
+
+.git-knowledge-trace-assertion-kind-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.git-knowledge-trace-assertion-kind-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.git-knowledge-trace-assertion-kind:hover {
+  background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent);
+  color: var(--text-normal);
+}
+
+button.git-knowledge-trace-assertion-kind.is-selected {
+  background: var(--background-primary);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 12%, transparent);
+  color: var(--interactive-accent);
+  font-weight: var(--font-medium);
+}
+
+button.git-knowledge-trace-assertion-kind:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.git-knowledge-trace-assertion-controls {
+  min-height: 194px;
+  margin: 9px 0 4px;
+  padding: 2px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background-primary-alt) 82%, transparent);
+}
+
+.git-knowledge-trace-assertion-controls .setting-item,
+.git-knowledge-trace-setup-modal > .setting-item {
+  padding-block: 10px;
+}
+
+.git-knowledge-trace-assertion-controls textarea {
+  width: min(330px, 100%);
+  min-height: 56px;
+  resize: vertical;
+}
+
+.git-knowledge-trace-control-note,
+.git-knowledge-trace-manual-note {
+  margin: 9px 0 2px;
+}
+
+.git-knowledge-trace-setup-error {
+  min-height: 22px;
+  padding: 3px 2px;
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-knowledge-trace-setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.git-knowledge-trace-setup-modal input.is-invalid {
+  border-color: var(--text-error);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-knowledge-trace-state.is-loading > span:first-child,
+  .git-knowledge-trace-version-group-chevron {
+    animation: none;
+    transition: none;
+  }
+}
+
+@container (max-width: 760px) {
+  .git-knowledge-trace-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px 18px;
+  }
+
+  .git-knowledge-trace-header-actions {
+    justify-content: flex-start;
+  }
+
+  .git-knowledge-trace-frozen,
+  .git-knowledge-trace-conclusion,
+  .git-knowledge-trace-manual-focus,
+  .git-knowledge-trace-boundaries,
+  .git-knowledge-trace-timeline,
+  .git-knowledge-trace-warnings {
+    width: calc(100% - 36px);
+  }
+
+  .git-knowledge-trace-conclusion {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .git-knowledge-trace-metrics {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .git-knowledge-trace-boundary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 520px) {
+  .git-knowledge-trace-header {
+    padding-inline: 14px;
+  }
+
+  .git-knowledge-trace-identity h2 {
+    font-size: 18px;
+  }
+
+  .git-knowledge-trace-assertion code {
+    max-width: 76%;
+  }
+
+  .git-knowledge-trace-header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .git-knowledge-trace-header-actions button {
+    justify-content: center;
+  }
+
+  .git-knowledge-trace-frozen,
+  .git-knowledge-trace-conclusion,
+  .git-knowledge-trace-manual-focus,
+  .git-knowledge-trace-boundaries,
+  .git-knowledge-trace-timeline,
+  .git-knowledge-trace-warnings {
+    width: calc(100% - 28px);
+  }
+
+  .git-knowledge-trace-frozen {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .git-knowledge-trace-frozen-context {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+
+  .git-knowledge-trace-conclusion {
+    padding: 13px;
+  }
+
+  .git-knowledge-trace-boundary-route {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .git-knowledge-trace-boundary-arrow {
+    transform: rotate(90deg);
+  }
+
+  .git-knowledge-trace-version {
+    grid-template-columns: 22px 20px minmax(0, 1fr);
+    padding-inline: 4px 10px;
+  }
+
+  .git-knowledge-trace-version-index {
+    text-align: right;
+  }
+
+  .git-knowledge-trace-version-title {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .git-knowledge-trace-version-title > strong {
+    flex: 1 1 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .git-knowledge-trace-manual-focus-identity strong {
+    flex: 1 1 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .git-knowledge-trace-manual-focus-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+    padding: 13px;
+  }
+
+  .git-knowledge-trace-manual-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-self: start;
+    max-width: 100%;
+    margin-top: 0;
+  }
+
+  button.git-knowledge-trace-manual-choice {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .git-knowledge-trace-setup-modal {
+    width: calc(100vw - 20px);
+  }
+
+  .git-knowledge-trace-assertion-kinds {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .git-knowledge-trace-assertion-controls {
+    padding-inline: 9px;
+  }
+
+  .git-knowledge-trace-assertion-controls .setting-item {
+    display: block;
+  }
+
+  .git-knowledge-trace-assertion-controls .setting-item-control {
+    margin-top: 7px;
+  }
+
+  .git-knowledge-trace-assertion-controls textarea {
+    width: 100%;
+  }
+}

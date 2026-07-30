@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DetailRequest } from "../src/models";
 import type { WorkEventRequest } from "../src/work-events/types";
+import type { KnowledgeTraceSetupValue } from "../src/ui/knowledge-trace-modal";
 
 const workEventMocks = vi.hoisted(() => {
   class WorkEventViewMock {
@@ -24,6 +25,36 @@ const detailMocks = vi.hoisted(() => {
   }
 
   return { DetailViewMock };
+});
+
+const knowledgeTraceMocks = vi.hoisted(() => {
+  class KnowledgeTraceViewMock {
+    readonly requests: unknown[] = [];
+
+    async setRequest(request: unknown): Promise<void> {
+      this.requests.push(request);
+    }
+  }
+
+  class KnowledgeTraceSetupModalMock {
+    static readonly instances: KnowledgeTraceSetupModalMock[] = [];
+    opened = false;
+
+    constructor(
+      readonly app: unknown,
+      readonly options: {
+        onSubmit: (setup: unknown) => void;
+      }
+    ) {
+      KnowledgeTraceSetupModalMock.instances.push(this);
+    }
+
+    open(): void {
+      this.opened = true;
+    }
+  }
+
+  return { KnowledgeTraceViewMock, KnowledgeTraceSetupModalMock };
 });
 
 vi.mock("obsidian", () => ({
@@ -81,6 +112,19 @@ vi.mock("../src/views/work-event-view", () => ({
   GIT_WORK_EVENT_VIEW_TYPE: "git-work-event",
   GitWorkEventView: workEventMocks.WorkEventViewMock
 }));
+vi.mock("../src/ui/knowledge-trace-modal", () => ({
+  KnowledgeTraceSetupModal: knowledgeTraceMocks.KnowledgeTraceSetupModalMock
+}));
+vi.mock("../src/views/knowledge-trace-view", () => ({
+  GIT_KNOWLEDGE_TRACE_VIEW_TYPE: "git-knowledge-trace",
+  GitKnowledgeTraceView: knowledgeTraceMocks.KnowledgeTraceViewMock
+}));
+vi.mock("../src/knowledge-trace/version-materializer", () => ({
+  KnowledgeVersionMaterializer: class {}
+}));
+vi.mock("../src/knowledge-trace/boundary-search", () => ({
+  traceKnowledgeBoundary: vi.fn()
+}));
 
 import GitNoteHistoryPlugin from "../src/main";
 
@@ -104,7 +148,9 @@ function pluginWithWorkspace(workspace: object): GitNoteHistoryPlugin {
     detailOpenGeneration: 0,
     pendingDetailLeaf: null,
     workEventOpenGeneration: 0,
-    pendingWorkEventLeaf: null
+    pendingWorkEventLeaf: null,
+    knowledgeTraceOpenGeneration: 0,
+    pendingKnowledgeTraceLeaf: null
   });
   return plugin;
 }
@@ -129,6 +175,24 @@ const latestDetailRequest: DetailRequest = {
   repositoryRoot: "/vault",
   base: { kind: "working", label: "Latest base" },
   target: { kind: "working", label: "Latest target" }
+};
+const firstKnowledgeTraceRequest: KnowledgeTraceSetupValue = {
+  filePath: "First.md",
+  assertion: {
+    kind: "text",
+    operator: "contains",
+    expected: "first"
+  },
+  maxVersions: 80
+};
+const latestKnowledgeTraceRequest: KnowledgeTraceSetupValue = {
+  filePath: "Latest.md",
+  assertion: {
+    kind: "text",
+    operator: "contains",
+    expected: "latest"
+  },
+  maxVersions: 80
 };
 
 describe("detail view opening", () => {
@@ -223,6 +287,7 @@ describe("work-event view opening", () => {
     const leaf = {
       view: null as unknown,
       getRoot: () => rootSplit,
+      detach: vi.fn(),
       setViewState: vi.fn(async () => {
         await viewReady.promise;
         leaf.view = view;
@@ -277,5 +342,161 @@ describe("work-event view opening", () => {
 
     expect(workspace.getLeaf).not.toHaveBeenCalled();
     expect(view.requests).toEqual([latestRequest]);
+  });
+});
+
+describe("knowledge-trace view opening", () => {
+  it("ignores a setup modal submitted after the plugin unloads", async () => {
+    knowledgeTraceMocks.KnowledgeTraceSetupModalMock.instances.length = 0;
+    const workspace = {
+      rootSplit: {},
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(),
+      revealLeaf: vi.fn(async () => {}),
+      detachLeavesOfType: vi.fn()
+    };
+    const plugin = pluginWithWorkspace(workspace);
+
+    plugin.openKnowledgeTraceSetup(
+      { path: "First.md" } as Parameters<GitNoteHistoryPlugin["openKnowledgeTraceSetup"]>[0]
+    );
+    const modal = knowledgeTraceMocks.KnowledgeTraceSetupModalMock.instances[0];
+    expect(modal?.opened).toBe(true);
+
+    plugin.onunload();
+    modal?.options.onSubmit(firstKnowledgeTraceRequest);
+    await Promise.resolve();
+
+    expect(workspace.getLeaf).not.toHaveBeenCalled();
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+  });
+
+  it("ignores an older setup modal after a newer setup has opened", async () => {
+    knowledgeTraceMocks.KnowledgeTraceSetupModalMock.instances.length = 0;
+    const rootSplit = {};
+    const view = new knowledgeTraceMocks.KnowledgeTraceViewMock();
+    const leaf = {
+      view,
+      getRoot: () => rootSplit
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => [leaf]),
+      getLeaf: vi.fn(),
+      revealLeaf: vi.fn(async () => {})
+    };
+    const plugin = pluginWithWorkspace(workspace);
+    const file = { path: "First.md" } as Parameters<
+      GitNoteHistoryPlugin["openKnowledgeTraceSetup"]
+    >[0];
+
+    plugin.openKnowledgeTraceSetup(file);
+    plugin.openKnowledgeTraceSetup(file);
+    const [older, newer] =
+      knowledgeTraceMocks.KnowledgeTraceSetupModalMock.instances;
+
+    older?.options.onSubmit(firstKnowledgeTraceRequest);
+    await Promise.resolve();
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+
+    newer?.options.onSubmit(latestKnowledgeTraceRequest);
+    await vi.waitFor(() =>
+      expect(view.requests).toEqual([latestKnowledgeTraceRequest])
+    );
+  });
+
+  it("reuses one pending leaf and applies only the latest concurrent request", async () => {
+    const rootSplit = {};
+    const view = new knowledgeTraceMocks.KnowledgeTraceViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {})
+    };
+    const plugin = pluginWithWorkspace(workspace);
+
+    const firstOpen = plugin.openKnowledgeTrace(firstKnowledgeTraceRequest);
+    const latestOpen = plugin.openKnowledgeTrace(latestKnowledgeTraceRequest);
+
+    expect(workspace.getLeaf).toHaveBeenCalledTimes(1);
+    viewReady.resolve();
+    await Promise.all([firstOpen, latestOpen]);
+
+    expect(workspace.revealLeaf).toHaveBeenCalledTimes(1);
+    expect(view.requests).toEqual([latestKnowledgeTraceRequest]);
+  });
+
+  it("does not let an older reveal completion overwrite a newer request", async () => {
+    const rootSplit = {};
+    const view = new knowledgeTraceMocks.KnowledgeTraceViewMock();
+    const firstReveal = deferred<void>();
+    const latestReveal = deferred<void>();
+    const revealQueue = [firstReveal, latestReveal];
+    const leaf = {
+      view,
+      getRoot: () => rootSplit
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => [leaf]),
+      getLeaf: vi.fn(),
+      revealLeaf: vi.fn(() => revealQueue.shift()?.promise ?? Promise.resolve())
+    };
+    const plugin = pluginWithWorkspace(workspace);
+
+    const firstOpen = plugin.openKnowledgeTrace(firstKnowledgeTraceRequest);
+    await vi.waitFor(() => expect(workspace.revealLeaf).toHaveBeenCalledTimes(1));
+    const latestOpen = plugin.openKnowledgeTrace(latestKnowledgeTraceRequest);
+    await vi.waitFor(() => expect(workspace.revealLeaf).toHaveBeenCalledTimes(2));
+
+    latestReveal.resolve();
+    await latestOpen;
+    firstReveal.resolve();
+    await firstOpen;
+
+    expect(workspace.getLeaf).not.toHaveBeenCalled();
+    expect(view.requests).toEqual([latestKnowledgeTraceRequest]);
+  });
+
+  it("invalidates a pending open when the plugin unloads", async () => {
+    const rootSplit = {};
+    const view = new knowledgeTraceMocks.KnowledgeTraceViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      detach: vi.fn(),
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {}),
+      detachLeavesOfType: vi.fn()
+    };
+    const plugin = pluginWithWorkspace(workspace);
+
+    const pendingOpen = plugin.openKnowledgeTrace(firstKnowledgeTraceRequest);
+    plugin.onunload();
+    viewReady.resolve();
+    await pendingOpen;
+
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+    expect(view.requests).toEqual([]);
+    expect(leaf.detach).toHaveBeenCalledTimes(1);
   });
 });

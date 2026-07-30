@@ -101,6 +101,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function basenameFromVaultPath(path: string): string {
+  const name = path.split("/").filter(Boolean).at(-1) ?? path;
+  return name.replace(/\.md$/iu, "") || "Git 版本对比";
+}
+
 class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
   constructor(
     app: App,
@@ -184,7 +189,8 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   getDisplayText(): string {
-    return this.file ? `${this.file.basename} · Git 对比` : "Git 版本对比";
+    const path = this.file?.path ?? this.request?.filePath;
+    return path ? `${basenameFromVaultPath(path)} · Git 对比` : "Git 版本对比";
   }
 
   getIcon(): string {
@@ -269,7 +275,10 @@ export class GitHistoryDetailView extends ItemView {
     this.changeMap = [];
     this.currentChangeIndex = 0;
     const file = this.app.vault.getFileByPath(request.filePath);
-    if (!file) {
+    const hasFrozenPair = request.readOnly === true
+      && request.baseContentOverride !== undefined
+      && request.targetContentOverride !== undefined;
+    if (!file && !hasFrozenPair) {
       this.file = null;
       this.loading = false;
       this.error = `找不到笔记：${request.filePath}`;
@@ -277,25 +286,39 @@ export class GitHistoryDetailView extends ItemView {
       return;
     }
 
-    this.file = file;
+    this.file = file ?? null;
     this.loading = true;
     this.error = "";
     this.render();
     try {
-      const historyPromise = request.readOnly || this.historyLoadedFor === file.path
+      const historyPromise = !file
+        || request.readOnly
+        || this.historyLoadedFor === file.path
         ? Promise.resolve(null)
         : this.plugin.gitClient.loadFileHistory(file).catch(() => null);
       const [baseContent, targetContent, history] = await Promise.all([
         request.baseContentOverride !== undefined
           ? Promise.resolve(request.baseContentOverride)
-          : this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.base),
+          : file
+            ? this.plugin.gitClient.getContentForReference(
+                file,
+                request.repositoryRoot,
+                request.base
+              )
+            : Promise.reject(new Error("冻结对比缺少左侧内容。")),
         request.targetContentOverride !== undefined
           ? Promise.resolve(request.targetContentOverride)
-          : this.plugin.gitClient.getContentForReference(file, request.repositoryRoot, request.target),
+          : file
+            ? this.plugin.gitClient.getContentForReference(
+                file,
+                request.repositoryRoot,
+                request.target
+              )
+            : Promise.reject(new Error("冻结对比缺少右侧内容。")),
         historyPromise
       ]);
       if (generation !== this.generation) return;
-      if (history) {
+      if (history && file) {
         await this.plugin.hydrateVersionMilestones(
           history.context,
           history.commits
@@ -328,16 +351,17 @@ export class GitHistoryDetailView extends ItemView {
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
     container.toggleClass("is-focus", this.focusMode);
 
-    if (!this.request || !this.file) {
+    if (!this.request) {
       container.createDiv({ cls: "git-note-history-empty", text: this.error || "请从 Git 时间线选择一个版本。" });
       return;
     }
 
+    const displayPath = this.file?.path ?? this.request.filePath;
     const header = container.createDiv({ cls: "git-note-history-detail-toolbar" });
     const top = header.createDiv({ cls: "git-note-history-detail-top" });
     const heading = top.createDiv({ cls: "git-note-history-detail-heading" });
-    heading.createEl("h3", { text: this.file.basename });
-    heading.createDiv({ cls: "git-note-history-file-path", text: this.file.path });
+    heading.createEl("h3", { text: basenameFromVaultPath(displayPath) });
+    heading.createDiv({ cls: "git-note-history-file-path", text: displayPath });
     const focus = top.createEl("button", {
       cls: this.focusMode ? "clickable-icon is-active" : "clickable-icon",
       attr: {
@@ -380,7 +404,7 @@ export class GitHistoryDetailView extends ItemView {
     });
     setIcon(moreActions.createSpan(), "ellipsis-vertical");
     moreActions.createSpan({ text: "更多" });
-    moreActions.disabled = !this.hasCurrentContent();
+    moreActions.disabled = !this.hasCurrentContent() || !this.file;
     moreActions.addEventListener("click", (event) => this.openActionOptions(event));
 
     if (this.request.base.kind === "commit" && !this.request.readOnly) {
@@ -391,15 +415,13 @@ export class GitHistoryDetailView extends ItemView {
       restore.addEventListener("click", () => void this.confirmFullRestore());
     }
     if (this.request.readOnly) {
-      const snapshotTitle = this.request.target.kind === "working"
-        ? `${this.request.target.label}；内容固定为打开工作事件时的采样`
-        : "从工作事件打开的对比不会提供恢复、另存或里程碑编辑";
+      const snapshotTitle = "内容固定为发起对比时的快照，不提供恢复、另存或里程碑编辑";
       const badge = actions.createSpan({
         cls: "git-note-history-read-only-badge",
         attr: { title: snapshotTitle }
       });
       setIcon(badge.createSpan(), "lock-keyhole");
-      badge.createSpan({ text: "工作事件只读" });
+      badge.createSpan({ text: "冻结快照 · 只读" });
     }
 
     if (this.loading) {
@@ -1314,7 +1336,7 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private renderRenderedDiff(container: HTMLElement): void {
-    if (!this.file) return;
+    if (!this.request) return;
     const reader = container.createDiv({ cls: "git-note-history-reader" });
     const intro = reader.createDiv({ cls: "git-note-history-reader-intro" });
     const legend = intro.createDiv({ cls: "git-note-history-reader-legend" });
@@ -1377,14 +1399,20 @@ export class GitHistoryDetailView extends ItemView {
   }
 
   private renderMarkdownBlocks(container: HTMLElement, blocks: RenderedDiffSection["after"]): void {
-    if (!this.file || blocks.length === 0) return;
+    if (!this.request || blocks.length === 0) return;
     const content = blocks.map((block) => block.content).join("\n\n");
     const body = container.createDiv({ cls: "git-note-history-rendered-markdown" });
-    void MarkdownRenderer.render(this.app, content, body, this.file.path, this);
+    void MarkdownRenderer.render(
+      this.app,
+      content,
+      body,
+      this.file?.path ?? this.request.filePath,
+      this
+    );
   }
 
   private renderPreview(container: HTMLElement): void {
-    if (!this.file || !this.request) return;
+    if (!this.request) return;
     const preview = container.createDiv({ cls: "git-note-history-preview-pair" });
     const leftBody = this.renderPreviewPane(
       preview,
@@ -1437,17 +1465,27 @@ export class GitHistoryDetailView extends ItemView {
     const body = pane.createDiv({
       cls: "git-note-history-preview-document markdown-preview-view"
     });
-    void MarkdownRenderer.render(this.app, content, body, this.file!.path, this);
+    void MarkdownRenderer.render(
+      this.app,
+      content,
+      body,
+      this.file?.path ?? this.request?.filePath ?? "",
+      this
+    );
     return body;
   }
 
   private renderLinkImpact(container: HTMLElement, impact: LinkImpact): void {
-    if (!this.file) return;
+    if (!this.request) return;
+    const sourcePath = this.file?.path ?? this.request.filePath;
     const all = [...impact.added, ...impact.removed, ...impact.unchanged];
     const resolved = new Map<string, TFile>();
     for (const relation of all) {
       if (relation.kind === "tag") continue;
-      const destination = this.app.metadataCache.getFirstLinkpathDest(relation.target, this.file.path);
+      const destination = this.app.metadataCache.getFirstLinkpathDest(
+        relation.target,
+        sourcePath
+      );
       if (destination) resolved.set(relation.key, destination);
     }
     const backlinkCounts = this.countBacklinks([...resolved.values()]);
@@ -1542,7 +1580,9 @@ export class GitHistoryDetailView extends ItemView {
     centerLabel.setAttribute("y", String(centerY + 5));
     centerLabel.setAttribute("text-anchor", "middle");
     centerLabel.setAttribute("class", "git-note-history-impact-center-label");
-    centerLabel.textContent = this.file?.basename ?? "当前笔记";
+    centerLabel.textContent = basenameFromVaultPath(
+      this.file?.path ?? this.request?.filePath ?? ""
+    );
     svg.appendChild(centerLabel);
   }
 
@@ -1751,7 +1791,6 @@ export class GitHistoryDetailView extends ItemView {
   private hasCurrentContent(): boolean {
     return Boolean(
       this.request
-      && this.file
       && !this.loading
       && this.contentGeneration === this.generation
     );

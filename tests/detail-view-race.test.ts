@@ -247,4 +247,65 @@ describe("detail view content leases", () => {
     expect(resolveFileContext).not.toHaveBeenCalled();
     expect(setVersionMilestone).not.toHaveBeenCalled();
   });
+
+  it("opens a frozen read-only comparison after the live note is renamed or deleted", async () => {
+    const base = "before frozen content";
+    const target = "after frozen content";
+    const frozenRequest: DetailRequest = {
+      ...request(),
+      readOnly: true,
+      baseContentOverride: base,
+      targetContentOverride: target
+    };
+    const getContentForReference = vi.fn(async () => {
+      throw new Error("frozen comparison must not read Git again");
+    });
+    const render = vi.fn();
+    const view = Object.create(
+      GitHistoryDetailView.prototype
+    ) as GitHistoryDetailView;
+    Object.assign(view, {
+      request: frozenRequest,
+      file: null,
+      baseContent: "",
+      targetContent: "",
+      loading: false,
+      error: "",
+      generation: 0,
+      contentGeneration: -1,
+      changeMap: [],
+      currentChangeIndex: 0,
+      historyCommits: [],
+      historyContext: null,
+      historyLoadedFor: "",
+      app: {
+        vault: {
+          getFileByPath: vi.fn(() => null)
+        }
+      },
+      plugin: {
+        gitClient: {
+          getContentForReference,
+          loadFileHistory: vi.fn()
+        }
+      },
+      render
+    });
+
+    await (view as unknown as {
+      loadComparison: () => Promise<void>;
+    }).loadComparison();
+
+    expect(getContentForReference).not.toHaveBeenCalled();
+    expect(Object.assign({}, view)).toMatchObject({
+      file: null,
+      baseContent: base,
+      targetContent: target,
+      loading: false,
+      error: "",
+      generation: 1,
+      contentGeneration: 1
+    });
+    expect(render).toHaveBeenCalled();
+  });
 });

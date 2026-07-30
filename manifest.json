@@ -1,9 +1,9 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "minAppVersion": "1.8.0",
-  "description": "Cross-file Git work events, meaningful note timelines, focused Markdown review, and safe restore workflows for Obsidian.",
+  "description": "Trace knowledge boundaries across Git history, review cross-file work events, compare Markdown clearly, and restore notes safely.",
   "author": "Rexxall",
   "isDesktopOnly": true
 }

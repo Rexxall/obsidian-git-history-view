@@ -1271,6 +1271,17 @@ export class GitNoteHistoryView extends ItemView {
       this.render();
     });
 
+    if (this.targetFile) {
+      const trace = controls.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "追踪知识变化边界" }
+      });
+      setIcon(trace, "scan-search");
+      trace.addEventListener("click", () => {
+        this.plugin.openKnowledgeTraceSetup(this.targetFile!);
+      });
+    }
+
     const refresh = controls.createEl("button", {
       cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
       attr: { "aria-label": this.loading ? "正在刷新" : "刷新", "aria-busy": String(this.loading) }

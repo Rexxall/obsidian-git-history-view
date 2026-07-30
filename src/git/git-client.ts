@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { App, FileSystemAdapter, TFile } from "obsidian";
@@ -38,6 +39,7 @@ import {
   mergeWorkEventChanges,
   selectInferredSessionCommits
 } from "../work-events/work-event";
+import { contentFingerprint } from "../history/version-groups";
 import type { MergeWorkEventChangesResult } from "../work-events/work-event";
 import type {
   WorkEventAnalysisState,
@@ -53,6 +55,8 @@ const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
 const WORK_EVENT_LOG_FORMAT =
   "%x1e%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%s%x1f%B%x1d";
 const MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024;
+const EXACT_UNSTAGED_RENAME_MAX_BYTES = 512 * 1024;
+const EXACT_UNSTAGED_RENAME_MAX_CANDIDATES = 64;
 const WORK_EVENT_ANALYSIS_LIMITS = {
   maxMarkdownFiles: 60,
   maxFileBytes: 256 * 1024,
@@ -82,6 +86,93 @@ export class GitCommandError extends Error {
     this.name = "GitCommandError";
     this.stderr = stderr;
   }
+}
+
+export interface ReadOnlyFirstParentFileHistory {
+  context: GitRepositoryContext;
+  branch: string;
+  headHash: string;
+  status: string;
+  historyPath: string;
+  workingRename?: {
+    kind: "staged" | "exact-unstaged";
+    currentPath: string;
+    originalPath: string;
+  };
+  anchorWorkingFingerprint?: string;
+  renameWarning?: string;
+  /** Git's newest-to-oldest order. Consumers may reverse this, but must not sort by dates. */
+  commits: GitCommitVersion[];
+  hasMoreHistory: boolean;
+}
+
+export type ReadOnlyHistoricalFileObject =
+  | {
+      availability: "ready";
+      content: string;
+      sizeBytes: number;
+    }
+  | {
+      availability: "missing";
+      sizeBytes: null;
+    }
+  | {
+      availability: "too-large";
+      sizeBytes: number;
+    }
+  | {
+      availability: "read-error";
+      sizeBytes: number | null;
+    };
+
+export type ReadOnlyHistoricalFileInspection =
+  | {
+      availability: "ready";
+      sizeBytes: number;
+    }
+  | {
+      availability: "missing";
+      sizeBytes: null;
+    }
+  | {
+      availability: "too-large";
+      sizeBytes: number;
+    };
+
+export type StableWorkingFileCapture =
+  | {
+      availability: "ready";
+      context: GitRepositoryContext;
+      branch: string;
+      headHash: string;
+      status: string;
+      content: string;
+      sizeBytes: number;
+      beforeFingerprint: string;
+      afterFingerprint: string;
+    }
+  | {
+      availability: "missing" | "too-large" | "physical-boundary" | "concurrent-change";
+      context: GitRepositoryContext;
+      branch: string;
+      headHash: string;
+      status: string;
+      sizeBytes: number | null;
+    };
+
+interface ReadOnlyFileState {
+  branch: string;
+  headHash: string;
+  status: string;
+}
+
+interface WorkingHistoryAnchor {
+  historyPath: string;
+  workingRename?: ReadOnlyFirstParentFileHistory["workingRename"];
+  anchorWorkingFingerprint?: string;
+  renameWarning?: string;
+  validationTrackedStatus?: string;
+  validationStagedNameStatus?: string;
 }
 
 export class GitClient {
@@ -166,6 +257,243 @@ export class GitClient {
       commits,
       hasMoreHistory: limitedHistory.hasMore,
       workingTreeStats
+    };
+  }
+
+  /**
+   * Loads one file's path-continuous history without checking out a commit or
+   * moving HEAD. The returned commits retain Git's newest-to-oldest traversal
+   * order; callers that need chronological presentation should reverse the
+   * array rather than sorting by authored timestamps.
+   */
+  async loadFirstParentFileHistory(
+    file: TFile,
+    requestedMaxCommits: number
+  ): Promise<ReadOnlyFirstParentFileHistory> {
+    const context = await this.resolveContext(file);
+    const maxCommits = Math.max(0, Math.min(1000, Math.trunc(requestedMaxCommits)));
+    const before = await this.readOnlyFileState(context);
+    const anchor = await this.resolveWorkingHistoryAnchor(file, context, before);
+    const logOutput = await this.runGit(context.repositoryRoot, [
+      "-c",
+      "core.quotePath=false",
+      "log",
+      "--first-parent",
+      "--full-history",
+      "-m",
+      "--follow",
+      "--find-renames",
+      `--max-count=${maxCommits + 1}`,
+      `--format=${LOG_FORMAT}`,
+      "--name-status",
+      "--",
+      anchor.historyPath
+    ]).catch((error: unknown) => {
+      if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) {
+        return "";
+      }
+      throw error;
+    });
+    const after = await this.readOnlyFileState(context);
+    const trackedStatusStillStable =
+      anchor.validationTrackedStatus === undefined
+      || await this.readTrackedWorkspaceStatus(context.repositoryRoot)
+        === anchor.validationTrackedStatus;
+    const stagedStatusStillStable =
+      anchor.validationStagedNameStatus === undefined
+      || await this.readStagedNameStatus(context.repositoryRoot)
+        === anchor.validationStagedNameStatus;
+    if (
+      before.headHash !== after.headHash
+      || before.branch !== after.branch
+      || before.status !== after.status
+      || !trackedStatusStillStable
+      || !stagedStatusStillStable
+    ) {
+      throw new GitCommandError(
+        "读取期间 Git HEAD、分支或当前笔记状态发生了变化，请重新发起追踪。"
+      );
+    }
+
+    const parsed = parseGitLog(logOutput, anchor.historyPath);
+    return {
+      context,
+      branch: after.branch,
+      headHash: after.headHash,
+      status: after.status,
+      historyPath: anchor.historyPath,
+      ...(anchor.workingRename ? { workingRename: anchor.workingRename } : {}),
+      ...(anchor.anchorWorkingFingerprint
+        ? { anchorWorkingFingerprint: anchor.anchorWorkingFingerprint }
+        : {}),
+      ...(anchor.renameWarning ? { renameWarning: anchor.renameWarning } : {}),
+      commits: parsed.slice(0, maxCommits),
+      hasMoreHistory: parsed.length > maxCommits
+    };
+  }
+
+  /**
+   * Reads an immutable Git object under a byte cap. A missing or unreadable
+   * object remains explicit so higher layers can evaluate that version as
+   * unknown instead of inferring across the gap.
+   */
+  async readHistoricalFileObject(
+    repositoryRoot: string,
+    commitHash: string,
+    historicalPath: string,
+    maxBytes: number
+  ): Promise<ReadOnlyHistoricalFileObject> {
+    const inspection = await this.inspectHistoricalFileObject(
+      repositoryRoot,
+      commitHash,
+      historicalPath,
+      maxBytes
+    );
+    if (inspection.availability !== "ready") return inspection;
+    const size = inspection.sizeBytes;
+    try {
+      const content = await this.getFileContent(
+        repositoryRoot,
+        commitHash,
+        historicalPath
+      );
+      if (Buffer.byteLength(content, "utf8") > Math.max(0, maxBytes)) {
+        return { availability: "too-large", sizeBytes: size };
+      }
+      return { availability: "ready", content, sizeBytes: size };
+    } catch {
+      return { availability: "read-error", sizeBytes: size };
+    }
+  }
+
+  async inspectHistoricalFileObject(
+    repositoryRoot: string,
+    commitHash: string,
+    historicalPath: string,
+    maxBytes: number
+  ): Promise<ReadOnlyHistoricalFileInspection> {
+    if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
+      return { availability: "missing", sizeBytes: null };
+    }
+    const size = await this.getHistoricalObjectSizeOrNull(
+      repositoryRoot,
+      commitHash,
+      historicalPath
+    );
+    if (size === null) return { availability: "missing", sizeBytes: null };
+    if (size > Math.max(0, maxBytes)) {
+      return { availability: "too-large", sizeBytes: size };
+    }
+    return { availability: "ready", sizeBytes: size };
+  }
+
+  /**
+   * Freezes the current Vault file with before/after content fingerprints and
+   * Git state checks. Physical realpaths are checked on both sides of the read
+   * so a symlink cannot make the plugin read outside the Vault boundary.
+   */
+  async captureStableWorkingFile(
+    file: TFile,
+    maxBytes: number
+  ): Promise<StableWorkingFileCapture> {
+    const context = await this.resolveContext(file);
+    const beforeState = await this.readOnlyFileState(context);
+    const currentFile = this.app.vault.getFileByPath(file.path);
+    if (!currentFile) {
+      return {
+        availability: "missing",
+        context,
+        ...beforeState,
+        sizeBytes: null
+      };
+    }
+    if (!await this.isPhysicalVaultPath(context.vaultRoot, file.path)) {
+      return {
+        availability: "physical-boundary",
+        context,
+        ...beforeState,
+        sizeBytes: currentFile.stat.size
+      };
+    }
+
+    const byteLimit = Math.max(0, maxBytes);
+    if (currentFile.stat.size > byteLimit) {
+      const afterState = await this.readOnlyFileState(context);
+      const stillInside = await this.isPhysicalVaultPath(context.vaultRoot, file.path);
+      if (
+        !stillInside
+        || beforeState.headHash !== afterState.headHash
+        || beforeState.branch !== afterState.branch
+        || beforeState.status !== afterState.status
+      ) {
+        return {
+          availability: "concurrent-change",
+          context,
+          ...afterState,
+          sizeBytes: currentFile.stat.size
+        };
+      }
+      return {
+        availability: "too-large",
+        context,
+        ...afterState,
+        sizeBytes: currentFile.stat.size
+      };
+    }
+
+    const beforeContent = await this.app.vault.read(currentFile);
+    const beforeFingerprint = contentFingerprint(beforeContent);
+    const afterState = await this.readOnlyFileState(context);
+    const refreshedFile = this.app.vault.getFileByPath(file.path);
+    if (
+      !refreshedFile
+      || !await this.isPhysicalVaultPath(context.vaultRoot, file.path)
+      || beforeState.headHash !== afterState.headHash
+      || beforeState.branch !== afterState.branch
+      || beforeState.status !== afterState.status
+    ) {
+      return {
+        availability: "concurrent-change",
+        context,
+        ...afterState,
+        sizeBytes: refreshedFile?.stat.size ?? null
+      };
+    }
+    const afterContent = await this.app.vault.read(refreshedFile);
+    const afterFingerprint = contentFingerprint(afterContent);
+    const finalState = await this.readOnlyFileState(context);
+    if (
+      !await this.isPhysicalVaultPath(context.vaultRoot, file.path)
+      || beforeContent !== afterContent
+      || beforeFingerprint !== afterFingerprint
+      || beforeState.headHash !== finalState.headHash
+      || beforeState.branch !== finalState.branch
+      || beforeState.status !== finalState.status
+    ) {
+      return {
+        availability: "concurrent-change",
+        context,
+        ...finalState,
+        sizeBytes: refreshedFile.stat.size
+      };
+    }
+    const actualSize = Buffer.byteLength(beforeContent, "utf8");
+    if (actualSize > byteLimit) {
+      return {
+        availability: "too-large",
+        context,
+        ...finalState,
+        sizeBytes: actualSize
+      };
+    }
+    return {
+      availability: "ready",
+      context,
+      ...finalState,
+      content: beforeContent,
+      sizeBytes: actualSize,
+      beforeFingerprint,
+      afterFingerprint
     };
   }
 
@@ -1300,6 +1628,209 @@ export class GitClient {
     };
   }
 
+  private async readOnlyFileState(
+    context: GitRepositoryContext
+  ): Promise<ReadOnlyFileState> {
+    const [headHash, status, branch] = await Promise.all([
+      this.runGit(context.repositoryRoot, ["rev-parse", "HEAD"]).catch(
+        (error: unknown) => {
+          if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) {
+            return "";
+          }
+          throw error;
+        }
+      ),
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        context.repositoryRelativePath
+      ]),
+      this.getBranch(context.repositoryRoot)
+    ]);
+    return {
+      branch: branch.trim() || "HEAD",
+      headHash: headHash.trim(),
+      status
+    };
+  }
+
+  private async resolveWorkingHistoryAnchor(
+    file: TFile,
+    context: GitRepositoryContext,
+    state: ReadOnlyFileState
+  ): Promise<WorkingHistoryAnchor> {
+    const currentPath = context.repositoryRelativePath;
+    const currentChange = parseWorkspaceStatus(state.status).find(
+      (change) => change.path === currentPath
+    );
+    if (
+      currentChange?.indexStatus === "R"
+      && currentChange.originalPath
+      && this.workEventVaultPath(context, currentChange.originalPath) !== null
+    ) {
+      return {
+        historyPath: currentChange.originalPath,
+        workingRename: {
+          kind: "staged",
+          currentPath,
+          originalPath: currentChange.originalPath
+        }
+      };
+    }
+    if (currentChange?.indexStatus === "A") {
+      const stagedNameStatus = await this.readStagedNameStatus(
+        context.repositoryRoot
+      );
+      const stagedRename = parseCommittedNameStatus(stagedNameStatus).find(
+        (change) =>
+          change.changeType === "R"
+          && change.path === currentPath
+          && change.originalPath
+      );
+      if (
+        stagedRename?.originalPath
+        && this.workEventVaultPath(context, stagedRename.originalPath) !== null
+      ) {
+        return {
+          historyPath: stagedRename.originalPath,
+          workingRename: {
+            kind: "staged",
+            currentPath,
+            originalPath: stagedRename.originalPath
+          },
+          validationStagedNameStatus: stagedNameStatus
+        };
+      }
+    }
+    if (!state.headHash || !currentChange?.untracked) {
+      return { historyPath: currentPath };
+    }
+
+    const trackedStatusBefore = await this.readTrackedWorkspaceStatus(
+      context.repositoryRoot
+    );
+    const workspace = parseWorkspaceStatus(trackedStatusBefore);
+    const deletedCandidates = workspace.filter((change) =>
+      change.indexStatus === " "
+      && change.workTreeStatus === "D"
+      && this.workEventVaultPath(context, change.path) !== null
+    );
+    if (deletedCandidates.length === 0) {
+      return { historyPath: currentPath };
+    }
+    if (deletedCandidates.length > EXACT_UNSTAGED_RENAME_MAX_CANDIDATES) {
+      return {
+        historyPath: currentPath,
+        renameWarning:
+          `检测到超过 ${EXACT_UNSTAGED_RENAME_MAX_CANDIDATES} 个未暂存删除候选，未猜测当前文件的旧路径。`
+      };
+    }
+
+    const capture = await this.captureStableWorkingFile(
+      file,
+      EXACT_UNSTAGED_RENAME_MAX_BYTES
+    );
+    if (
+      capture.availability !== "ready"
+      || capture.headHash !== state.headHash
+      || capture.branch !== state.branch
+      || capture.status !== state.status
+    ) {
+      return {
+        historyPath: currentPath,
+        ...(capture.availability === "too-large"
+          ? {
+              renameWarning:
+                `当前文件超过 ${EXACT_UNSTAGED_RENAME_MAX_BYTES / 1024} KiB，未尝试精确识别未暂存重命名。`
+            }
+          : {})
+      };
+    }
+
+    const bytes = Buffer.from(capture.content, "utf8");
+    const algorithm = state.headHash.length === 64 ? "sha256" : "sha1";
+    const workingBlobHash = createHash(algorithm)
+      .update(`blob ${bytes.length}\0`)
+      .update(bytes)
+      .digest("hex");
+    const matches: string[] = [];
+    for (const candidate of deletedCandidates) {
+      const objectHash = (await this.runGit(context.repositoryRoot, [
+        "rev-parse",
+        `${state.headHash}:${candidate.path}`
+      ]).catch(() => "")).trim();
+      if (objectHash === workingBlobHash) matches.push(candidate.path);
+    }
+    const trackedStatusAfter = await this.readTrackedWorkspaceStatus(
+      context.repositoryRoot
+    );
+    if (trackedStatusAfter !== trackedStatusBefore) {
+      return {
+        historyPath: currentPath,
+        renameWarning: "识别旧路径期间工作区状态发生了变化，未猜测重命名关系。"
+      };
+    }
+    if (matches.length === 1) {
+      const originalPath = matches[0]!;
+      return {
+        historyPath: originalPath,
+        workingRename: {
+          kind: "exact-unstaged",
+          currentPath,
+          originalPath
+        },
+        anchorWorkingFingerprint: capture.beforeFingerprint,
+        validationTrackedStatus: trackedStatusAfter
+      };
+    }
+    if (matches.length > 1) {
+      return {
+        historyPath: currentPath,
+        renameWarning: "存在多个内容完全相同的旧路径候选，未猜测当前文件来自哪一篇笔记。"
+      };
+    }
+    return {
+      historyPath: currentPath,
+      renameWarning:
+        "检测到未暂存删除候选，但当前内容已变或无法唯一确认旧路径，未猜测重命名关系。"
+    };
+  }
+
+  private readTrackedWorkspaceStatus(repositoryRoot: string): Promise<string> {
+    return this.runGit(repositoryRoot, [
+      "-c",
+      "core.quotePath=false",
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=no"
+    ]);
+  }
+
+  private readStagedNameStatus(repositoryRoot: string): Promise<string> {
+    return this.runGit(repositoryRoot, [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--cached",
+      "--find-renames",
+      "--diff-filter=R",
+      "--name-status",
+      "-z",
+      "--"
+    ]).catch((error: unknown) => {
+      if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) {
+        return "";
+      }
+      throw error;
+    });
+  }
+
   private async getEmptyTreeHash(repositoryRoot: string): Promise<string> {
     const hash = (await this.runGit(
       repositoryRoot,
@@ -1384,6 +1915,7 @@ export class GitClient {
           env: {
             ...process.env,
             GIT_OPTIONAL_LOCKS: "0",
+            GIT_NO_LAZY_FETCH: "1",
             GIT_PAGER: "cat"
           }
         },

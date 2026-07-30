@@ -66,6 +66,20 @@ import {
   GIT_WORK_EVENT_VIEW_TYPE,
   GitWorkEventView
 } from "./views/work-event-view";
+import {
+  KnowledgeTraceSetupModal,
+  type KnowledgeTraceSetupValue
+} from "./ui/knowledge-trace-modal";
+import {
+  GIT_KNOWLEDGE_TRACE_VIEW_TYPE,
+  GitKnowledgeTraceView,
+  type KnowledgeTraceViewRun
+} from "./views/knowledge-trace-view";
+import {
+  KnowledgeVersionMaterializer,
+  type KnowledgeWorkingSnapshot
+} from "./knowledge-trace/version-materializer";
+import { traceKnowledgeBoundary } from "./knowledge-trace/boundary-search";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -88,6 +102,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   settings: GitNoteHistorySettings = { ...DEFAULT_SETTINGS };
   gitClient!: GitClient;
   restoreService!: RestoreService;
+  private knowledgeVersionMaterializer!: KnowledgeVersionMaterializer;
   private undoStack: UndoSnapshot[] = [];
   private restoreReceipts: RestoreReceipt[] = [];
   private fileReviewStates: Record<string, FileReviewState> = {};
@@ -97,11 +112,18 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingDetailLeaf: Promise<WorkspaceLeaf> | null = null;
   private workEventOpenGeneration = 0;
   private pendingWorkEventLeaf: Promise<WorkspaceLeaf> | null = null;
+  private knowledgeTraceOpenGeneration = 0;
+  private pendingKnowledgeTraceLeaf: Promise<WorkspaceLeaf> | null = null;
+  private isUnloading = false;
 
   async onload(): Promise<void> {
+    this.isUnloading = false;
     await this.loadPluginData();
 
     this.gitClient = new GitClient(this.app, () => this.settings);
+    this.knowledgeVersionMaterializer = new KnowledgeVersionMaterializer(
+      this.gitClient
+    );
     this.restoreService = new RestoreService(this.app, {
       getStack: () => this.undoStack,
       getReceipts: () => this.restoreReceipts,
@@ -128,6 +150,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerView(
       GIT_WORK_EVENT_VIEW_TYPE,
       (leaf) => new GitWorkEventView(leaf, this)
+    );
+    this.registerView(
+      GIT_KNOWLEDGE_TRACE_VIEW_TYPE,
+      (leaf) => new GitKnowledgeTraceView(leaf, {
+        trace: (setup, signal) => this.runKnowledgeTrace(setup, signal),
+        openComparison: (request) => this.openDetail(request),
+        isFrozenWorkspaceStale: (filePath, snapshot) =>
+          this.isKnowledgeTraceWorkspaceStale(filePath, snapshot)
+      })
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -195,6 +226,21 @@ export default class GitNoteHistoryPlugin extends Plugin {
             editor.getLine(start + index)
           ).join("\n");
           new LineHistoryModal(this.app, this, view.file, start + 1, end + 1, selectedText).open();
+        }
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: "trace-current-note-knowledge-boundary",
+      name: "追踪当前笔记的知识变化边界",
+      editorCheckCallback: (checking, editor, view) => {
+        if (!view.file || view.file.extension !== "md") return false;
+        if (!checking) {
+          const selectedText = editor.somethingSelected()
+            ? editor.getSelection()
+            : "";
+          this.openKnowledgeTraceSetup(view.file, selectedText);
         }
         return true;
       }
@@ -339,15 +385,19 @@ export default class GitNoteHistoryPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.isUnloading = true;
     this.detailOpenGeneration += 1;
     this.pendingDetailLeaf = null;
     this.workEventOpenGeneration += 1;
     this.pendingWorkEventLeaf = null;
+    this.knowledgeTraceOpenGeneration += 1;
+    this.pendingKnowledgeTraceLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_CONFLICT_RESOLVER_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORK_EVENT_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_TRACE_VIEW_TYPE);
   }
 
   async activateWorkspaceReview(): Promise<void> {
@@ -431,6 +481,123 @@ export default class GitNoteHistoryPlugin extends Plugin {
         this.pendingWorkEventLeaf = null;
       }
     }
+  }
+
+  openKnowledgeTraceSetup(
+    file: TFile,
+    selectedText = ""
+  ): void {
+    if (this.isUnloading) return;
+    const generation = ++this.knowledgeTraceOpenGeneration;
+    const initialValue = selectedText.trim()
+      ? {
+          assertion: {
+            kind: "text" as const,
+            operator: "contains" as const,
+            expected: selectedText,
+            caseSensitive: false,
+            normalizeLineEndings: true
+          }
+        }
+      : undefined;
+    new KnowledgeTraceSetupModal(this.app, {
+      filePath: file.path,
+      ...(initialValue ? { initialValue } : {}),
+      onSubmit: (setup) => {
+        if (
+          this.isUnloading
+          || generation !== this.knowledgeTraceOpenGeneration
+        ) return;
+        void this.openKnowledgeTrace(setup);
+      }
+    }).open();
+  }
+
+  async openKnowledgeTrace(setup: KnowledgeTraceSetupValue): Promise<void> {
+    if (this.isUnloading) return;
+    const generation = ++this.knowledgeTraceOpenGeneration;
+    const leaf = await this.ensureKnowledgeTraceLeaf();
+    if (!leaf) return;
+    if (this.isUnloading) {
+      leaf.detach();
+      return;
+    }
+    if (
+      generation !== this.knowledgeTraceOpenGeneration
+    ) return;
+
+    await this.app.workspace.revealLeaf(leaf);
+    if (
+      this.isUnloading
+      || generation !== this.knowledgeTraceOpenGeneration
+    ) return;
+
+    if (leaf.view instanceof GitKnowledgeTraceView) {
+      await leaf.view.setRequest(setup);
+    }
+  }
+
+  private async ensureKnowledgeTraceLeaf(): Promise<WorkspaceLeaf | null> {
+    if (this.isUnloading) return null;
+    const pendingLeaf = this.pendingKnowledgeTraceLeaf;
+    if (pendingLeaf) return pendingLeaf;
+
+    const existingLeaf = this.app.workspace
+      .getLeavesOfType(GIT_KNOWLEDGE_TRACE_VIEW_TYPE)
+      .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+    if (existingLeaf) return existingLeaf;
+
+    const leafPromise = (async (): Promise<WorkspaceLeaf> => {
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_KNOWLEDGE_TRACE_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    this.pendingKnowledgeTraceLeaf = leafPromise;
+    try {
+      return await leafPromise;
+    } finally {
+      if (this.pendingKnowledgeTraceLeaf === leafPromise) {
+        this.pendingKnowledgeTraceLeaf = null;
+      }
+    }
+  }
+
+  private async runKnowledgeTrace(
+    setup: KnowledgeTraceSetupValue,
+    signal: AbortSignal
+  ): Promise<KnowledgeTraceViewRun> {
+    const file = this.app.vault.getFileByPath(setup.filePath);
+    if (!file || file.extension !== "md") {
+      throw new GitCommandError("找不到要追踪的 Markdown 笔记。");
+    }
+    const materialization = await this.knowledgeVersionMaterializer.materialize(
+      file,
+      {
+        maxVersions: setup.maxVersions,
+        includeWorking: true,
+        signal
+      }
+    );
+    const result = traceKnowledgeBoundary({
+      assertion: setup.assertion,
+      versions: materialization.samples
+    });
+    return { setup, materialization, result };
+  }
+
+  private async isKnowledgeTraceWorkspaceStale(
+    filePath: string,
+    snapshot: KnowledgeWorkingSnapshot
+  ): Promise<boolean> {
+    const file = this.app.vault.getFileByPath(filePath);
+    if (!file || file.extension !== "md") return true;
+    return this.knowledgeVersionMaterializer.isWorkingSnapshotStale(
+      file,
+      snapshot
+    );
   }
 
   async openWorkEventFileComparison(
