@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.3
+
+- Added a temporary block-level provenance lens with a direct history-sidebar shortcut, file-menu entry, command-palette entry, search, focused filters, and immediate `Esc` exit.
+- Current Markdown blocks use frozen-content `git blame --line-porcelain` evidence and retain explicit working or unknown states instead of inventing authorship when blame is unavailable.
+- Sources are classified as human, Agent, automation, script, working tree, or unknown. Existing `Agent`, `Authority`, `Send-Gate`, and `Workflow-Status` trailers remain visible as evidence and never become a correctness score.
+- Existing local review checkpoints now identify Agent, automation, script, and working blocks not yet covered by human review; users may explicitly mark the current frozen content reviewed without changing the note or Git.
+- When a matched block's prose changes while its existing link, embed, attachment, or footnote set remains identical, the lens raises a citation-sync review prompt rather than claiming the citation is wrong.
+- Analysis is limited to 2 MB and 240 commits, validates the working content and Git state before and after blame, and opens source comparisons in frozen read-only mode.
+
 ## 0.7.2
 
 - Added a central knowledge-graph time machine that analyzes up to 80 chronological note versions and keeps only boundaries where links, embeds, attachments, tags, or footnotes actually changed.

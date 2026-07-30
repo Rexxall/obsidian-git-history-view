@@ -52,6 +52,11 @@ import type {
   WorkEventRequest,
   WorkEventSnapshot
 } from "../work-events/types";
+import {
+  parseLinePorcelain,
+  type BlameLine,
+  type ProvenanceLensSnapshot
+} from "../provenance/provenance-lens";
 
 const LOG_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%B%x1d";
 const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
@@ -67,6 +72,8 @@ const WORK_EVENT_ANALYSIS_LIMITS = {
   maxRelationsPerFile: 500,
   maxTotalRelations: 2000
 } as const;
+const PROVENANCE_LENS_MAX_BYTES = 2 * 1024 * 1024;
+const PROVENANCE_LENS_MAX_COMMITS = 240;
 
 function parseWorkEventCommitLog(raw: string): WorkEventCommit[] {
   const commits: WorkEventCommit[] = [];
@@ -539,6 +546,92 @@ export class GitClient {
       lineRange
     ]);
     return parseGitLog(output, context.repositoryRelativePath);
+  }
+
+  async loadProvenanceLens(file: TFile): Promise<ProvenanceLensSnapshot> {
+    const history = await this.loadFileHistory(file, PROVENANCE_LENS_MAX_COMMITS);
+    const capture = await this.captureStableWorkingFile(
+      file,
+      PROVENANCE_LENS_MAX_BYTES
+    );
+    if (capture.availability !== "ready") {
+      const labels = {
+        missing: "当前笔记已经不存在。",
+        "too-large": "当前笔记超过 2 MB，可信度镜头未读取正文。",
+        "physical-boundary": "当前笔记的物理路径超出 Vault，可信度镜头拒绝读取。",
+        "concurrent-change": "读取期间笔记或 Git 状态发生变化，请重试。"
+      } as const;
+      throw new GitCommandError(labels[capture.availability]);
+    }
+    const latest = history.commits[0];
+    const historyPath = latest?.historicalPath
+      ?? history.context.repositoryRelativePath;
+    const rawBlame = capture.headHash
+      ? await this.runGit(
+          history.context.repositoryRoot,
+          [
+            "-c",
+            "core.quotePath=false",
+            "blame",
+            "--line-porcelain",
+            "--contents",
+            "-",
+            capture.headHash,
+            "--",
+            historyPath
+          ],
+          capture.content
+        ).catch(() => "")
+      : "";
+    const blame = parseLinePorcelain(rawBlame);
+    const completeBlame = blame.length > 0
+      ? blame
+      : capture.content.split(/\r?\n/).map((content, index): BlameLine => ({
+          line: index + 1,
+          hash: "0".repeat(capture.headHash.length === 64 ? 64 : 40),
+          content,
+          authorName: "",
+          authorEmail: "",
+          authoredAt: "",
+          working: true
+        }));
+    let previousContent: string | undefined;
+    if (latest) {
+      const previous = await this.readHistoricalFileObject(
+        history.context.repositoryRoot,
+        latest.hash,
+        latest.historicalPath,
+        PROVENANCE_LENS_MAX_BYTES
+      );
+      if (previous.availability === "ready") previousContent = previous.content;
+    }
+    const after = await this.captureStableWorkingFile(
+      file,
+      PROVENANCE_LENS_MAX_BYTES
+    );
+    if (
+      after.availability !== "ready"
+      || after.beforeFingerprint !== capture.beforeFingerprint
+      || after.headHash !== capture.headHash
+      || after.status !== capture.status
+      || after.branch !== capture.branch
+    ) {
+      throw new GitCommandError(
+        "生成可信度镜头期间笔记或 Git 状态发生变化，请重新打开。"
+      );
+    }
+    return {
+      content: capture.content,
+      ...(previousContent !== undefined ? { previousContent } : {}),
+      blame: completeBlame,
+      commits: history.commits,
+      context: history.context,
+      branch: history.branch,
+      headHash: capture.headHash,
+      workingFingerprint: capture.beforeFingerprint,
+      hasMoreHistory: history.hasMoreHistory,
+      historyPath
+    };
   }
 
   async loadWorkspaceReview(): Promise<GitWorkspaceReview> {

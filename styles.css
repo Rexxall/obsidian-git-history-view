@@ -9001,3 +9001,376 @@ button.git-note-history-graph-machine-relation:hover {
     margin-left: 0;
   }
 }
+
+/* Provenance lens */
+
+.git-provenance-lens-view {
+  --provenance-human: var(--color-green);
+  --provenance-agent: var(--color-purple);
+  --provenance-automation: var(--color-blue);
+  --provenance-working: var(--color-orange);
+  --provenance-unknown: var(--text-faint);
+  padding: 24px clamp(16px, 3vw, 42px) 60px;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 84% 0%, color-mix(in srgb, var(--color-purple) 8%, transparent), transparent 28rem),
+    var(--background-primary);
+}
+
+.git-provenance-lens-header,
+.git-provenance-summary,
+.git-provenance-toolbar,
+.git-provenance-block-list {
+  width: min(980px, 100%);
+  margin-inline: auto;
+}
+
+.git-provenance-lens-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.git-provenance-lens-header h2 {
+  margin: 2px 0 3px;
+  color: var(--text-normal);
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.git-provenance-lens-eyebrow,
+.git-provenance-lens-path {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-provenance-lens-eyebrow {
+  color: var(--interactive-accent);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.git-provenance-summary {
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--background-secondary) 88%, transparent);
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--background-modifier-box-shadow) 45%, transparent);
+}
+
+.git-provenance-summary-copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.git-provenance-summary-copy span,
+.git-provenance-summary-meta {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.git-provenance-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(70px, 1fr));
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.git-provenance-metric {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--background-primary);
+}
+
+.git-provenance-metric > span {
+  color: var(--text-normal);
+  font-size: 1.12rem;
+  font-weight: 700;
+}
+
+.git-provenance-metric > small {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-provenance-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin-top: 11px;
+}
+
+.git-provenance-summary-meta .is-warning {
+  color: var(--text-warning);
+}
+
+.git-provenance-mark-reviewed {
+  margin-top: 12px;
+}
+
+.git-provenance-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+.git-provenance-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.git-provenance-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+.git-provenance-filters button:hover,
+.git-provenance-filters button.is-active {
+  border-color: var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.git-provenance-filters button.is-active {
+  border-color: color-mix(in srgb, var(--interactive-accent) 36%, var(--background-modifier-border));
+  color: var(--interactive-accent);
+}
+
+.git-provenance-toolbar .search-input-container {
+  width: min(250px, 36vw);
+}
+
+.git-provenance-block-list {
+  display: grid;
+  gap: 8px;
+}
+
+.git-provenance-block {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 13px;
+  background: var(--background-primary-alt);
+}
+
+.git-provenance-block:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.git-provenance-block.needs-review {
+  border-color: color-mix(in srgb, var(--color-orange) 34%, var(--background-modifier-border));
+}
+
+.git-provenance-block.has-citation-risk {
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--color-cyan) 55%, transparent);
+}
+
+.git-provenance-block-rail {
+  display: flex;
+  justify-content: center;
+  padding-top: 17px;
+  background: var(--background-secondary);
+}
+
+.git-provenance-source-dot {
+  width: 4px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--provenance-unknown);
+}
+
+.git-provenance-source-dot.is-human {
+  background: var(--provenance-human);
+}
+
+.git-provenance-source-dot.is-agent {
+  background: var(--provenance-agent);
+}
+
+.git-provenance-source-dot.is-automation,
+.git-provenance-source-dot.is-script {
+  background: var(--provenance-automation);
+}
+
+.git-provenance-source-dot.is-working {
+  background: var(--provenance-working);
+}
+
+.git-provenance-block-body {
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.git-provenance-block-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.git-provenance-block-heading > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-provenance-block-heading small {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.git-provenance-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.git-provenance-source {
+  min-height: 23px;
+  max-width: 190px;
+  overflow: hidden;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--background-secondary);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-provenance-source.is-agent {
+  background: color-mix(in srgb, var(--provenance-agent) 13%, var(--background-secondary));
+  color: color-mix(in srgb, var(--provenance-agent) 72%, var(--text-normal));
+}
+
+.git-provenance-source.is-automation,
+.git-provenance-source.is-script {
+  background: color-mix(in srgb, var(--provenance-automation) 13%, var(--background-secondary));
+  color: color-mix(in srgb, var(--provenance-automation) 72%, var(--text-normal));
+}
+
+.git-provenance-source.is-working {
+  background: color-mix(in srgb, var(--provenance-working) 13%, var(--background-secondary));
+  color: color-mix(in srgb, var(--provenance-working) 72%, var(--text-normal));
+}
+
+.git-provenance-block-preview {
+  margin-top: 8px;
+  color: var(--text-normal);
+  font-family: var(--font-text);
+  line-height: 1.58;
+  white-space: pre-wrap;
+}
+
+.git-provenance-alerts {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.git-provenance-alerts > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: var(--font-ui-smaller);
+}
+
+.git-provenance-alerts .is-review {
+  background: color-mix(in srgb, var(--color-orange) 10%, var(--background-secondary));
+  color: var(--text-warning);
+}
+
+.git-provenance-alerts .is-citation {
+  background: color-mix(in srgb, var(--color-cyan) 9%, var(--background-secondary));
+  color: var(--text-muted);
+}
+
+.git-provenance-details {
+  margin-top: 9px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-provenance-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.git-provenance-evidence-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.git-provenance-evidence-row > div {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+}
+
+.git-provenance-state {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 220px;
+  padding: 28px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .git-provenance-lens-view {
+    padding-inline: 12px;
+  }
+
+  .git-provenance-summary-copy,
+  .git-provenance-toolbar,
+  .git-provenance-block-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .git-provenance-summary-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .git-provenance-toolbar .search-input-container {
+    width: 100%;
+  }
+
+  .git-provenance-badges {
+    justify-content: flex-start;
+  }
+}

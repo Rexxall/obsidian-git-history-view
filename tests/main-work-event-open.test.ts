@@ -81,6 +81,18 @@ const historicalSandboxMocks = vi.hoisted(() => {
   return { HistoricalSandboxViewMock };
 });
 
+const provenanceLensMocks = vi.hoisted(() => {
+  class ProvenanceLensViewMock {
+    readonly files: unknown[] = [];
+
+    async setFile(file: unknown): Promise<void> {
+      this.files.push(file);
+    }
+  }
+
+  return { ProvenanceLensViewMock };
+});
+
 vi.mock("obsidian", () => ({
   MarkdownView: class {},
   Notice: class {},
@@ -105,6 +117,10 @@ vi.mock("../src/views/history-view", () => ({
 vi.mock("../src/views/knowledge-graph-view", () => ({
   GIT_KNOWLEDGE_GRAPH_VIEW_TYPE: "git-knowledge-graph-time-machine",
   GitKnowledgeGraphView: class {}
+}));
+vi.mock("../src/views/provenance-lens-view", () => ({
+  GIT_PROVENANCE_LENS_VIEW_TYPE: "git-provenance-lens",
+  GitProvenanceLensView: provenanceLensMocks.ProvenanceLensViewMock
 }));
 vi.mock("../src/views/detail-view", () => ({
   GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE: "git-note-history-detail",
@@ -192,7 +208,9 @@ function pluginWithWorkspace(workspace: object): GitNoteHistoryPlugin {
     knowledgeTraceOpenGeneration: 0,
     pendingKnowledgeTraceLeaf: null,
     recoveryBasketOpenGeneration: 0,
-    pendingRecoveryBasketLeaf: null
+    pendingRecoveryBasketLeaf: null,
+    provenanceLensOpenGeneration: 0,
+    pendingProvenanceLensLeaf: null
   });
   return plugin;
 }
@@ -354,6 +372,76 @@ describe("recovery-basket view opening", () => {
 
     expect(workspace.revealLeaf).toHaveBeenCalledTimes(1);
     expect(view.files).toEqual([latest]);
+  });
+});
+
+describe("provenance-lens view opening", () => {
+  it("reuses one pending leaf and applies only the latest note", async () => {
+    const rootSplit = {};
+    const view = new provenanceLensMocks.ProvenanceLensViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      detach: vi.fn(),
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {})
+    };
+    const plugin = pluginWithWorkspace(workspace);
+    const first = { path: "First.md", extension: "md" };
+    const latest = { path: "Latest.md", extension: "md" };
+
+    const firstOpen = plugin.openProvenanceLens(first as never);
+    const latestOpen = plugin.openProvenanceLens(latest as never);
+
+    expect(workspace.getLeaf).toHaveBeenCalledTimes(1);
+    viewReady.resolve();
+    await Promise.all([firstOpen, latestOpen]);
+
+    expect(workspace.revealLeaf).toHaveBeenCalledTimes(1);
+    expect(view.files).toEqual([latest]);
+  });
+
+  it("invalidates a pending open when the plugin unloads", async () => {
+    const rootSplit = {};
+    const view = new provenanceLensMocks.ProvenanceLensViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      detach: vi.fn(),
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {}),
+      detachLeavesOfType: vi.fn()
+    };
+    const plugin = pluginWithWorkspace(workspace);
+    const pending = plugin.openProvenanceLens(
+      { path: "First.md", extension: "md" } as never
+    );
+
+    plugin.onunload();
+    viewReady.resolve();
+    await pending;
+
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+    expect(view.files).toEqual([]);
+    expect(leaf.detach).toHaveBeenCalledTimes(1);
   });
 });
 

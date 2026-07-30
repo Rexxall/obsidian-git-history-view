@@ -88,3 +88,12 @@ The install archive must contain exactly:
 - [x] both test vaults installs match the tracked build. Their current `data.json` hashes match the pre-install backups exactly.
 - [x] Obsidian 1.12.7 in Projects confirms the sidebar shortcut, relationship playback, type filtering, current-target navigation, frozen exact comparison, and the expandable restore-impact wave without applying a restore. the second test vault confirms a clean reload, the new shortcut, an explicit no-change state, narrow layout, and light/dark rendering.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.7.3 local acceptance
+
+- [x] `npm run release:check` passes with 215 tests across 21 files, the production build, and package verification.
+- [x] `dist/git-note-history-0.7.3.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `ccd41394cb607f0c18c7ef8aac1a71580a81f034bdf2705664a036f9962b7844`.
+- [x] both test vaults installs match the tracked build. Their current `data.json` hashes match the pre-install backups exactly.
+- [x] Obsidian 1.12.7 in the second test vault confirms 33 block-source cards, filters and an honest empty state, evidence disclosure, frozen read-only source comparison, and immediate `Esc` exit. Projects confirms the history-sidebar shortcut, eight block-source cards, narrow layout, and light/dark rendering.
+- [x] Real temporary Git tests confirm Agent trailer evidence, uncommitted and untracked working attribution, review coverage, citation-sync prompts, and unchanged HEAD / status. The live Vaults had no Agent-trailer or uncommitted Markdown fixture, so acceptance did not create a synthetic commit in user history.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.

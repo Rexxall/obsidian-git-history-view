@@ -121,6 +121,10 @@ import {
   GitKnowledgeGraphView
 } from "./views/knowledge-graph-view";
 import {
+  GIT_PROVENANCE_LENS_VIEW_TYPE,
+  GitProvenanceLensView
+} from "./views/provenance-lens-view";
+import {
   buildKnowledgeGraphTimeline,
   GRAPH_TIME_MACHINE_MAX_CONTENT_BYTES,
   GRAPH_TIME_MACHINE_MAX_VERSIONS,
@@ -176,6 +180,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingHistorySourceLeaf: Promise<WorkspaceLeaf> | null = null;
   private knowledgeGraphOpenGeneration = 0;
   private pendingKnowledgeGraphLeaf: Promise<WorkspaceLeaf> | null = null;
+  private provenanceLensOpenGeneration = 0;
+  private pendingProvenanceLensLeaf: Promise<WorkspaceLeaf> | null = null;
   private readonly pendingHistoricalSandboxCreates = new Map<
     string,
     Promise<HistoricalSandboxRecord>
@@ -242,6 +248,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerView(
       GIT_KNOWLEDGE_GRAPH_VIEW_TYPE,
       (leaf) => new GitKnowledgeGraphView(leaf, this)
+    );
+    this.registerView(
+      GIT_PROVENANCE_LENS_VIEW_TYPE,
+      (leaf) => new GitProvenanceLensView(leaf, this)
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -430,6 +440,19 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-current-note-provenance-lens",
+      name: "打开当前笔记的来源可信度镜头",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) {
+          void this.openProvenanceLens(file);
+        }
+        return available;
+      }
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -479,6 +502,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
             .setTitle("打开知识图谱时间机")
             .setIcon("orbit")
             .onClick(() => void this.openKnowledgeGraphTimeMachine(file))
+        );
+        menu.addItem((item) =>
+          item
+            .setTitle("打开来源可信度镜头")
+            .setIcon("scan-eye")
+            .onClick(() => void this.openProvenanceLens(file))
         );
       })
     );
@@ -627,6 +656,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingHistorySourceLeaf = null;
     this.knowledgeGraphOpenGeneration += 1;
     this.pendingKnowledgeGraphLeaf = null;
+    this.provenanceLensOpenGeneration += 1;
+    this.pendingProvenanceLensLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
@@ -637,6 +668,42 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(GIT_HISTORICAL_SANDBOX_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE);
+  }
+
+  async openProvenanceLens(file: TFile): Promise<void> {
+    if (this.isUnloading || file.extension !== "md") return;
+    const generation = ++this.provenanceLensOpenGeneration;
+    const pending = this.pendingProvenanceLensLeaf;
+    const leafPromise = pending ?? (async () => {
+      const existing = this.app.workspace
+        .getLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE)
+        .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+      if (existing) return existing;
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_PROVENANCE_LENS_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    if (!pending) this.pendingProvenanceLensLeaf = leafPromise;
+    let leaf: WorkspaceLeaf;
+    try {
+      leaf = await leafPromise;
+    } finally {
+      if (this.pendingProvenanceLensLeaf === leafPromise) {
+        this.pendingProvenanceLensLeaf = null;
+      }
+    }
+    if (this.isUnloading) {
+      leaf.detach();
+      return;
+    }
+    if (generation !== this.provenanceLensOpenGeneration) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (generation !== this.provenanceLensOpenGeneration || this.isUnloading) return;
+    if (leaf.view instanceof GitProvenanceLensView) await leaf.view.setFile(file);
   }
 
   async openKnowledgeGraphTimeMachine(file: TFile): Promise<void> {
@@ -1796,6 +1863,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     }
     for (const leaf of this.app.workspace.getLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE)) {
       if (leaf.view instanceof GitKnowledgeGraphView) void leaf.view.refresh();
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE)) {
+      if (leaf.view instanceof GitProvenanceLensView) void leaf.view.refresh();
     }
   }
 

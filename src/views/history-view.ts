@@ -1352,6 +1352,15 @@ export class GitNoteHistoryView extends ItemView {
       graph.addEventListener("click", () => {
         void this.plugin.openKnowledgeGraphTimeMachine(this.targetFile!);
       });
+
+      const provenance = controls.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "打开来源可信度镜头" }
+      });
+      setIcon(provenance, "scan-eye");
+      provenance.addEventListener("click", () => {
+        void this.plugin.openProvenanceLens(this.targetFile!);
+      });
     }
 
     const refresh = controls.createEl("button", {
