@@ -116,6 +116,17 @@ import {
   GIT_HISTORY_SOURCE_VIEW_TYPE,
   GitHistorySourceView
 } from "./views/history-source-view";
+import {
+  GIT_KNOWLEDGE_GRAPH_VIEW_TYPE,
+  GitKnowledgeGraphView
+} from "./views/knowledge-graph-view";
+import {
+  buildKnowledgeGraphTimeline,
+  GRAPH_TIME_MACHINE_MAX_CONTENT_BYTES,
+  GRAPH_TIME_MACHINE_MAX_VERSIONS,
+  type KnowledgeGraphTimeline,
+  type KnowledgeGraphVersion
+} from "./knowledge-graph/time-machine";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -163,6 +174,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingHistoricalSandboxLeaf: Promise<WorkspaceLeaf> | null = null;
   private historySourceOpenGeneration = 0;
   private pendingHistorySourceLeaf: Promise<WorkspaceLeaf> | null = null;
+  private knowledgeGraphOpenGeneration = 0;
+  private pendingKnowledgeGraphLeaf: Promise<WorkspaceLeaf> | null = null;
   private readonly pendingHistoricalSandboxCreates = new Map<
     string,
     Promise<HistoricalSandboxRecord>
@@ -225,6 +238,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerView(
       GIT_HISTORY_SOURCE_VIEW_TYPE,
       (leaf) => new GitHistorySourceView(leaf, this)
+    );
+    this.registerView(
+      GIT_KNOWLEDGE_GRAPH_VIEW_TYPE,
+      (leaf) => new GitKnowledgeGraphView(leaf, this)
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -400,6 +417,19 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-current-note-knowledge-graph-time-machine",
+      name: "打开当前笔记的知识图谱时间机",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) {
+          void this.openKnowledgeGraphTimeMachine(file);
+        }
+        return available;
+      }
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -443,6 +473,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
             .setTitle("查看全部历史来源")
             .setIcon("layers-3")
             .onClick(() => void this.openHistorySources(file))
+        );
+        menu.addItem((item) =>
+          item
+            .setTitle("打开知识图谱时间机")
+            .setIcon("orbit")
+            .onClick(() => void this.openKnowledgeGraphTimeMachine(file))
         );
       })
     );
@@ -589,6 +625,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingHistoricalSandboxLeaf = null;
     this.historySourceOpenGeneration += 1;
     this.pendingHistorySourceLeaf = null;
+    this.knowledgeGraphOpenGeneration += 1;
+    this.pendingKnowledgeGraphLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
@@ -598,6 +636,109 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_HISTORICAL_SANDBOX_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE);
+  }
+
+  async openKnowledgeGraphTimeMachine(file: TFile): Promise<void> {
+    if (this.isUnloading || file.extension !== "md") return;
+    const generation = ++this.knowledgeGraphOpenGeneration;
+    const pending = this.pendingKnowledgeGraphLeaf;
+    const leafPromise = pending ?? (async () => {
+      const existing = this.app.workspace
+        .getLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE)
+        .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+      if (existing) return existing;
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_KNOWLEDGE_GRAPH_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    if (!pending) this.pendingKnowledgeGraphLeaf = leafPromise;
+    let leaf: WorkspaceLeaf;
+    try {
+      leaf = await leafPromise;
+    } finally {
+      if (this.pendingKnowledgeGraphLeaf === leafPromise) {
+        this.pendingKnowledgeGraphLeaf = null;
+      }
+    }
+    if (generation !== this.knowledgeGraphOpenGeneration || this.isUnloading) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (generation !== this.knowledgeGraphOpenGeneration || this.isUnloading) return;
+    if (leaf.view instanceof GitKnowledgeGraphView) await leaf.view.setFile(file);
+  }
+
+  async loadKnowledgeGraphTimeline(
+    file: TFile,
+    signal?: AbortSignal
+  ): Promise<KnowledgeGraphTimeline> {
+    const history = await this.gitClient.loadFileHistory(
+      file,
+      GRAPH_TIME_MACHINE_MAX_VERSIONS
+    );
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const commits = [...history.commits].reverse();
+    const versions: KnowledgeGraphVersion[] = new Array(commits.length);
+    const batchSize = 4;
+    for (let start = 0; start < commits.length; start += batchSize) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const batch = commits.slice(start, start + batchSize);
+      const materialized = await Promise.all(batch.map(async (commit) => {
+        try {
+          const content = await this.gitClient.getFileContent(
+            history.context.repositoryRoot,
+            commit.hash,
+            commit.historicalPath
+          );
+          if (
+            new TextEncoder().encode(content).byteLength
+            > GRAPH_TIME_MACHINE_MAX_CONTENT_BYTES
+          ) {
+            return {
+              id: commit.hash,
+              label: commit.subject || commit.shortHash,
+              capturedAt: commit.authoredAt,
+              reference: { kind: "commit" as const, commit },
+              availability: "too-large" as const,
+              warning: "该版本超过 2 MB 关系分析上限。"
+            };
+          }
+          return {
+            id: commit.hash,
+            label: commit.subject || commit.shortHash,
+            capturedAt: commit.authoredAt,
+            reference: { kind: "commit" as const, commit },
+            availability: "ready" as const,
+            content
+          };
+        } catch (error) {
+          return {
+            id: commit.hash,
+            label: commit.subject || commit.shortHash,
+            capturedAt: commit.authoredAt,
+            reference: { kind: "commit" as const, commit },
+            availability: "unavailable" as const,
+            warning: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }));
+      materialized.forEach((version, offset) => {
+        versions[start + offset] = version;
+      });
+    }
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const currentContent = await this.app.vault.read(file);
+    versions.push({
+      id: `working:${contentFingerprint(currentContent)}`,
+      label: "当前工作区",
+      capturedAt: new Date(file.stat.mtime).toISOString(),
+      reference: { kind: "working", label: "当前工作区" },
+      availability: "ready",
+      content: currentContent
+    });
+    return buildKnowledgeGraphTimeline(versions);
   }
 
   async openHistorySources(file: TFile): Promise<void> {
@@ -1652,6 +1793,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     }
     for (const leaf of this.app.workspace.getLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE)) {
       if (leaf.view instanceof GitHistorySourceView) void leaf.view.refresh();
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE)) {
+      if (leaf.view instanceof GitKnowledgeGraphView) void leaf.view.refresh();
     }
   }
 

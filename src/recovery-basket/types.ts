@@ -1,3 +1,5 @@
+import type { NoteRelationKind } from "../analysis/link-impact";
+
 export type RecoveryBasketItemKind = "hunk" | "property";
 export type RecoveryBasketOperation = "replace" | "insert" | "delete";
 
@@ -76,7 +78,7 @@ export interface RecoveryBasketPlan {
   addedLines: number;
   deletedLines: number;
   removedRelations: Array<{
-    kind: "wikilink" | "markdown" | "embed" | "tag";
+    kind: NoteRelationKind;
     label: string;
     target: string;
   }>;

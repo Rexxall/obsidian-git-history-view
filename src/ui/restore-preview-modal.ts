@@ -1,6 +1,11 @@
 import { App, Component, MarkdownRenderer, Modal, Setting, TFile, setIcon } from "obsidian";
 import { diffLines } from "diff";
 import { buildLinkImpact } from "../analysis/link-impact";
+import {
+  buildRecoveryImpactWave,
+  extractFrontmatterAliases,
+  type IncomingKnowledgeReference
+} from "../analysis/recovery-impact";
 import { buildSemanticDiff } from "../diff/semantic-diff";
 import type { RestoreScope } from "../models";
 
@@ -51,13 +56,33 @@ export class RestorePreviewModal extends Modal {
     const stats = lineStats(this.options.currentContent, this.options.targetContent);
     const semantic = buildSemanticDiff(this.options.currentContent, this.options.targetContent);
     const impact = buildLinkImpact(this.options.currentContent, this.options.targetContent);
+    const incomingReferences = this.collectIncomingReferences(
+      extractFrontmatterAliases(this.options.currentContent)
+    );
+    const wave = buildRecoveryImpactWave(
+      this.options.currentContent,
+      this.options.targetContent,
+      {
+        incomingReferences,
+        resolvesTarget: (relation) => Boolean(
+          this.app.metadataCache.getFirstLinkpathDest(
+            relation.target,
+            this.options.file.path
+          )
+        )
+      }
+    );
     const metrics = intro.createDiv({ cls: "git-note-history-restore-metrics" });
     metrics.createSpan({ cls: "is-added", text: `+${stats.added} 行` });
     metrics.createSpan({ cls: "is-removed", text: `−${stats.deleted} 行` });
     metrics.createSpan({ text: `${semantic.length} 个结构变化` });
     metrics.createSpan({
-      cls: impact.removed.length > 0 ? "is-warning" : "",
-      text: `${impact.removed.length} 个关系将移除`
+      cls: wave.severity === "danger"
+        ? "is-danger"
+        : wave.severity === "review"
+          ? "is-warning"
+          : "is-safe",
+      text: wave.summary
     });
 
     if (semantic.length > 0 || impact.removed.length > 0) {
@@ -74,6 +99,76 @@ export class RestorePreviewModal extends Modal {
         checks.createDiv({
           cls: "git-note-history-restore-check is-warning",
           text: `− 将移除 ${relation.kind === "tag" ? "标签" : "关系"}：${relation.label}`
+        });
+      }
+    }
+
+    const wavePanel = this.contentEl.createEl("details", {
+      cls: `git-note-history-restore-wave is-${wave.severity}`
+    });
+    const waveSummary = wavePanel.createEl("summary");
+    const waveIcon = waveSummary.createSpan();
+    setIcon(
+      waveIcon,
+      wave.severity === "danger"
+        ? "circle-alert"
+        : wave.severity === "review"
+          ? "waves"
+          : "shield-check"
+    );
+    const waveHeading = waveSummary.createDiv();
+    waveHeading.createEl("strong", { text: "恢复冲击波" });
+    waveHeading.createSpan({ text: wave.summary });
+    const waveMetrics = wavePanel.createDiv({
+      cls: "git-note-history-restore-wave-metrics"
+    });
+    waveMetrics.createDiv({
+      text: `${wave.restoredRelations.length}`,
+      attr: { "data-label": "恢复旧关系" }
+    });
+    waveMetrics.createDiv({
+      text: `${wave.missingTargets.length}`,
+      attr: { "data-label": "恢复后断链" }
+    });
+    waveMetrics.createDiv({
+      text: `${wave.brokenIncomingReferences.length}`,
+      attr: { "data-label": "受影响反链" }
+    });
+    waveMetrics.createDiv({
+      text: `${wave.missingAttachments.length}`,
+      attr: { "data-label": "缺失附件" }
+    });
+    if (wave.findings.length === 0) {
+      const safe = wavePanel.createDiv({
+        cls: "git-note-history-restore-wave-safe"
+      });
+      setIcon(safe.createSpan(), "circle-check-big");
+      safe.createSpan({
+        text: "当前 Vault 中未发现会因这次恢复新增的断链、缺失附件或失效入站锚点。"
+      });
+    } else {
+      const findings = wavePanel.createDiv({
+        cls: "git-note-history-restore-wave-findings"
+      });
+      for (const finding of wave.findings.slice(0, 16)) {
+        const row = findings.createDiv({
+          cls: `is-${finding.severity}`
+        });
+        setIcon(
+          row.createSpan(),
+          finding.severity === "danger"
+            ? "circle-alert"
+            : finding.severity === "warning"
+              ? "triangle-alert"
+              : "minus"
+        );
+        const copy = row.createDiv();
+        copy.createEl("strong", { text: finding.title });
+        copy.createDiv({ text: finding.detail });
+      }
+      if (wave.findings.length > 16) {
+        findings.createDiv({
+          text: `另有 ${wave.findings.length - 16} 项影响未展开`
         });
       }
     }
@@ -148,5 +243,50 @@ export class RestorePreviewModal extends Modal {
   onClose(): void {
     this.renderer.unload();
     this.contentEl.empty();
+  }
+
+  private collectIncomingReferences(
+    aliases: string[]
+  ): IncomingKnowledgeReference[] {
+    const references: IncomingKnowledgeReference[] = [];
+    const aliasesByLower = new Map(
+      aliases.map((alias) => [alias.toLocaleLowerCase(), alias])
+    );
+    for (const source of this.app.vault.getMarkdownFiles()) {
+      if (source.path === this.options.file.path) continue;
+      const cache = this.app.metadataCache.getFileCache(source);
+      const groups = [
+        { kind: "link" as const, items: cache?.links ?? [] },
+        { kind: "embed" as const, items: cache?.embeds ?? [] }
+      ];
+      for (const group of groups) {
+        for (const item of group.items) {
+          const raw = item.link.trim();
+          const subpathIndex = [raw.indexOf("#"), raw.indexOf("^")]
+            .filter((index) => index >= 0)
+            .sort((a, b) => a - b)[0];
+          const linkpath = (
+            subpathIndex === undefined ? raw : raw.slice(0, subpathIndex)
+          ).trim();
+          const destination = this.app.metadataCache.getFirstLinkpathDest(
+            linkpath,
+            source.path
+          );
+          if (destination?.path !== this.options.file.path) continue;
+          const subpath = subpathIndex === undefined
+            ? undefined
+            : raw.slice(subpathIndex);
+          const viaAlias = aliasesByLower.get(linkpath.toLocaleLowerCase());
+          references.push({
+            sourcePath: source.path,
+            sourceLabel: source.basename,
+            kind: group.kind,
+            ...(subpath ? { subpath } : {}),
+            ...(viaAlias ? { viaAlias } : {})
+          });
+        }
+      }
+    }
+    return references;
   }
 }

@@ -32,7 +32,10 @@ import {
   isReviewPathExcluded,
   mergeReviewInboxItems
 } from "../review/review-inbox";
-import { buildLinkImpact } from "../analysis/link-impact";
+import {
+  buildLinkImpact,
+  isVaultTargetRelation
+} from "../analysis/link-impact";
 import {
   countUniqueHiddenRepositoryFiles,
   createHiddenRepositoryPathIdentity,
@@ -1407,7 +1410,7 @@ export class GitClient {
           ? change.vaultPath
           : change.originalVaultPath ?? change.vaultPath;
         let resolvedPath: string | undefined;
-        if (relation.kind !== "tag") {
+        if (isVaultTargetRelation(relation)) {
           try {
             resolvedPath = this.app.metadataCache
               ?.getFirstLinkpathDest(relation.target, sourcePath)
@@ -1421,7 +1424,7 @@ export class GitClient {
           kind: relation.kind,
           target: relation.target,
           label: relation.label,
-          eventLocal: relation.kind !== "tag"
+          eventLocal: isVaultTargetRelation(relation)
             && this.isEventLocalRelation(relation.target, sourcePath, changedPaths)
         };
         if (relationChange === "removed") {

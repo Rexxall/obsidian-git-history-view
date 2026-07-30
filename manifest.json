@@ -1,9 +1,9 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "minAppVersion": "1.8.0",
-  "description": "Review Git, workspace, local snapshot, File Recovery, and Sync history without mixing their trust boundaries.",
+  "description": "Review note history, knowledge-graph changes, and recovery impact across Git and local sources.",
   "author": "Rexxall",
   "isDesktopOnly": true
 }

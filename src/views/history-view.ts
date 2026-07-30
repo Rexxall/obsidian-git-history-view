@@ -1343,6 +1343,15 @@ export class GitNoteHistoryView extends ItemView {
       sources.addEventListener("click", () => {
         void this.plugin.openHistorySources(this.targetFile!);
       });
+
+      const graph = controls.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": "打开知识图谱时间机" }
+      });
+      setIcon(graph, "orbit");
+      graph.addEventListener("click", () => {
+        void this.plugin.openKnowledgeGraphTimeMachine(this.targetFile!);
+      });
     }
 
     const refresh = controls.createEl("button", {

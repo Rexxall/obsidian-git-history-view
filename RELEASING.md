@@ -80,3 +80,11 @@ The install archive must contain exactly:
 - [x] Obsidian 1.12.7 in Projects confirms the historical-sandbox entry, creation from a real full commit, a locked detached worktree, read-only note permissions, the manager card, and first-open guidance without changing the current Vault. the second test vault confirms the entry after a clean application reload.
 - [x] Real temporary Git repository tests cover editable upgrade, experiment changes, frozen comparison, recovery-basket collection, new-note no-overwrite copy, binary patch export, archive, deletion, symlink rejection, untrusted markers, capacity limits, and persistence migration.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.7.2 local acceptance
+
+- [x] `npm run release:check` passes with 205 tests across 19 files, the production build, and package verification.
+- [x] `dist/git-note-history-0.7.2.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `c98a5e4145d06fb8d02831eda6081672cf4a23ebe91e939de242bbb44030d9cf`.
+- [x] both test vaults installs match the tracked build. Their current `data.json` hashes match the pre-install backups exactly.
+- [x] Obsidian 1.12.7 in Projects confirms the sidebar shortcut, relationship playback, type filtering, current-target navigation, frozen exact comparison, and the expandable restore-impact wave without applying a restore. the second test vault confirms a clean reload, the new shortcut, an explicit no-change state, narrow layout, and light/dark rendering.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.

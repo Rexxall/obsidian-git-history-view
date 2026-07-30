@@ -29,6 +29,7 @@ import {
 } from "../diff/semantic-diff";
 import {
   buildLinkImpact,
+  isVaultTargetRelation,
   type LinkImpact,
   type NoteRelation
 } from "../analysis/link-impact";
@@ -1541,7 +1542,7 @@ export class GitHistoryDetailView extends ItemView {
     const all = [...impact.added, ...impact.removed, ...impact.unchanged];
     const resolved = new Map<string, TFile>();
     for (const relation of all) {
-      if (relation.kind === "tag") continue;
+      if (!isVaultTargetRelation(relation)) continue;
       const destination = this.app.metadataCache.getFirstLinkpathDest(
         relation.target,
         sourcePath
@@ -1557,7 +1558,9 @@ export class GitHistoryDetailView extends ItemView {
     const stats = summary.createDiv({ cls: "git-note-history-impact-stats" });
     stats.createDiv({ cls: "is-added", text: `+${impact.added.length} 新关系` });
     stats.createDiv({ cls: "is-removed", text: `−${impact.removed.length} 移除` });
-    const unresolvedCount = all.filter((relation) => relation.kind !== "tag" && !resolved.has(relation.key)).length;
+    const unresolvedCount = all.filter(
+      (relation) => isVaultTargetRelation(relation) && !resolved.has(relation.key)
+    ).length;
     stats.createDiv({ cls: unresolvedCount > 0 ? "is-warning" : "", text: `${unresolvedCount} 个未解析目标` });
 
     if (impact.added.length === 0 && impact.removed.length === 0) {
@@ -1666,10 +1669,21 @@ export class GitHistoryDetailView extends ItemView {
       const destination = resolved.get(relation.key);
       const row = group.createEl(destination ? "button" : "div", { cls: "git-note-history-impact-row" });
       const kind = row.createSpan({ cls: "git-note-history-impact-kind" });
-      setIcon(kind, relation.kind === "tag" ? "tag" : relation.kind === "embed" ? "paperclip" : "link");
+      setIcon(
+        kind,
+        relation.kind === "tag"
+          ? "tag"
+          : relation.kind === "footnote"
+            ? "superscript"
+            : relation.kind === "attachment"
+              ? "paperclip"
+              : relation.kind === "embed"
+                ? "panel-top"
+                : "link"
+      );
       row.createSpan({ cls: "git-note-history-impact-label", text: relation.label });
       row.createSpan({ cls: "git-note-history-impact-type", text: relation.kind });
-      if (relation.kind !== "tag") {
+      if (isVaultTargetRelation(relation)) {
         row.createSpan({
           cls: `git-note-history-impact-resolution ${destination ? "is-resolved" : "is-unresolved"}`,
           text: destination

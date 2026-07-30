@@ -308,7 +308,10 @@ function evaluateRelationAssertion(
     ? "markdown"
     : assertion.relation;
   const relation = extractNoteRelations(comparableContent).find((item) =>
-    item.kind === expectedKind
+    (
+      item.kind === expectedKind
+      || (expectedKind === "embed" && item.kind === "attachment")
+    )
     && item.target.toLocaleLowerCase() === target
   );
   const exists = Boolean(relation);

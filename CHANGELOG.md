@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.2
+
+- Added a central knowledge-graph time machine that analyzes up to 80 chronological note versions and keeps only boundaries where links, embeds, attachments, tags, or footnotes actually changed.
+- Added playback, previous/next navigation, relationship-type filters, a focused local graph, a compact event rail, direct target opening, and frozen comparison of the selected relationship boundary.
+- Attachment embeds and footnote references are now distinct relationship types; anchored links retain their heading or block subpath instead of being flattened.
+- Restore previews now calculate a Vault-aware impact wave: restored relationships, unresolved historical targets, missing attachments, inbound links or embeds to removed headings and blocks, and references through aliases that the restored version removes.
+- Relationship analysis remains bounded and read-only. Oversized, excessive, or unreadable historical versions stay visible as explicit gaps, and no change is inferred across them.
+
 ## 0.7.1
 
 - Added a pluggable history-source bus with explicit capabilities, access mode, confidence, retention, and provider-boundary metadata.

@@ -102,6 +102,10 @@ vi.mock("../src/views/history-view", () => ({
   GIT_NOTE_HISTORY_VIEW_TYPE: "git-note-history",
   GitNoteHistoryView: class {}
 }));
+vi.mock("../src/views/knowledge-graph-view", () => ({
+  GIT_KNOWLEDGE_GRAPH_VIEW_TYPE: "git-knowledge-graph-time-machine",
+  GitKnowledgeGraphView: class {}
+}));
 vi.mock("../src/views/detail-view", () => ({
   GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE: "git-note-history-detail",
   GitHistoryDetailView: detailMocks.DetailViewMock

@@ -803,14 +803,29 @@ export class GitWorkEventView extends ItemView {
       cls: `git-work-event-relation is-${relation.change}`
     });
     const icon = row.createSpan();
-    setIcon(icon, relation.kind === "tag" ? "tag" : relation.kind === "embed" ? "paperclip" : "link");
+    setIcon(
+      icon,
+      relation.kind === "tag"
+        ? "tag"
+        : relation.kind === "footnote"
+          ? "superscript"
+          : relation.kind === "attachment"
+            ? "paperclip"
+            : relation.kind === "embed"
+              ? "panel-top"
+              : "link"
+    );
     row.createSpan({
       cls: "git-work-event-relation-change",
       text: relation.change === "added" ? "新增" : "移除"
     });
     row.createSpan({ cls: "git-work-event-relation-target", text: relation.label });
     if (relation.eventLocal) row.createSpan({ cls: "git-work-event-relation-local", text: "本事件内" });
-    if (!relation.currentResolvedVaultPath && relation.kind !== "tag") {
+    if (
+      !relation.currentResolvedVaultPath
+      && relation.kind !== "tag"
+      && relation.kind !== "footnote"
+    ) {
       row.createSpan({ cls: "git-work-event-relation-unresolved", text: "当前未解析" });
     }
   }
