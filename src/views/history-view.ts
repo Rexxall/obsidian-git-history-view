@@ -1361,6 +1361,17 @@ export class GitNoteHistoryView extends ItemView {
       provenance.addEventListener("click", () => {
         void this.plugin.openProvenanceLens(this.targetFile!);
       });
+
+      const annotations = controls.createEl("button", {
+        cls: "clickable-icon",
+        attr: {
+          "aria-label": `打开版本批注（${this.plugin.getReviewAnnotations(this.targetFile.path).length}）`
+        }
+      });
+      setIcon(annotations, "message-square-text");
+      annotations.addEventListener("click", () => {
+        void this.plugin.openReviewAnnotations(this.targetFile!);
+      });
     }
 
     const refresh = controls.createEl("button", {
@@ -2076,6 +2087,12 @@ export class GitNoteHistoryView extends ItemView {
       .setTitle("创建只读时间胶囊")
       .setIcon("boxes")
       .onClick(() => this.confirmHistoricalSandbox(commit)));
+    if (this.targetFile) {
+      menu.addItem((item) => item
+        .setTitle("批注这个历史版本")
+        .setIcon("message-square-plus")
+        .onClick(() => void this.plugin.addCommitReviewAnnotation(this.targetFile!, commit)));
+    }
     menu.addSeparator();
     menu.addItem((item) => item.setTitle("与当前版本比较").setIcon("git-compare-arrows").onClick(() => void this.openAgainstWorking(commit)));
     this.addPreviousMilestoneCompareItems(menu, commit, state);

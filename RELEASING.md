@@ -97,3 +97,12 @@ The install archive must contain exactly:
 - [x] Obsidian 1.12.7 in the second test vault confirms 33 block-source cards, filters and an honest empty state, evidence disclosure, frozen read-only source comparison, and immediate `Esc` exit. Projects confirms the history-sidebar shortcut, eight block-source cards, narrow layout, and light/dark rendering.
 - [x] Real temporary Git tests confirm Agent trailer evidence, uncommitted and untracked working attribution, review coverage, citation-sync prompts, and unchanged HEAD / status. The live Vaults had no Agent-trailer or uncommitted Markdown fixture, so acceptance did not create a synthetic commit in user history.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.7.4 local acceptance
+
+- [x] `npm run release:check` passes with 221 tests across 23 files, the production build, and package verification.
+- [x] `dist/git-note-history-0.7.4.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `48362ac87391c992d9c21e860506ec177c34b2388a235c6b251497f40d82b326`.
+- [x] both test vaults installs match the tracked build. Their pre-load `data.json` hashes match the 0.7.3 installation backups exactly.
+- [x] Real temporary Git tests confirm missing-note handling, dedicated-ref writes, preservation of unrelated note text, managed-marker replacement, annotation decoding, and unchanged HEAD / status.
+- [ ] Obsidian 1.12.7 checks in both test vaults: commands and menus, current-version and block annotation, historical-version annotation, status editing and deletion, Markdown package copy, Git notes warning, narrow layout, and light/dark rendering.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.

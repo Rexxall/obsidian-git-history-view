@@ -131,6 +131,25 @@ import {
   type KnowledgeGraphTimeline,
   type KnowledgeGraphVersion
 } from "./knowledge-graph/time-machine";
+import type {
+  ReviewAnnotation,
+  ReviewAnnotationBlockAnchor,
+  ReviewAnnotationStatus
+} from "./annotations/types";
+import {
+  annotationBlockAnchor,
+  buildMarkdownReviewPackage,
+  decodeGitNotesReview,
+  encodeGitNotesReview,
+  MAX_REVIEW_ANNOTATIONS,
+  MAX_REVIEW_ANNOTATIONS_PER_FILE
+} from "./annotations/review-annotations";
+import { findBlockAtLines } from "./history/markdown-blocks";
+import { ReviewAnnotationModal } from "./ui/review-annotation-modal";
+import {
+  GIT_REVIEW_ANNOTATIONS_VIEW_TYPE,
+  GitReviewAnnotationsView
+} from "./views/review-annotations-view";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -162,6 +181,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private recoveryBaskets: Record<string, RecoveryBasketState> = {};
   private historicalSandboxes: Record<string, HistoricalSandboxRecord> = {};
   private localSnapshots: Record<string, LocalHistorySnapshot> = {};
+  private reviewAnnotations: Record<string, ReviewAnnotation> = {};
   private historicalSandboxManager!: HistoricalSandboxManager;
   private fileReviewStates: Record<string, FileReviewState> = {};
   private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
@@ -182,6 +202,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingKnowledgeGraphLeaf: Promise<WorkspaceLeaf> | null = null;
   private provenanceLensOpenGeneration = 0;
   private pendingProvenanceLensLeaf: Promise<WorkspaceLeaf> | null = null;
+  private reviewAnnotationsOpenGeneration = 0;
+  private pendingReviewAnnotationsLeaf: Promise<WorkspaceLeaf> | null = null;
   private readonly pendingHistoricalSandboxCreates = new Map<
     string,
     Promise<HistoricalSandboxRecord>
@@ -252,6 +274,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerView(
       GIT_PROVENANCE_LENS_VIEW_TYPE,
       (leaf) => new GitProvenanceLensView(leaf, this)
+    );
+    this.registerView(
+      GIT_REVIEW_ANNOTATIONS_VIEW_TYPE,
+      (leaf) => new GitReviewAnnotationsView(leaf, this)
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -453,6 +479,48 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-current-note-review-annotations",
+      name: "打开当前笔记的版本批注",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) void this.openReviewAnnotations(file);
+        return available;
+      }
+    });
+
+    this.addCommand({
+      id: "annotate-current-note-version",
+      name: "批注当前笔记的工作区版本",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) void this.addWorkingVersionAnnotation(file);
+        return available;
+      }
+    });
+
+    this.addCommand({
+      id: "annotate-selected-markdown-block",
+      name: "批注当前段落或选中内容块",
+      editorCheckCallback: (checking, editor, view) => {
+        if (!view.file || view.file.extension !== "md") return false;
+        if (!checking) {
+          const selection = editor.listSelections()[0];
+          const cursor = editor.getCursor();
+          const startLine = selection
+            ? Math.min(selection.anchor.line, selection.head.line)
+            : cursor.line;
+          const endLine = selection
+            ? Math.max(selection.anchor.line, selection.head.line)
+            : cursor.line;
+          void this.addWorkingVersionAnnotation(view.file, { startLine, endLine });
+        }
+        return true;
+      }
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -509,6 +577,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
             .setIcon("scan-eye")
             .onClick(() => void this.openProvenanceLens(file))
         );
+        menu.addItem((item) =>
+          item
+            .setTitle("打开版本批注")
+            .setIcon("message-square-text")
+            .onClick(() => void this.openReviewAnnotations(file))
+        );
       })
     );
     this.registerEvent(
@@ -537,17 +611,24 @@ export default class GitNoteHistoryPlugin extends Plugin {
           nextPath,
           includeDescendants
         );
+        const annotationMigration = this.renameReviewAnnotationPath(
+          oldPath,
+          nextPath,
+          includeDescendants
+        );
         void (async () => {
           const [
             reviewResult,
             restoreResult,
             basketResult,
-            localSnapshotResult
+            localSnapshotResult,
+            annotationResult
           ] = await Promise.allSettled([
             reviewMigration,
             restoreMigration,
             basketMigration,
-            localSnapshotMigration
+            localSnapshotMigration,
+            annotationMigration
           ]);
           if (reviewResult.status === "rejected") {
             const reason = reviewResult.reason;
@@ -574,6 +655,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
             const reason = localSnapshotResult.reason;
             new Notice(
               `重命名后未能迁移本地快照：${reason instanceof Error ? reason.message : String(reason)}`,
+              9000
+            );
+          }
+          if (annotationResult.status === "rejected") {
+            const reason = annotationResult.reason;
+            new Notice(
+              `重命名后未能迁移版本批注：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
@@ -658,6 +746,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingKnowledgeGraphLeaf = null;
     this.provenanceLensOpenGeneration += 1;
     this.pendingProvenanceLensLeaf = null;
+    this.reviewAnnotationsOpenGeneration += 1;
+    this.pendingReviewAnnotationsLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
@@ -669,6 +759,42 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_REVIEW_ANNOTATIONS_VIEW_TYPE);
+  }
+
+  async openReviewAnnotations(file: TFile): Promise<void> {
+    if (this.isUnloading || file.extension !== "md") return;
+    const generation = ++this.reviewAnnotationsOpenGeneration;
+    const pending = this.pendingReviewAnnotationsLeaf;
+    const leafPromise = pending ?? (async () => {
+      const existing = this.app.workspace
+        .getLeavesOfType(GIT_REVIEW_ANNOTATIONS_VIEW_TYPE)
+        .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+      if (existing) return existing;
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_REVIEW_ANNOTATIONS_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    if (!pending) this.pendingReviewAnnotationsLeaf = leafPromise;
+    let leaf: WorkspaceLeaf;
+    try {
+      leaf = await leafPromise;
+    } finally {
+      if (this.pendingReviewAnnotationsLeaf === leafPromise) {
+        this.pendingReviewAnnotationsLeaf = null;
+      }
+    }
+    if (this.isUnloading) {
+      leaf.detach();
+      return;
+    }
+    if (generation !== this.reviewAnnotationsOpenGeneration) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (generation !== this.reviewAnnotationsOpenGeneration || this.isUnloading) return;
+    if (leaf.view instanceof GitReviewAnnotationsView) await leaf.view.setFile(file);
   }
 
   async openProvenanceLens(file: TFile): Promise<void> {
@@ -1867,6 +1993,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE)) {
       if (leaf.view instanceof GitProvenanceLensView) void leaf.view.refresh();
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(GIT_REVIEW_ANNOTATIONS_VIEW_TYPE)) {
+      if (leaf.view instanceof GitReviewAnnotationsView) void leaf.view.refresh();
+    }
   }
 
   getFileReviewState(context: GitRepositoryContext): FileReviewState {
@@ -1901,7 +2030,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     restoreReceipts = this.restoreReceipts,
     recoveryBaskets = this.recoveryBaskets,
     historicalSandboxes = this.historicalSandboxes,
-    localSnapshots = this.localSnapshots
+    localSnapshots = this.localSnapshots,
+    reviewAnnotations = this.reviewAnnotations
   ): PersistedPluginData {
     return {
       schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
@@ -1911,9 +2041,238 @@ export default class GitNoteHistoryPlugin extends Plugin {
       recoveryBaskets,
       historicalSandboxes,
       localSnapshots,
+      reviewAnnotations,
       fileReviewStates,
       reviewInboxCheckpoints
     };
+  }
+
+  getReviewAnnotations(filePath?: string): ReviewAnnotation[] {
+    return Object.values(this.reviewAnnotations)
+      .filter((item) => !filePath || item.filePath === filePath)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .map(clonePlainData);
+  }
+
+  private mutateReviewAnnotations<T>(
+    mutation: (records: Record<string, ReviewAnnotation>) => T | Promise<T>,
+    shouldPersist: (result: T) => boolean = () => true
+  ): Promise<T> {
+    return this.enqueueDataOperation(async () => {
+      const next = clonePlainData(this.reviewAnnotations);
+      const result = await mutation(next);
+      if (!shouldPersist(result)) return result;
+      await this.saveData(this.pluginDataSnapshot(
+        this.fileReviewStates,
+        this.reviewInboxCheckpoints,
+        this.undoStack,
+        this.restoreReceipts,
+        this.recoveryBaskets,
+        this.historicalSandboxes,
+        this.localSnapshots,
+        next
+      ));
+      this.reviewAnnotations = next;
+      return result;
+    });
+  }
+
+  async addWorkingVersionAnnotation(
+    file: TFile,
+    range?: { startLine: number; endLine: number }
+  ): Promise<void> {
+    try {
+      const [history, content] = await Promise.all([
+        this.gitClient.loadFileHistory(file),
+        this.app.vault.read(file)
+      ]);
+      const block = range
+        ? findBlockAtLines(content, range.startLine, range.endLine)
+        : null;
+      if (range && !block) {
+        new Notice("没有找到可批注的 Markdown 内容块。");
+        return;
+      }
+      const fingerprint = contentFingerprint(content);
+      this.openReviewAnnotationEditor({
+        file,
+        repositoryRoot: history.context.repositoryRoot,
+        historicalPath: history.context.repositoryRelativePath,
+        commitHash: `working:${fingerprint}`,
+        versionLabel: "当前工作区",
+        ...(block ? { block: annotationBlockAnchor(block) } : {})
+      });
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error), 8000);
+    }
+  }
+
+  async addCommitReviewAnnotation(
+    file: TFile,
+    commit: GitCommitVersion,
+    block?: ReviewAnnotationBlockAnchor
+  ): Promise<void> {
+    try {
+      const context = await this.gitClient.resolveFileContext(file);
+      this.openReviewAnnotationEditor({
+        file,
+        repositoryRoot: context.repositoryRoot,
+        historicalPath: commit.historicalPath,
+        commitHash: commit.hash,
+        versionLabel: `${commit.shortHash} · ${commit.subject}`,
+        ...(block ? { block } : {})
+      });
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error), 8000);
+    }
+  }
+
+  private openReviewAnnotationEditor(input: {
+    file: TFile;
+    repositoryRoot: string;
+    historicalPath: string;
+    commitHash: string;
+    versionLabel: string;
+    block?: ReviewAnnotationBlockAnchor;
+  }): void {
+    const targetDescription = input.block
+      ? `${input.versionLabel} · 第 ${input.block.startLine + 1}–${input.block.endLine + 1} 行`
+      : `${input.versionLabel} · 整个版本`;
+    new ReviewAnnotationModal(this.app, undefined, targetDescription, async (draft) => {
+      if (!draft) return;
+      const now = new Date().toISOString();
+      const id = `annotation:${globalThis.crypto?.randomUUID?.()
+        ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+      await this.mutateReviewAnnotations((records) => {
+        const total = Object.keys(records).length;
+        const fileCount = Object.values(records)
+          .filter((item) =>
+            item.repositoryRoot === input.repositoryRoot
+            && item.filePath === input.file.path
+          ).length;
+        if (total >= MAX_REVIEW_ANNOTATIONS) {
+          throw new Error(`批注总数已达到 ${MAX_REVIEW_ANNOTATIONS} 条上限。`);
+        }
+        if (fileCount >= MAX_REVIEW_ANNOTATIONS_PER_FILE) {
+          throw new Error(`这篇笔记的批注已达到 ${MAX_REVIEW_ANNOTATIONS_PER_FILE} 条上限。`);
+        }
+        records[id] = {
+          id,
+          repositoryRoot: input.repositoryRoot,
+          filePath: input.file.path,
+          historicalPath: input.historicalPath,
+          commitHash: input.commitHash,
+          versionLabel: input.versionLabel,
+          target: input.block ? "block" : "version",
+          ...(input.block ? { block: input.block } : {}),
+          comment: draft.comment,
+          status: draft.status,
+          source: "local",
+          createdAt: now,
+          updatedAt: now
+        };
+      });
+      new Notice("版本批注已保存。");
+      await this.openReviewAnnotations(input.file);
+      this.refreshOpenViews();
+    }).open();
+  }
+
+  async updateReviewAnnotation(
+    id: string,
+    value: { comment: string; status: ReviewAnnotationStatus }
+  ): Promise<void> {
+    await this.mutateReviewAnnotations((records) => {
+      const existing = records[id];
+      if (!existing) throw new Error("找不到这条版本批注。");
+      existing.comment = value.comment.trim().slice(0, 4000);
+      existing.status = value.status;
+      existing.updatedAt = new Date().toISOString();
+    });
+    this.refreshOpenViews();
+  }
+
+  async deleteReviewAnnotation(id: string): Promise<void> {
+    await this.mutateReviewAnnotations((records) => {
+      delete records[id];
+    });
+    this.refreshOpenViews();
+  }
+
+  async copyAnnotationReviewPackage(file: TFile): Promise<void> {
+    const markdown = buildMarkdownReviewPackage(
+      file.path,
+      this.getReviewAnnotations(file.path)
+    );
+    await navigator.clipboard.writeText(markdown);
+    new Notice("Markdown 审阅包已复制到剪贴板。");
+  }
+
+  async syncAnnotationsToGitNotes(file: TFile): Promise<void> {
+    const annotations = this.getReviewAnnotations(file.path)
+      .filter((item) => !item.commitHash.startsWith("working:"));
+    if (annotations.length === 0) {
+      new Notice("没有绑定 Git commit 的批注；工作区批注不能写入 Git notes。", 7000);
+      return;
+    }
+    const byCommit = new Map<string, ReviewAnnotation[]>();
+    for (const item of annotations) {
+      const group = byCommit.get(item.commitHash) ?? [];
+      group.push(item);
+      byCommit.set(item.commitHash, group);
+    }
+    let imported = 0;
+    for (const [commitHash, localItems] of byCommit) {
+      const existing = await this.gitClient.readReviewGitNote(
+        localItems[0]!.repositoryRoot,
+        commitHash
+      );
+      const remoteItems = decodeGitNotesReview(existing);
+      const merged = new Map<string, ReviewAnnotation>();
+      for (const item of [...remoteItems, ...localItems]) {
+        const previous = merged.get(item.id);
+        if (!previous || item.updatedAt >= previous.updatedAt) merged.set(item.id, item);
+      }
+      for (const item of remoteItems) {
+        if (this.reviewAnnotations[item.id]) continue;
+        imported += 1;
+        item.source = "git-notes";
+        await this.mutateReviewAnnotations((records) => {
+          records[item.id] = item;
+        });
+      }
+      await this.gitClient.writeReviewGitNote(
+        localItems[0]!.repositoryRoot,
+        commitHash,
+        encodeGitNotesReview(existing, [...merged.values()])
+      );
+    }
+    new Notice(
+      `已写入 ${byCommit.size} 个 commit 的专用 Git notes${imported ? `，并导入 ${imported} 条批注` : ""}。普通 git push 默认不会同步该 ref。`,
+      9000
+    );
+    this.refreshOpenViews();
+  }
+
+  private renameReviewAnnotationPath(
+    oldPath: string,
+    newPath: string,
+    includeDescendants: boolean
+  ): Promise<boolean> {
+    return this.mutateReviewAnnotations((records) => {
+      let changed = false;
+      for (const item of Object.values(records)) {
+        const nextPath = item.filePath === oldPath
+          ? newPath
+          : includeDescendants && item.filePath.startsWith(`${oldPath}/`)
+            ? `${newPath}${item.filePath.slice(oldPath.length)}`
+            : item.filePath;
+        if (nextPath === item.filePath) continue;
+        item.filePath = nextPath;
+        changed = true;
+      }
+      return changed;
+    }, (changed) => changed);
   }
 
   private mutateHistoricalSandboxes<T>(
@@ -2401,6 +2760,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.recoveryBaskets = data?.recoveryBaskets ?? {};
     this.historicalSandboxes = data?.historicalSandboxes ?? {};
     this.localSnapshots = data?.localSnapshots ?? {};
+    this.reviewAnnotations = data?.reviewAnnotations ?? {};
     this.fileReviewStates = data.fileReviewStates ?? {};
     this.reviewInboxCheckpoints = data?.reviewInboxCheckpoints ?? {};
     if (previousSchema !== CURRENT_DATA_SCHEMA_VERSION) {

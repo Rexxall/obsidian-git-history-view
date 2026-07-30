@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.4
+
+- Added a central per-note annotation workbench and commands for annotating either the current working version or the Markdown block under the cursor/selection without changing the note or commit.
+- Historical commit menus can now attach whole-version annotations. Every annotation records the repository, current and historical paths, exact version identity, original block context, status, and timestamps.
+- Annotation status moves explicitly between pending, resolved, and no-action. Block annotations first relocate by exact content fingerprint, then by a conservative Markdown structure/content match; failed relocation keeps the original context visible.
+- Added a readable Markdown review-package export to the clipboard for external review and handoff.
+- Added optional, confirmed Git notes synchronization through the dedicated `refs/notes/git-note-history-review` ref. Managed data is bounded by markers, unrelated note text is preserved, existing annotations are merged by ID and timestamp, and the UI warns that ordinary `git push` does not normally transfer notes.
+- Persisted data now uses schema v6, validates malformed annotations, enforces global and per-file limits, and migrates annotation paths on file or folder rename.
+
 ## 0.7.3
 
 - Added a temporary block-level provenance lens with a direct history-sidebar shortcut, file-menu entry, command-palette entry, search, focused filters, and immediate `Esc` exit.

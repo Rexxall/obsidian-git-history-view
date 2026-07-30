@@ -23,8 +23,9 @@ import {
 import { contentFingerprint } from "../history/version-groups";
 import type { HistoricalSandboxRecord } from "../sandbox/types";
 import { normalizeLocalSnapshots } from "../history-sources/local-snapshots";
+import { normalizeReviewAnnotations } from "../annotations/review-annotations";
 
-export const CURRENT_DATA_SCHEMA_VERSION = 5;
+export const CURRENT_DATA_SCHEMA_VERSION = 6;
 export const REVIEW_STATE_KEY_SEPARATOR = "\u001f";
 
 export function reviewStateKey(context: GitRepositoryContext): string {
@@ -403,7 +404,8 @@ export function migratePluginData(value: unknown): PersistedPluginData {
     fileReviewStates,
     recoveryBaskets: normalizeRecoveryBaskets(candidate.recoveryBaskets),
     historicalSandboxes: normalizeHistoricalSandboxes(candidate.historicalSandboxes),
-    localSnapshots: normalizeLocalSnapshots(candidate.localSnapshots)
+    localSnapshots: normalizeLocalSnapshots(candidate.localSnapshots),
+    reviewAnnotations: normalizeReviewAnnotations(candidate.reviewAnnotations)
   };
 }
 

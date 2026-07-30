@@ -519,6 +519,46 @@ export class GitClient {
     return this.runGit(repositoryRoot, ["show", `${commitHash}:${historicalPath}`]);
   }
 
+  async readReviewGitNote(repositoryRoot: string, commitHash: string): Promise<string> {
+    if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
+      throw new GitCommandError("Git 提交哈希格式无效。");
+    }
+    try {
+      return await this.runGit(repositoryRoot, [
+        "notes",
+        "--ref=git-note-history-review",
+        "show",
+        commitHash
+      ]);
+    } catch (error) {
+      if (
+        error instanceof GitCommandError
+        && /no note found|cannot read note data|failed to resolve/i.test(error.stderr)
+      ) return "";
+      throw error;
+    }
+  }
+
+  async writeReviewGitNote(
+    repositoryRoot: string,
+    commitHash: string,
+    content: string
+  ): Promise<void> {
+    if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
+      throw new GitCommandError("Git 提交哈希格式无效。");
+    }
+    if (!content.trim()) throw new GitCommandError("Git notes 内容不能为空。");
+    await this.runGit(repositoryRoot, [
+      "notes",
+      "--ref=git-note-history-review",
+      "add",
+      "-f",
+      "-F",
+      "-",
+      commitHash
+    ], content);
+  }
+
   async getContentForReference(
     file: TFile,
     repositoryRoot: string,
