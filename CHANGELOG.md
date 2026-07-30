@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.3
+
+- Added a central recovery basket that collects change hunks and individual YAML properties from multiple Git versions of the same note.
+- Added frozen-baseline planning, overlap and property conflict detection, duplicate handling, relation-removal warnings, and a full final Markdown preview.
+- Added one-write apply with confirm-time revalidation, restore receipts, concurrency protection, and undo support.
+- Added basket shortcuts in the history sidebar and comparison toolbar, plus local schema v3 persistence with malformed-data isolation.
+
 ## 0.6.2
 
 - 新增独立的中央“知识边界追踪”工作台，用明确声明回答一句话、属性、关系、Markdown 结构或规则从哪一版开始成立、失效或反复变化，不再只按关键词出现次数猜测。

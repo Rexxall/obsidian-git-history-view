@@ -28,6 +28,13 @@ const KIND_SYMBOLS: Record<SemanticChangeKind, string> = {
   moved: "↕"
 };
 
+export interface SemanticDiffRenderOptions {
+  onAddPropertyToBasket?: (
+    propertyName: string,
+    change: SemanticChange
+  ) => void | Promise<void>;
+}
+
 export function buildSemanticDiff(
   beforeText: string,
   afterText: string,
@@ -79,7 +86,11 @@ function renderDetails(container: HTMLElement, change: SemanticChange): void {
   }
 }
 
-function renderGroups(container: HTMLElement, changes: SemanticChange[]): void {
+function renderGroups(
+  container: HTMLElement,
+  changes: SemanticChange[],
+  options: SemanticDiffRenderOptions = {}
+): void {
   const groups = container.createDiv({ cls: "git-note-history-semantic-groups" });
   for (const group of semanticGroupOrder()) {
     const grouped = changes.filter((change) => change.group === group);
@@ -99,6 +110,15 @@ function renderGroups(container: HTMLElement, changes: SemanticChange[]): void {
       renderLocation(content, change);
       renderValues(content, change);
       renderDetails(content, change);
+      if (group === "属性" && options.onAddPropertyToBasket) {
+        const action = row.createEl("button", {
+          cls: "git-note-history-semantic-basket-action",
+          text: "加入恢复篮子"
+        });
+        action.addEventListener("click", () =>
+          void options.onAddPropertyToBasket?.(change.label, change)
+        );
+      }
     }
   }
 }
@@ -106,7 +126,8 @@ function renderGroups(container: HTMLElement, changes: SemanticChange[]): void {
 export function renderSemanticOverview(
   container: HTMLElement,
   changes: SemanticChange[],
-  compact = false
+  compact = false,
+  options: SemanticDiffRenderOptions = {}
 ): void {
   if (changes.length === 0) return;
   const shell = container.createEl(compact ? "details" : "section", {
@@ -123,10 +144,14 @@ export function renderSemanticOverview(
     const count = changes.filter((change) => change.kind === kind).length;
     if (count > 0) metrics.createSpan({ cls: `is-${kind}`, text: `${KIND_LABELS[kind]} ${count}` });
   }
-  renderGroups(shell, changes);
+  renderGroups(shell, changes, options);
 }
 
-export function renderSemanticDiff(container: HTMLElement, changes: SemanticChange[]): void {
+export function renderSemanticDiff(
+  container: HTMLElement,
+  changes: SemanticChange[],
+  options: SemanticDiffRenderOptions = {}
+): void {
   container.empty();
   container.addClass("git-note-history-semantic-view");
   if (changes.length === 0) {
@@ -136,5 +161,5 @@ export function renderSemanticDiff(container: HTMLElement, changes: SemanticChan
     });
     return;
   }
-  renderSemanticOverview(container, changes);
+  renderSemanticOverview(container, changes, false, options);
 }

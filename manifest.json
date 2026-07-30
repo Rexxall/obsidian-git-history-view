@@ -1,9 +1,9 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "minAppVersion": "1.8.0",
-  "description": "Trace knowledge boundaries across Git history, review cross-file work events, compare Markdown clearly, and restore notes safely.",
+  "description": "Collect changes from Git history, preview one recovery plan, trace knowledge boundaries, and restore Markdown safely.",
   "author": "Rexxall",
   "isDesktopOnly": true
 }

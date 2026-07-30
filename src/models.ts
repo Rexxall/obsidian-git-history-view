@@ -199,7 +199,7 @@ export interface UndoSnapshot {
   scope?: RestoreScope;
 }
 
-export type RestoreScope = "file" | "hunk" | "paragraph" | "conflict";
+export type RestoreScope = "file" | "hunk" | "paragraph" | "conflict" | "basket";
 
 export interface RestoreReceipt {
   id: string;
@@ -227,6 +227,7 @@ export interface PersistedPluginData {
   undoSnapshot?: UndoSnapshot | null;
   undoStack?: UndoSnapshot[];
   restoreReceipts?: RestoreReceipt[];
+  recoveryBaskets?: Record<string, RecoveryBasketState>;
   fileReviewStates?: Record<string, FileReviewState>;
   reviewInboxCheckpoints?: Record<string, ReviewInboxCheckpoint>;
 }
@@ -245,3 +246,4 @@ export interface DetailRequest {
   baseContentOverride?: string;
   targetContentOverride?: string;
 }
+import type { RecoveryBasketState } from "./recovery-basket/types";

@@ -1272,6 +1272,21 @@ export class GitNoteHistoryView extends ItemView {
     });
 
     if (this.targetFile) {
+      const basketCount = this.plugin.getRecoveryBasketCount(this.targetFile.path);
+      const basket = controls.createEl("button", {
+        cls: basketCount > 0 ? "clickable-icon git-note-history-basket-shortcut has-items" : "clickable-icon",
+        attr: {
+          "aria-label": basketCount > 0
+            ? `打开恢复篮子，已有 ${basketCount} 项`
+            : "打开恢复篮子"
+        }
+      });
+      setIcon(basket, "shopping-basket");
+      if (basketCount > 0) basket.dataset.count = String(basketCount);
+      basket.addEventListener("click", () => {
+        void this.plugin.openRecoveryBasket(this.targetFile!);
+      });
+
       const trace = controls.createEl("button", {
         cls: "clickable-icon",
         attr: { "aria-label": "追踪知识变化边界" }

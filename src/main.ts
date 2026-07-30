@@ -80,6 +80,18 @@ import {
   type KnowledgeWorkingSnapshot
 } from "./knowledge-trace/version-materializer";
 import { traceKnowledgeBoundary } from "./knowledge-trace/boundary-search";
+import type {
+  RecoveryBasketItem,
+  RecoveryBasketState
+} from "./recovery-basket/types";
+import {
+  appendRecoveryBasketItem,
+  createRecoveryBasket
+} from "./recovery-basket/planner";
+import {
+  GIT_RECOVERY_BASKET_VIEW_TYPE,
+  GitRecoveryBasketView
+} from "./views/recovery-basket-view";
 
 function clonePlainData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -105,6 +117,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private knowledgeVersionMaterializer!: KnowledgeVersionMaterializer;
   private undoStack: UndoSnapshot[] = [];
   private restoreReceipts: RestoreReceipt[] = [];
+  private recoveryBaskets: Record<string, RecoveryBasketState> = {};
   private fileReviewStates: Record<string, FileReviewState> = {};
   private reviewInboxCheckpoints: Record<string, ReviewInboxCheckpoint> = {};
   private dataOperationQueue: Promise<void> = Promise.resolve();
@@ -114,6 +127,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private pendingWorkEventLeaf: Promise<WorkspaceLeaf> | null = null;
   private knowledgeTraceOpenGeneration = 0;
   private pendingKnowledgeTraceLeaf: Promise<WorkspaceLeaf> | null = null;
+  private recoveryBasketOpenGeneration = 0;
+  private pendingRecoveryBasketLeaf: Promise<WorkspaceLeaf> | null = null;
   private isUnloading = false;
 
   async onload(): Promise<void> {
@@ -159,6 +174,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
         isFrozenWorkspaceStale: (filePath, snapshot) =>
           this.isKnowledgeTraceWorkspaceStale(filePath, snapshot)
       })
+    );
+    this.registerView(
+      GIT_RECOVERY_BASKET_VIEW_TYPE,
+      (leaf) => new GitRecoveryBasketView(leaf, this)
     );
 
     this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
@@ -301,6 +320,19 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "open-current-note-recovery-basket",
+      name: "打开当前笔记的恢复篮子",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) {
+          void this.openRecoveryBasket(file);
+        }
+        return available;
+      }
+    });
+
+    this.addCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -357,10 +389,16 @@ export default class GitNoteHistoryPlugin extends Plugin {
           nextPath,
           includeDescendants
         );
+        const basketMigration = this.renameRecoveryBasketPath(
+          oldPath,
+          nextPath,
+          includeDescendants
+        );
         void (async () => {
-          const [reviewResult, restoreResult] = await Promise.allSettled([
+          const [reviewResult, restoreResult, basketResult] = await Promise.allSettled([
             reviewMigration,
-            restoreMigration
+            restoreMigration,
+            basketMigration
           ]);
           if (reviewResult.status === "rejected") {
             const reason = reviewResult.reason;
@@ -373,6 +411,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
             const reason = restoreResult.reason;
             new Notice(
               `重命名后未能迁移恢复记录：${reason instanceof Error ? reason.message : String(reason)}`,
+              9000
+            );
+          }
+          if (basketResult.status === "rejected") {
+            const reason = basketResult.reason;
+            new Notice(
+              `重命名后未能迁移恢复篮子：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
@@ -392,12 +437,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingWorkEventLeaf = null;
     this.knowledgeTraceOpenGeneration += 1;
     this.pendingKnowledgeTraceLeaf = null;
+    this.recoveryBasketOpenGeneration += 1;
+    this.pendingRecoveryBasketLeaf = null;
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_CONFLICT_RESOLVER_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_WORK_EVENT_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_TRACE_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE);
   }
 
   async activateWorkspaceReview(): Promise<void> {
@@ -561,6 +609,51 @@ export default class GitNoteHistoryPlugin extends Plugin {
     } finally {
       if (this.pendingKnowledgeTraceLeaf === leafPromise) {
         this.pendingKnowledgeTraceLeaf = null;
+      }
+    }
+  }
+
+  async openRecoveryBasket(file: TFile): Promise<void> {
+    if (this.isUnloading || file.extension !== "md") return;
+    const generation = ++this.recoveryBasketOpenGeneration;
+    const leaf = await this.ensureRecoveryBasketLeaf();
+    if (!leaf || this.isUnloading) {
+      leaf?.detach();
+      return;
+    }
+    if (generation !== this.recoveryBasketOpenGeneration) return;
+    await this.app.workspace.revealLeaf(leaf);
+    if (
+      this.isUnloading
+      || generation !== this.recoveryBasketOpenGeneration
+    ) return;
+    if (leaf.view instanceof GitRecoveryBasketView) {
+      await leaf.view.setFile(file);
+    }
+  }
+
+  private async ensureRecoveryBasketLeaf(): Promise<WorkspaceLeaf | null> {
+    if (this.isUnloading) return null;
+    const pendingLeaf = this.pendingRecoveryBasketLeaf;
+    if (pendingLeaf) return pendingLeaf;
+    const existing = this.app.workspace
+      .getLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE)
+      .find((candidate) => candidate.getRoot() === this.app.workspace.rootSplit);
+    if (existing) return existing;
+    const leafPromise = (async (): Promise<WorkspaceLeaf> => {
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({
+        type: GIT_RECOVERY_BASKET_VIEW_TYPE,
+        active: true
+      });
+      return leaf;
+    })();
+    this.pendingRecoveryBasketLeaf = leafPromise;
+    try {
+      return await leafPromise;
+    } finally {
+      if (this.pendingRecoveryBasketLeaf === leafPromise) {
+        this.pendingRecoveryBasketLeaf = null;
       }
     }
   }
@@ -739,6 +832,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(GIT_CONFLICT_RESOLVER_VIEW_TYPE)) {
       if (leaf.view instanceof GitConflictResolverView) void leaf.view.refresh();
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE)) {
+      if (leaf.view instanceof GitRecoveryBasketView) void leaf.view.refresh();
+    }
   }
 
   getFileReviewState(context: GitRepositoryContext): FileReviewState {
@@ -770,13 +866,15 @@ export default class GitNoteHistoryPlugin extends Plugin {
     fileReviewStates = this.fileReviewStates,
     reviewInboxCheckpoints = this.reviewInboxCheckpoints,
     undoStack = this.undoStack,
-    restoreReceipts = this.restoreReceipts
+    restoreReceipts = this.restoreReceipts,
+    recoveryBaskets = this.recoveryBaskets
   ): PersistedPluginData {
     return {
       schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
       settings: this.settings,
       undoStack,
       restoreReceipts,
+      recoveryBaskets,
       fileReviewStates,
       reviewInboxCheckpoints
     };
@@ -1046,6 +1144,126 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
   }
 
+  getRecoveryBasket(filePath: string): RecoveryBasketState | undefined {
+    const basket = this.recoveryBaskets[filePath];
+    return basket ? clonePlainData(basket) : undefined;
+  }
+
+  getRecoveryBasketCount(filePath?: string): number {
+    if (filePath) return this.recoveryBaskets[filePath]?.items.length ?? 0;
+    return Object.values(this.recoveryBaskets)
+      .reduce((total, basket) => total + basket.items.length, 0);
+  }
+
+  async addRecoveryBasketItem(
+    file: TFile,
+    baselineContent: string,
+    item: RecoveryBasketItem
+  ): Promise<RecoveryBasketState> {
+    return this.mutateRecoveryBaskets((baskets) => {
+      const existing = baskets[file.path]
+        ?? createRecoveryBasket(file.path, baselineContent);
+      const next = appendRecoveryBasketItem(
+        existing,
+        item,
+        baselineContent
+      );
+      baskets[file.path] = next;
+      return clonePlainData(next);
+    });
+  }
+
+  async removeRecoveryBasketItem(
+    filePath: string,
+    itemId: string
+  ): Promise<boolean> {
+    return this.mutateRecoveryBaskets((baskets) => {
+      const basket = baskets[filePath];
+      if (!basket) return false;
+      const nextItems = basket.items.filter((item) => item.id !== itemId);
+      if (nextItems.length === basket.items.length) return false;
+      if (nextItems.length === 0) {
+        delete baskets[filePath];
+      } else {
+        basket.items = nextItems;
+        basket.updatedAt = new Date().toISOString();
+      }
+      return true;
+    }, (changed) => changed);
+  }
+
+  async moveRecoveryBasketItem(
+    filePath: string,
+    itemId: string,
+    direction: -1 | 1
+  ): Promise<boolean> {
+    return this.mutateRecoveryBaskets((baskets) => {
+      const basket = baskets[filePath];
+      if (!basket) return false;
+      const index = basket.items.findIndex((item) => item.id === itemId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= basket.items.length) return false;
+      const [item] = basket.items.splice(index, 1);
+      if (!item) return false;
+      basket.items.splice(target, 0, item);
+      basket.updatedAt = new Date().toISOString();
+      return true;
+    }, (changed) => changed);
+  }
+
+  async clearRecoveryBasket(filePath: string): Promise<boolean> {
+    return this.mutateRecoveryBaskets((baskets) => {
+      if (!baskets[filePath]) return false;
+      delete baskets[filePath];
+      return true;
+    }, (changed) => changed);
+  }
+
+  private mutateRecoveryBaskets<T>(
+    mutation: (baskets: Record<string, RecoveryBasketState>) => T,
+    shouldPersist: (result: T) => boolean = () => true
+  ): Promise<T> {
+    return this.enqueueDataOperation(async () => {
+      const nextBaskets = clonePlainData(this.recoveryBaskets);
+      const result = mutation(nextBaskets);
+      if (!shouldPersist(result)) return result;
+      await this.saveData(this.pluginDataSnapshot(
+        this.fileReviewStates,
+        this.reviewInboxCheckpoints,
+        this.undoStack,
+        this.restoreReceipts,
+        nextBaskets
+      ));
+      this.recoveryBaskets = nextBaskets;
+      return result;
+    });
+  }
+
+  private renameRecoveryBasketPath(
+    oldPath: string,
+    newPath: string,
+    includeDescendants: boolean
+  ): Promise<boolean> {
+    return this.mutateRecoveryBaskets((baskets) => {
+      let changed = false;
+      const entries = Object.entries(baskets);
+      for (const [key, basket] of entries) {
+        const nextPath = key === oldPath
+          ? newPath
+          : includeDescendants && key.startsWith(`${oldPath}/`)
+            ? `${newPath}${key.slice(oldPath.length)}`
+            : key;
+        if (nextPath === key) continue;
+        delete baskets[key];
+        basket.filePath = nextPath;
+        for (const item of basket.items) item.filePath = nextPath;
+        baskets[nextPath] = basket;
+        changed = true;
+      }
+      return changed;
+    }, (changed) => changed);
+  }
+
   savePluginData(): Promise<void> {
     return this.enqueueDataOperation(async () => {
       await this.saveData(this.pluginDataSnapshot());
@@ -1081,6 +1299,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       scope: snapshot.scope ?? "file"
     }));
     this.restoreReceipts = data?.restoreReceipts ?? [];
+    this.recoveryBaskets = data?.recoveryBaskets ?? {};
     this.fileReviewStates = data.fileReviewStates ?? {};
     this.reviewInboxCheckpoints = data?.reviewInboxCheckpoints ?? {};
     if (previousSchema !== CURRENT_DATA_SCHEMA_VERSION) {

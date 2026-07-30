@@ -1,4 +1,5 @@
 import { applyPatch, diffArrays, diffLines, diffWordsWithSpace, structuredPatch } from "diff";
+import type { RecoveryPatchHunk } from "../recovery-basket/types";
 
 const CONTEXT_LINE_COUNT = 3;
 const COLLAPSE_THRESHOLD = 14;
@@ -9,6 +10,7 @@ export interface UnifiedDiffOptions {
   ignoreWhitespace: boolean;
   ignoreBlankLines?: boolean;
   onRestoreHunk?: (targetContent: string, hunkNumber: number) => void | Promise<void>;
+  onAddHunkToBasket?: (target: HunkRestoreTarget) => void | Promise<void>;
   onLocateLine?: (line: number) => void | Promise<void>;
 }
 
@@ -25,6 +27,7 @@ export interface HunkRestoreTarget {
   targetContent: string;
   currentBlock: string;
   historicalBlock: string;
+  patch: RecoveryPatchHunk;
 }
 
 interface FrontmatterPropertyBlock {
@@ -182,7 +185,14 @@ export function buildHunkRestoreTargets(
       historicalBlock: hunk.lines
         .filter((line) => !line.startsWith("-"))
         .map((line) => line.slice(1))
-        .join("\n")
+        .join("\n"),
+      patch: {
+        oldStart: hunk.oldStart,
+        oldLines: hunk.oldLines,
+        newStart: hunk.newStart,
+        newLines: hunk.newLines,
+        lines: [...hunk.lines]
+      }
     });
   });
   return targets;
@@ -271,7 +281,11 @@ function renderHunkActions(
   currentText: string,
   options: UnifiedDiffOptions
 ): void {
-  if (!options.onRestoreHunk && !options.onLocateLine) return;
+  if (
+    !options.onRestoreHunk
+    && !options.onAddHunkToBasket
+    && !options.onLocateLine
+  ) return;
   const targets = buildHunkRestoreTargets(historicalText, currentText);
   if (targets.length === 0) return;
 
@@ -292,6 +306,15 @@ function renderHunkActions(
     if (options.onRestoreHunk) {
       const restore = actions.createEl("button", { cls: "mod-warning", text: "恢复此块" });
       restore.addEventListener("click", () => void options.onRestoreHunk?.(target.targetContent, target.hunkNumber));
+    }
+    if (options.onAddHunkToBasket) {
+      const collect = actions.createEl("button", {
+        cls: "git-note-history-add-to-basket",
+        text: "加入恢复篮子"
+      });
+      collect.addEventListener("click", () =>
+        void options.onAddHunkToBasket?.(target)
+      );
     }
 
     const copyCurrent = actions.createEl("button", { text: "复制当前块" });

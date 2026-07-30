@@ -10,8 +10,18 @@ import {
   normalizeVersionMilestones,
   projectMilestonesToBookmarks
 } from "../history/milestones";
+import type {
+  RecoveryBasketItem,
+  RecoveryBasketState,
+  RecoveryPatchHunk
+} from "../recovery-basket/types";
+import {
+  MAX_RECOVERY_BASKET_BYTES,
+  MAX_RECOVERY_BASKET_ITEMS
+} from "../recovery-basket/planner";
+import { contentFingerprint } from "../history/version-groups";
 
-export const CURRENT_DATA_SCHEMA_VERSION = 2;
+export const CURRENT_DATA_SCHEMA_VERSION = 3;
 export const REVIEW_STATE_KEY_SEPARATOR = "\u001f";
 
 export function reviewStateKey(context: GitRepositoryContext): string {
@@ -45,6 +55,121 @@ function normalizedIso(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+}
+
+function normalizePatch(value: unknown): RecoveryPatchHunk | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<RecoveryPatchHunk>;
+  if (
+    !Number.isInteger(candidate.oldStart)
+    || !Number.isInteger(candidate.oldLines)
+    || !Number.isInteger(candidate.newStart)
+    || !Number.isInteger(candidate.newLines)
+    || (candidate.oldStart ?? -1) < 0
+    || (candidate.oldLines ?? -1) < 0
+    || (candidate.newStart ?? -1) < 0
+    || (candidate.newLines ?? -1) < 0
+    || !Array.isArray(candidate.lines)
+    || candidate.lines.some((line) => typeof line !== "string")
+  ) return null;
+  return {
+    oldStart: candidate.oldStart!,
+    oldLines: candidate.oldLines!,
+    newStart: candidate.newStart!,
+    newLines: candidate.newLines!,
+    lines: [...candidate.lines as string[]]
+  };
+}
+
+function normalizeRecoveryBasketItem(value: unknown): RecoveryBasketItem | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<RecoveryBasketItem>;
+  const addedAt = normalizedIso(candidate.addedAt);
+  const patches = Array.isArray(candidate.patches)
+    ? candidate.patches.map(normalizePatch)
+    : [];
+  if (
+    typeof candidate.id !== "string"
+    || !candidate.id
+    || typeof candidate.filePath !== "string"
+    || !candidate.filePath
+    || (candidate.kind !== "hunk" && candidate.kind !== "property")
+    || !["replace", "insert", "delete"].includes(candidate.operation ?? "")
+    || typeof candidate.label !== "string"
+    || !candidate.label
+    || !candidate.source
+    || typeof candidate.source !== "object"
+    || typeof candidate.source.versionKey !== "string"
+    || typeof candidate.source.label !== "string"
+    || typeof candidate.previewBefore !== "string"
+    || typeof candidate.previewAfter !== "string"
+    || !addedAt
+    || patches.length === 0
+    || patches.some((patch) => patch === null)
+  ) return null;
+  return {
+    id: candidate.id,
+    filePath: candidate.filePath,
+    kind: candidate.kind,
+    operation: candidate.operation as RecoveryBasketItem["operation"],
+    label: candidate.label,
+    source: { ...candidate.source },
+    patches: patches as RecoveryPatchHunk[],
+    previewBefore: candidate.previewBefore,
+    previewAfter: candidate.previewAfter,
+    ...(Array.isArray(candidate.propertyNames)
+      ? {
+          propertyNames: candidate.propertyNames.filter(
+            (name): name is string => typeof name === "string" && Boolean(name)
+          )
+        }
+      : {}),
+    addedAt
+  };
+}
+
+function normalizeRecoveryBaskets(value: unknown): Record<string, RecoveryBasketState> {
+  const result: Record<string, RecoveryBasketState> = {};
+  for (const basketValue of Object.values(objectRecord(value))) {
+    if (!basketValue || typeof basketValue !== "object") continue;
+    const candidate = basketValue as Partial<RecoveryBasketState>;
+    const createdAt = normalizedIso(candidate.createdAt);
+    const updatedAt = normalizedIso(candidate.updatedAt);
+    if (
+      candidate.schemaVersion !== 1
+      || typeof candidate.id !== "string"
+      || !candidate.id
+      || typeof candidate.filePath !== "string"
+      || !candidate.filePath
+      || typeof candidate.baselineContent !== "string"
+      || typeof candidate.baselineFingerprint !== "string"
+      || candidate.baselineFingerprint !== contentFingerprint(candidate.baselineContent)
+      || !createdAt
+      || !updatedAt
+      || !Array.isArray(candidate.items)
+      || candidate.items.length > MAX_RECOVERY_BASKET_ITEMS
+    ) continue;
+    const items = candidate.items
+      .map(normalizeRecoveryBasketItem)
+      .filter((item): item is RecoveryBasketItem =>
+        item !== null && item.filePath === candidate.filePath
+      );
+    const basket: RecoveryBasketState = {
+      schemaVersion: 1,
+      id: candidate.id,
+      filePath: candidate.filePath,
+      baselineContent: candidate.baselineContent,
+      baselineFingerprint: candidate.baselineFingerprint,
+      createdAt,
+      updatedAt,
+      items
+    };
+    if (new TextEncoder().encode(JSON.stringify(basket)).byteLength > MAX_RECOVERY_BASKET_BYTES) {
+      continue;
+    }
+    result[basket.filePath] = basket;
+  }
+  return result;
 }
 
 function normalizeCheckpoint(value: unknown): ReviewCheckpoint | undefined {
@@ -195,7 +320,8 @@ export function migratePluginData(value: unknown): PersistedPluginData {
   return {
     ...(candidate as PersistedPluginData),
     schemaVersion: CURRENT_DATA_SCHEMA_VERSION,
-    fileReviewStates
+    fileReviewStates,
+    recoveryBaskets: normalizeRecoveryBaskets(candidate.recoveryBaskets)
   };
 }
 

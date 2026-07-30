@@ -57,6 +57,18 @@ const knowledgeTraceMocks = vi.hoisted(() => {
   return { KnowledgeTraceViewMock, KnowledgeTraceSetupModalMock };
 });
 
+const recoveryBasketMocks = vi.hoisted(() => {
+  class RecoveryBasketViewMock {
+    readonly files: unknown[] = [];
+
+    async setFile(file: unknown): Promise<void> {
+      this.files.push(file);
+    }
+  }
+
+  return { RecoveryBasketViewMock };
+});
+
 vi.mock("obsidian", () => ({
   MarkdownView: class {},
   Notice: class {},
@@ -119,6 +131,10 @@ vi.mock("../src/views/knowledge-trace-view", () => ({
   GIT_KNOWLEDGE_TRACE_VIEW_TYPE: "git-knowledge-trace",
   GitKnowledgeTraceView: knowledgeTraceMocks.KnowledgeTraceViewMock
 }));
+vi.mock("../src/views/recovery-basket-view", () => ({
+  GIT_RECOVERY_BASKET_VIEW_TYPE: "git-recovery-basket",
+  GitRecoveryBasketView: recoveryBasketMocks.RecoveryBasketViewMock
+}));
 vi.mock("../src/knowledge-trace/version-materializer", () => ({
   KnowledgeVersionMaterializer: class {}
 }));
@@ -150,7 +166,9 @@ function pluginWithWorkspace(workspace: object): GitNoteHistoryPlugin {
     workEventOpenGeneration: 0,
     pendingWorkEventLeaf: null,
     knowledgeTraceOpenGeneration: 0,
-    pendingKnowledgeTraceLeaf: null
+    pendingKnowledgeTraceLeaf: null,
+    recoveryBasketOpenGeneration: 0,
+    pendingRecoveryBasketLeaf: null
   });
   return plugin;
 }
@@ -276,6 +294,42 @@ describe("detail view opening", () => {
 
     expect(workspace.revealLeaf).not.toHaveBeenCalled();
     expect(view.requests).toEqual([]);
+  });
+});
+
+describe("recovery-basket view opening", () => {
+  it("reuses one pending leaf and applies only the latest note", async () => {
+    const rootSplit = {};
+    const view = new recoveryBasketMocks.RecoveryBasketViewMock();
+    const viewReady = deferred<void>();
+    const leaf = {
+      view: null as unknown,
+      getRoot: () => rootSplit,
+      detach: vi.fn(),
+      setViewState: vi.fn(async () => {
+        await viewReady.promise;
+        leaf.view = view;
+      })
+    };
+    const workspace = {
+      rootSplit,
+      getLeavesOfType: vi.fn(() => []),
+      getLeaf: vi.fn(() => leaf),
+      revealLeaf: vi.fn(async () => {})
+    };
+    const plugin = pluginWithWorkspace(workspace);
+    const first = { path: "First.md", extension: "md" };
+    const latest = { path: "Latest.md", extension: "md" };
+
+    const firstOpen = plugin.openRecoveryBasket(first as never);
+    const latestOpen = plugin.openRecoveryBasket(latest as never);
+
+    expect(workspace.getLeaf).toHaveBeenCalledTimes(1);
+    viewReady.resolve();
+    await Promise.all([firstOpen, latestOpen]);
+
+    expect(workspace.revealLeaf).toHaveBeenCalledTimes(1);
+    expect(view.files).toEqual([latest]);
   });
 });
 

@@ -35,8 +35,12 @@ import {
 import {
   compactLongFrontmatterPair,
   renderSideBySideDiff,
-  renderUnifiedDiff
+  renderUnifiedDiff,
+  type HunkRestoreTarget
 } from "../ui/diff-renderer";
+import { createRecoveryBasketItem } from "../recovery-basket/planner";
+import { createPropertyRecoveryItem } from "../recovery-basket/property-patch";
+import type { RecoveryBasketSource } from "../recovery-basket/types";
 import { buildChangeMap, type ChangeMapItem } from "../diff/change-map";
 import {
   buildRenderedDiff,
@@ -399,6 +403,17 @@ export class GitHistoryDetailView extends ItemView {
     }
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
 
+    if (this.canCollectToRecoveryBasket()) {
+      const basketCount = this.plugin.getRecoveryBasketCount(this.file!.path);
+      const basket = actions.createEl("button", {
+        cls: basketCount > 0 ? "git-note-history-basket-entry has-items" : "git-note-history-basket-entry",
+        attr: { "aria-label": "打开恢复篮子" }
+      });
+      setIcon(basket.createSpan(), "shopping-basket");
+      basket.createSpan({ text: basketCount > 0 ? `恢复篮子 ${basketCount}` : "恢复篮子" });
+      basket.addEventListener("click", () => void this.plugin.openRecoveryBasket(this.file!));
+    }
+
     const moreActions = actions.createEl("button", {
       attr: { "aria-label": "更多操作" }
     });
@@ -489,7 +504,24 @@ export class GitHistoryDetailView extends ItemView {
       });
     } else if (effectiveMode === "rendered") this.renderRenderedDiff(body);
     else if (effectiveMode === "preview") this.renderPreview(body);
-    else if (effectiveMode === "semantic") renderSemanticDiff(body, buildSemanticDiff(this.baseContent, this.targetContent));
+    else if (effectiveMode === "semantic") {
+      renderSemanticDiff(
+        body,
+        buildSemanticDiff(this.baseContent, this.targetContent),
+        this.canCollectToRecoveryBasket()
+          ? {
+              onAddPropertyToBasket: async (propertyName) => {
+                if (!this.request || !this.file) return;
+                await this.addPropertyToRecoveryBasket(propertyName, {
+                  request: this.request,
+                  file: this.file,
+                  generation: this.contentGeneration
+                });
+              }
+            }
+          : {}
+      );
+    }
     else this.renderLinkImpact(body, buildLinkImpact(this.baseContent, this.targetContent));
   }
 
@@ -1312,6 +1344,8 @@ export class GitHistoryDetailView extends ItemView {
     const generation = this.contentGeneration;
     const canRestoreHunk = !this.ignoreFrontmatter
       && !this.ignoreBlankLines
+      && baseContent === this.baseContent
+      && targetContent === this.targetContent
       && !request?.readOnly
       && request?.target.kind === "working"
       && file !== null
@@ -1324,6 +1358,14 @@ export class GitHistoryDetailView extends ItemView {
             onRestoreHunk: async (targetContent: string, hunkNumber: number) => {
               if (!request || !file) return;
               await this.confirmHunkRestore(targetContent, hunkNumber, {
+                request,
+                file,
+                generation
+              });
+            },
+            onAddHunkToBasket: async (target: HunkRestoreTarget) => {
+              if (!request || !file) return;
+              await this.addHunkToRecoveryBasket(target, {
                 request,
                 file,
                 generation
@@ -1786,6 +1828,112 @@ export class GitHistoryDetailView extends ItemView {
         }
       }
     }).open();
+  }
+
+  private canCollectToRecoveryBasket(): boolean {
+    return Boolean(
+      this.request
+      && !this.request.readOnly
+      && this.request.base.kind === "commit"
+      && this.request.target.kind === "working"
+      && this.file
+      && this.hasCurrentContent()
+    );
+  }
+
+  private recoveryBasketSource(request: DetailRequest): RecoveryBasketSource {
+    if (request.base.kind !== "commit") {
+      throw new Error("恢复篮子只能从 Git 历史版本收集内容。");
+    }
+    const commit = request.base.commit;
+    return {
+      versionKey: `commit:${commit.hash}:${commit.historicalPath}`,
+      label: this.versionReceiptLabel(request.base),
+      commitHash: commit.hash,
+      shortHash: commit.shortHash,
+      historicalPath: commit.historicalPath,
+      authoredAt: commit.authoredAt,
+      subject: commit.subject
+    };
+  }
+
+  private async addHunkToRecoveryBasket(
+    target: HunkRestoreTarget,
+    expected: {
+      request: DetailRequest;
+      file: TFile;
+      generation: number;
+    }
+  ): Promise<void> {
+    const { request, file, generation } = expected;
+    if (
+      request.base.kind !== "commit"
+      || !this.isContentContextCurrent(request, file, generation)
+    ) return;
+    const currentContent = await this.app.vault.read(file);
+    if (
+      !this.isContentContextCurrent(request, file, generation)
+      || currentContent !== this.targetContent
+    ) {
+      new Notice("当前笔记已经变化，请刷新对比后再加入恢复篮子。");
+      return;
+    }
+    const mapItem = this.changeMap[target.hunkNumber - 1];
+    const item = createRecoveryBasketItem({
+      filePath: file.path,
+      kind: "hunk",
+      label: mapItem?.title
+        ? `${mapItem.title} · 变更块 ${target.hunkNumber}`
+        : `变更块 ${target.hunkNumber}`,
+      source: this.recoveryBasketSource(request),
+      patches: [target.patch],
+      previewBefore: target.currentBlock,
+      previewAfter: target.historicalBlock
+    });
+    try {
+      const basket = await this.plugin.addRecoveryBasketItem(file, currentContent, item);
+      new Notice(`已加入恢复篮子（${basket.items.length} 项）`);
+      this.render();
+    } catch (error) {
+      new Notice(errorMessage(error), 8000);
+    }
+  }
+
+  private async addPropertyToRecoveryBasket(
+    propertyName: string,
+    expected: {
+      request: DetailRequest;
+      file: TFile;
+      generation: number;
+    }
+  ): Promise<void> {
+    const { request, file, generation } = expected;
+    if (
+      request.base.kind !== "commit"
+      || !this.isContentContextCurrent(request, file, generation)
+    ) return;
+    const currentContent = await this.app.vault.read(file);
+    if (
+      !this.isContentContextCurrent(request, file, generation)
+      || currentContent !== this.targetContent
+    ) {
+      new Notice("当前笔记已经变化，请刷新对比后再加入恢复篮子。");
+      return;
+    }
+    try {
+      const item = createPropertyRecoveryItem({
+        filePath: file.path,
+        propertyName,
+        historicalContent: this.baseContent,
+        currentContent,
+        source: this.recoveryBasketSource(request)
+      });
+      const basket = await this.plugin.addRecoveryBasketItem(file, currentContent, item);
+      new Notice(`已加入恢复篮子（${basket.items.length} 项）`);
+      this.render();
+    } catch (error) {
+      new Notice(errorMessage(error), 8000);
+    }
   }
 
   private hasCurrentContent(): boolean {

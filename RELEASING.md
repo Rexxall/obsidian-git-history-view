@@ -63,3 +63,11 @@ The install archive must contain exactly:
 - [x] both test vaults installs match the tracked build and preserve their existing `data.json`.
 - [x] Obsidian 1.12.7 checks pass in both Vaults: Projects confirms the sidebar entry, an automatic false-to-true boundary, candidate and verified cards, frozen read-only comparison, and absence of restore controls; the second test vault confirms the entry on a 299-revision note, the 80-version safety cap and scoped conclusion, narrow layout, and light/dark rendering. Automated regressions cover manual correction, repeated and unknown states, stale snapshots, keyboard focus, and open/unload races.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.6.3 local acceptance
+
+- [x] `npm run release:check` passes with 179 tests across 15 files, the production build, `git diff --check`, and package verification.
+- [x] `dist/git-note-history-0.6.3.zip` contains only `main.js`, `manifest.json`, and `styles.css`; each file matches the tracked build. SHA-256: `b20926d3510ddd56577a59f905bd1588ae90c6cd0b38f877409d0132a3142d07`.
+- [x] both test vaults installs match the tracked build and preserve their existing `data.json`.
+- [x] Obsidian 1.12.7 checks pass in both Vaults. Projects confirms the command entry and empty recovery workbench on a real note. the second test vault confirms collection from history, property-level collection with ignored blank lines enabled, item metadata, conflict analysis, merged Markdown preview, apply gating, and clean basket removal. No QA item was written into a note.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.
