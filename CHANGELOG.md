@@ -1,4 +1,16 @@
+# 0.7.7 — 2026-09-19
+
+- Group secondary history tools under a labeled menu while keeping follow, basket, refresh, and main-view actions visible.
+- Preserve theme-compatible timeline cards and improve keyboard focus.
+- Restore complete Git read-only and semantic-diff implementations from the committed baseline; all 235 regression tests pass.
+
 # Changelog
+
+## 0.7.6
+
+- Fixed timeline cards becoming blank gray bars under themes that override the background of the full-row activation button.
+- The invisible activation layer now explicitly resets native and theme button decoration, while timeline text and rail content render above it.
+- Added a style-contract regression test for both transparency and stacking order.
 
 ## 0.7.5
 

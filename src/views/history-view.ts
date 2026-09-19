@@ -1326,60 +1326,23 @@ export class GitNoteHistoryView extends ItemView {
         void this.plugin.openRecoveryBasket(this.targetFile!);
       });
 
-      const trace = controls.createEl("button", {
+      const more = controls.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": "追踪知识变化边界" }
+        attr: { "aria-label": "更多历史工具", "title": "更多历史工具" }
       });
-      setIcon(trace, "scan-search");
-      trace.addEventListener("click", () => {
-        this.plugin.openKnowledgeTraceSetup(this.targetFile!);
-      });
-
-      const sources = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: { "aria-label": "查看全部历史来源" }
-      });
-      setIcon(sources, "layers-3");
-      sources.addEventListener("click", () => {
-        void this.plugin.openHistorySources(this.targetFile!);
-      });
-
-      const graph = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: { "aria-label": "打开知识图谱时间机" }
-      });
-      setIcon(graph, "orbit");
-      graph.addEventListener("click", () => {
-        void this.plugin.openKnowledgeGraphTimeMachine(this.targetFile!);
-      });
-
-      const provenance = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: { "aria-label": "打开来源可信度镜头" }
-      });
-      setIcon(provenance, "scan-eye");
-      provenance.addEventListener("click", () => {
-        void this.plugin.openProvenanceLens(this.targetFile!);
-      });
-
-      const annotations = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: {
-          "aria-label": `打开版本批注（${this.plugin.getReviewAnnotations(this.targetFile.path).length}）`
-        }
-      });
-      setIcon(annotations, "message-square-text");
-      annotations.addEventListener("click", () => {
-        void this.plugin.openReviewAnnotations(this.targetFile!);
-      });
-
-      const health = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: { "aria-label": "打开历史健康中心" }
-      });
-      setIcon(health, "activity");
-      health.addEventListener("click", () => {
-        void this.plugin.openHistoryHealth(this.targetFile!);
+      setIcon(more, "ellipsis");
+      more.addEventListener("click", event => {
+        const file = this.targetFile;
+        if (!file) return;
+        const menu = new Menu();
+        menu.addItem(item => item.setTitle("追踪内容从哪一版变化").setIcon("scan-search").onClick(() => this.plugin.openKnowledgeTraceSetup(file)));
+        menu.addItem(item => item.setTitle("查看全部历史来源").setIcon("layers-3").onClick(() => void this.plugin.openHistorySources(file)));
+        menu.addItem(item => item.setTitle("查看版本批注").setIcon("message-square-text").onClick(() => void this.plugin.openReviewAnnotations(file)));
+        menu.addSeparator();
+        menu.addItem(item => item.setTitle("知识图谱时间机").setIcon("orbit").onClick(() => void this.plugin.openKnowledgeGraphTimeMachine(file)));
+        menu.addItem(item => item.setTitle("来源与复查状态").setIcon("scan-eye").onClick(() => void this.plugin.openProvenanceLens(file)));
+        menu.addItem(item => item.setTitle("历史健康检查").setIcon("activity").onClick(() => void this.plugin.openHistoryHealth(file)));
+        menu.showAtMouseEvent(event);
       });
     }
 

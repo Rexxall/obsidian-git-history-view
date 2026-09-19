@@ -741,6 +741,7 @@ button.git-note-history-path-event:hover {
 }
 
 .git-note-history-row-trigger {
+  appearance: none !important;
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -748,19 +749,23 @@ button.git-note-history-path-event:hover {
   height: 100%;
   min-height: 0;
   padding: 0;
-  border: 0;
+  border: 0 !important;
   border-radius: inherit;
-  background: transparent;
-  box-shadow: none;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
   color: inherit;
   cursor: pointer;
 }
 
 .git-note-history-row-trigger:hover,
 .git-note-history-row-trigger:active {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 .git-note-history-row-trigger:focus-visible {
@@ -780,7 +785,7 @@ button.git-note-history-path-event:hover {
 .git-note-history-row-actions,
 .git-note-history-milestone-badge {
   position: relative;
-  z-index: 2;
+  z-index: 3;
 }
 
 .git-note-history-timeline .git-note-history-commit:hover {
@@ -795,6 +800,7 @@ button.git-note-history-path-event:hover {
 
 .git-note-history-rail {
   position: relative;
+  z-index: 2;
   display: flex;
   justify-content: center;
 }
@@ -828,6 +834,8 @@ button.git-note-history-path-event:hover {
 }
 
 .git-note-history-commit-content {
+  position: relative;
+  z-index: 2;
   min-width: 0;
   font-size: var(--font-ui-small);
 }
@@ -9757,3 +9765,15 @@ button.git-note-history-graph-machine-relation:hover {
     flex-direction: column;
   }
 }
+
+/* Focused history workspace: 2026-09-19. Keep theme-safe timeline activation layers. */
+.git-note-history-view { --history-radius: 12px; }
+.git-note-history-view .git-note-history-header { padding: 18px 16px 14px; border-bottom: 1px solid var(--background-modifier-border); background: var(--background-primary); }
+.git-note-history-view .git-note-history-brand h4 { font-size: 18px; font-weight: 650; letter-spacing: -.025em; }
+.git-note-history-view .git-note-history-header-actions { gap: 3px; flex-wrap: wrap; }
+.git-note-history-view .git-note-history-file-path { margin-top: 8px; color: var(--text-muted); overflow-wrap: anywhere; }
+.git-note-history-view .git-note-history-search { margin-top: 14px; }
+.git-note-history-view .git-note-history-search input { border-radius: 8px; min-height: 36px; }
+.git-note-history-view button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.git-note-history-view .git-note-history-overview { margin: 14px 12px; }
+@media (prefers-reduced-motion: reduce) { .git-note-history-view * { animation: none !important; transition: none !important; } }
