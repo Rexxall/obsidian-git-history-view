@@ -1,5 +1,7 @@
 # 0.7.7 — 2026-09-19
 
+- Add a direct plugin-settings toolbar entry and keyboard-accessible setting jump navigation.
+
 - Group secondary history tools under a labeled menu while keeping follow, basket, refresh, and main-view actions visible.
 - Preserve theme-compatible timeline cards and improve keyboard focus.
 - Restore complete Git read-only and semantic-diff implementations from the committed baseline; all 235 regression tests pass.

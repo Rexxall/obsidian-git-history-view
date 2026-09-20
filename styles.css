@@ -9804,3 +9804,9 @@ button.git-note-history-graph-machine-relation:hover {
 .git-note-history-detail-view .git-note-history-detail-mode-group button.is-active { color: var(--gnh-accent); background: var(--background-primary); }
 .git-note-history-detail-view .git-note-history-version-chip { background: var(--background-primary); border-radius: 8px; }
 .git-note-history-detail-view .git-note-history-review-body { border-radius: 8px; }
+
+.git-note-history-settings-entry { min-height: 30px; padding: 4px 8px; font-size: var(--font-ui-small); white-space: nowrap; }
+.git-note-history-settings-jump { position: sticky; top: 0; z-index: 2; padding: 10px 0; background: var(--background-primary); border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 16px; }
+.git-note-history-settings-jump label { display: flex; align-items: center; gap: 12px; color: var(--text-muted); }
+.git-note-history-settings-jump select { min-width: 0; flex: 1; max-width: 360px; }
+.git-note-history-settings .setting-item-name { scroll-margin-top: 76px; }

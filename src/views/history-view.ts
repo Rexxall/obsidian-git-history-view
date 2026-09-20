@@ -1346,6 +1346,13 @@ export class GitNoteHistoryView extends ItemView {
       });
     }
 
+    const settingsEntry = controls.createEl("button", { text: "插件设置", cls: "git-note-history-settings-entry" });
+    settingsEntry.addEventListener("click", () => {
+      const settings = (this.app as typeof this.app & { setting?: { open(): void; openTabById(id: string): void } }).setting;
+      settings?.open();
+      settings?.openTabById(this.plugin.manifest.id);
+    });
+
     const refresh = controls.createEl("button", {
       cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
       attr: { "aria-label": this.loading ? "正在刷新" : "刷新", "aria-busy": String(this.loading) }

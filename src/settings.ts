@@ -34,6 +34,27 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.renderSettingsBody();
+    const root = this.containerEl;
+    root.addClass("git-note-history-settings");
+    const nav = root.createDiv({ cls: "git-note-history-settings-jump" });
+    const label = nav.createEl("label", { text: "快速定位" });
+    const select = label.createEl("select", { attr: { "aria-label": "跳转到历史设置" } });
+    select.createEl("option", { text: "选择设置项…", value: "" });
+    const rows = Array.from(root.querySelectorAll<HTMLElement>(".setting-item-name"));
+    rows.forEach((row, index) => select.createEl("option", { text: row.textContent || "设置", value: String(index) }));
+    select.addEventListener("change", () => {
+      if (select.value === "") return;
+      const row = rows[Number(select.value)];
+      if (!row) return;
+      row.setAttribute("tabindex", "-1");
+      row.scrollIntoView({ block: "start" });
+      row.focus({ preventScroll: true });
+    });
+    root.prepend(nav);
+  }
+
+  private renderSettingsBody(): void {
     const { containerEl } = this;
     containerEl.empty();
 
