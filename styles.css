@@ -9778,35 +9778,34 @@ button.git-note-history-graph-machine-relation:hover {
 .git-note-history-view .git-note-history-overview { margin: 14px 12px; }
 @media (prefers-reduced-motion: reduce) { .git-note-history-view * { animation: none !important; transition: none !important; } }
 
-/* Semantic colors for the timeline and comparison workspace. */
-:is(.git-note-history-view,.git-note-history-detail-view) {
-  --gnh-accent: #5267a0;
-  --gnh-accent-on: #fff;
-  --gnh-tint: color-mix(in srgb,var(--gnh-accent) 10%,var(--background-primary));
-  --gnh-wash: color-mix(in srgb,var(--gnh-accent) 4%,var(--background-primary));
-  --interactive-accent: var(--gnh-accent);
-  --interactive-accent-hover: var(--gnh-accent);
-  --text-accent: var(--gnh-accent);
-  --text-on-accent: var(--gnh-accent-on);
-}
-.theme-dark :is(.git-note-history-view,.git-note-history-detail-view) { --gnh-accent: #aebce9; --gnh-accent-on: #202331; }
-.git-note-history-view { padding: 18px; background: linear-gradient(180deg,var(--gnh-wash),var(--background-primary) 260px); }
-.git-note-history-view .git-note-history-header { margin-bottom: 18px; }
-.git-note-history-view .git-note-history-brand > span { background: var(--gnh-tint); color: var(--gnh-accent); border-radius: 8px; }
-.git-note-history-view .git-note-history-title-row h4 { font-size: 17px; color: var(--text-normal); }
-.git-note-history-view .git-note-history-repo-summary { background: var(--gnh-wash); border-radius: 8px; padding: 10px 12px; }
-.git-note-history-view .git-note-history-commit.is-selected,
-.git-note-history-view .git-note-history-commit.is-keyboard-selected { background: var(--gnh-tint); border-color: var(--gnh-accent); }
-.git-note-history-detail-view .git-note-history-detail-toolbar { background: var(--gnh-wash); backdrop-filter: none; padding: 16px 20px; }
-.git-note-history-detail-view .git-note-history-detail-heading h3 { font-size: 18px; color: var(--text-normal); }
-.git-note-history-detail-view .git-note-history-detail-mode-group { background: var(--background-secondary); padding: 4px; border-radius: 8px; }
-.git-note-history-detail-view .git-note-history-detail-mode-group button { min-height: 32px; border-radius: 5px; border: 0; }
-.git-note-history-detail-view .git-note-history-detail-mode-group button.is-active { color: var(--gnh-accent); background: var(--background-primary); }
-.git-note-history-detail-view .git-note-history-version-chip { background: var(--background-primary); border-radius: 8px; }
-.git-note-history-detail-view .git-note-history-review-body { border-radius: 8px; }
-
 .git-note-history-settings-entry { min-height: 30px; padding: 4px 8px; font-size: var(--font-ui-small); white-space: nowrap; }
 .git-note-history-settings-jump { position: sticky; top: 0; z-index: 2; padding: 10px 0; background: var(--background-primary); border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 16px; }
 .git-note-history-settings-jump label { display: flex; align-items: center; gap: 12px; color: var(--text-muted); }
 .git-note-history-settings-jump select { min-width: 0; flex: 1; max-width: 360px; }
 .git-note-history-settings .setting-item-name { scroll-margin-top: 76px; }
+
+/* Morning / Nightfall surfaces; timeline activation layers remain unchanged. */
+:is(.git-note-history-view,.git-note-history-detail-view,.git-note-history-settings) {
+ --gnh-accent:#29695b; --gnh-accent-on:#fffefa; --gnh-base:#eaf0ed; --gnh-paper:#fffefa; --gnh-soft:#f0f4f0; --gnh-ink:#243838; --gnh-muted:#627370; --gnh-line:#dce5dd;
+ --gnh-tint:color-mix(in srgb,var(--gnh-accent) 10%,var(--gnh-paper)); --gnh-wash:var(--gnh-soft);
+ --background-primary:var(--gnh-paper); --background-secondary:var(--gnh-soft); --text-normal:var(--gnh-ink); --text-muted:var(--gnh-muted); --background-modifier-border:var(--gnh-line); --interactive-accent:var(--gnh-accent); --text-accent:var(--gnh-accent); --text-on-accent:var(--gnh-accent-on);
+ color:var(--gnh-ink);
+}
+.theme-dark :is(.git-note-history-view,.git-note-history-detail-view,.git-note-history-settings) { --gnh-accent:#b7dcbe; --gnh-accent-on:#203335; --gnh-base:#152729; --gnh-paper:#203335; --gnh-soft:#293e3e; --gnh-ink:#e7ede9; --gnh-muted:#a2b6b0; --gnh-line:#3a4d4c; }
+.git-note-history-view { padding:16px; background:radial-gradient(ellipse at 90% 0%,color-mix(in srgb,var(--gnh-accent) 10%,transparent),transparent 320px),var(--gnh-base); }
+.git-note-history-view .git-note-history-header { padding:18px; border:0; border-radius:18px; background:var(--gnh-paper); }
+.git-note-history-view .git-note-history-brand h4 { font-size:22px; font-weight:500; }
+.git-note-history-view .git-note-history-brand > span { color:var(--gnh-accent); background:var(--gnh-tint); border-radius:50%; }
+.git-note-history-view .git-note-history-overview { margin:16px 0; }
+.git-note-history-view .git-note-history-repo-summary { padding:12px; border-radius:12px; background:var(--gnh-soft); }
+.git-note-history-view .git-note-history-search input { border-radius:10px; min-height:36px; }
+.git-note-history-view .git-note-history-timeline .git-note-history-commit { border-radius:12px; background:var(--gnh-paper); }
+.git-note-history-view .git-note-history-commit:is(.is-selected,.is-keyboard-selected) { background:var(--gnh-tint); border-color:var(--gnh-accent); }
+.git-note-history-detail-view { background:var(--gnh-base); }
+.git-note-history-detail-view .git-note-history-detail-toolbar { background:var(--gnh-soft); padding:16px 20px; }
+.git-note-history-detail-view .git-note-history-detail-heading h3 { font-size:22px; font-weight:500; }
+.git-note-history-detail-view .git-note-history-detail-mode-group { background:var(--gnh-base); padding:4px; border-radius:12px; }
+.git-note-history-detail-view .git-note-history-detail-mode-group button { min-height:32px; border-radius:8px; border:0; }
+.git-note-history-detail-view .git-note-history-detail-mode-group button.is-active { color:var(--gnh-accent); background:var(--gnh-paper); }
+.git-note-history-detail-view .git-note-history-version-chip { background:var(--gnh-paper); border-radius:12px; }
+.git-note-history-detail-view .git-note-history-review-body { border-radius:14px; }
