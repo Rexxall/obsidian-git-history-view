@@ -2,6 +2,39 @@
 
 在 Obsidian 内用笔记时光机审阅 Markdown 的 Git 历史、一次工作的跨文件上下文、段落演变、知识关系和冲突，并安全恢复整篇、单个修改块或单个段落。
 
+## Why this exists / 为什么做
+
+My vault is backed up to Git automatically, so every old version exists. But restoring a whole old version is rarely what I want: it brings back one lost paragraph and deletes everything I wrote afterwards. This plugin lets me pick only the parts I need from one or more old versions, shows the final note before anything is written, refuses to write if the note changed in the meantime, and keeps an undo history.
+
+笔记库每天自动备份到 Git，旧版本都在。但整篇恢复旧版几乎从来不是我要的：找回一段，却冲掉之后写的全部内容。这个插件让我只挑需要的部分，写回前先看最终结果；如果笔记在这期间又被改过就停下；恢复后可以撤销。
+
+### Design choices / 设计取舍
+
+| Choice | Why | Cost |
+|---|---|---|
+| Restore selected parts (hunks, paragraphs, YAML properties) instead of whole files | Keeps text written after the old version | The user has to choose what to bring back |
+| Show the complete resulting note, plus broken-link checks, before writing | The user sees exactly what will change | One more step before restoring |
+| Write only if the note still matches what the preview was based on (`vault.process`) | Never overwrite edits made during the review | The user may need to reopen the preview |
+| Keep up to 12 undo steps and a restore receipt | Restoring is safe to try | Undo stops if the note changed after the restore, to avoid overwriting newer text |
+| Read Git only; never commit, push, fetch or take Git locks | Works next to automatic backup tools | History is only as complete as the backups |
+
+### Two-minute demo / 两分钟演示
+
+Use a test vault that is a Git repository, not your daily vault.
+
+1. Write a note, commit; delete one paragraph and add a new one, commit again.
+2. Open the note's history → compare the old version with the current one.
+3. Add only the deleted paragraph to the **recovery basket** → preview the final note: the new paragraph is still there.
+4. Apply, then run **撤销上次 Git 恢复** (Undo last Git restore).
+
+The same case is an automated test: `tests/selective-restore-demo.test.ts`.
+
+### How it was built / 开发方式
+
+Built with AI coding agents. I wrote the requirements, designed the recovery workflow (compare first, restore selected parts, preview, undo), tested each release in my own vault, and read the TypeScript to explain and check it.
+
+由 AI 编码代理写出代码；需求、恢复流程设计、每版测试由我完成，我读过并能讲解主要 TypeScript 代码。
+
 ## 功能
 
 - 右侧栏显示按日期分组的 Git 时间线，主编辑区显示版本详情。
