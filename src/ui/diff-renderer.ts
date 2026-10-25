@@ -342,7 +342,7 @@ export function renderUnifiedDiff(
   }
   container.createDiv({
     cls: "git-note-history-diff-legend",
-    text: "− 历史版本内容　＋当前版本内容；颜色之外同时保留符号提示"
+    text: "− 左侧版本　＋右侧版本；颜色之外同时保留符号提示"
   });
 
   let changeIndex = 0;
