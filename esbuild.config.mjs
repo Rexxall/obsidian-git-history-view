@@ -1,6 +1,9 @@
 import esbuild from "esbuild";
+import { buildStyles } from "./scripts/build-styles.mjs";
 
 const production = process.argv[2] === "production";
+
+buildStyles();
 
 const context = await esbuild.context({
   entryPoints: ["src/main.ts"],

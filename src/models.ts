@@ -198,6 +198,7 @@ export interface GitNoteHistorySettings {
   historyGeneratedProperties: string[];
   useBlameIgnoreRevs: boolean;
   showLabTools: boolean;
+  paperStyle: boolean;
 }
 
 export interface UndoSnapshot {

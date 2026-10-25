@@ -41,7 +41,8 @@ const settings: GitNoteHistorySettings = {
   historyIgnoredProperties: [],
   historyGeneratedProperties: [],
   useBlameIgnoreRevs: true,
-  showLabTools: false
+  showLabTools: false,
+  paperStyle: false,
 };
 
 function git(root: string, args: string[]): string {

@@ -8,6 +8,7 @@ import {
   WorkspaceLeaf,
   setIcon
 } from "obsidian";
+import { RestoreHistoryModal } from "../ui/restore-history-modal";
 import type GitNoteHistoryPlugin from "../main";
 import type {
   DetailMode,
@@ -418,6 +419,7 @@ export class GitNoteHistoryView extends ItemView {
         this.renderCommitRow(timeline, commit, index, state);
       });
       this.renderTimelineFooter(timeline, window.visible, window.total);
+      this.renderPrinciples(container);
       return;
     }
 
@@ -438,6 +440,14 @@ export class GitNoteHistoryView extends ItemView {
       this.renderEffectiveGroupRow(timeline, group, index, groups, state);
     });
     this.renderTimelineFooter(timeline, window.visible, window.total);
+    this.renderPrinciples(container);
+  }
+
+  private renderPrinciples(container: HTMLElement): void {
+    container.createDiv({
+      cls: "git-note-history-principles",
+      text: "只读 Git · 写回前预览 · 撤销上次"
+    });
   }
 
   private timelineCommits(): GitCommitVersion[] {
@@ -1328,30 +1338,15 @@ export class GitNoteHistoryView extends ItemView {
 
       const more = controls.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": "更多历史工具", "title": "更多历史工具" }
+        attr: { "aria-label": "更多", "title": "更多" }
       });
       setIcon(more, "ellipsis");
       more.addEventListener("click", event => {
         const file = this.targetFile;
         if (!file) return;
-        const menu = new Menu();
-        menu.addItem(item => item.setTitle("追踪内容从哪一版变化").setIcon("scan-search").onClick(() => this.plugin.openKnowledgeTraceSetup(file)));
-        menu.addItem(item => item.setTitle("查看全部历史来源").setIcon("layers-3").onClick(() => void this.plugin.openHistorySources(file)));
-        menu.addItem(item => item.setTitle("查看版本批注").setIcon("message-square-text").onClick(() => void this.plugin.openReviewAnnotations(file)));
-        menu.addSeparator();
-        menu.addItem(item => item.setTitle("知识图谱时间机").setIcon("orbit").onClick(() => void this.plugin.openKnowledgeGraphTimeMachine(file)));
-        menu.addItem(item => item.setTitle("来源与复查状态").setIcon("scan-eye").onClick(() => void this.plugin.openProvenanceLens(file)));
-        menu.addItem(item => item.setTitle("历史健康检查").setIcon("activity").onClick(() => void this.plugin.openHistoryHealth(file)));
-        menu.showAtMouseEvent(event);
+        this.openMoreMenu(event, file);
       });
     }
-
-    const settingsEntry = controls.createEl("button", { text: "插件设置", cls: "git-note-history-settings-entry" });
-    settingsEntry.addEventListener("click", () => {
-      const settings = (this.app as typeof this.app & { setting?: { open(): void; openTabById(id: string): void } }).setting;
-      settings?.open();
-      settings?.openTabById(this.plugin.manifest.id);
-    });
 
     const refresh = controls.createEl("button", {
       cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
@@ -1404,6 +1399,27 @@ export class GitNoteHistoryView extends ItemView {
         });
       }
     }
+  }
+
+  private openMoreMenu(event: MouseEvent, file: TFile): void {
+    const menu = new Menu();
+    if (this.plugin.settings.showLabTools) {
+      menu.addItem(item => item.setTitle("追踪内容从哪一版变化").setIcon("scan-search").onClick(() => this.plugin.openKnowledgeTraceSetup(file)));
+      menu.addItem(item => item.setTitle("查看版本批注").setIcon("message-square-text").onClick(() => void this.plugin.openReviewAnnotations(file)));
+      menu.addSeparator();
+      menu.addItem(item => item.setTitle("查看全部历史来源").setIcon("layers-3").onClick(() => void this.plugin.openHistorySources(file)));
+      menu.addItem(item => item.setTitle("来源与复查状态").setIcon("scan-eye").onClick(() => void this.plugin.openProvenanceLens(file)));
+      menu.addItem(item => item.setTitle("知识图谱时间机").setIcon("orbit").onClick(() => void this.plugin.openKnowledgeGraphTimeMachine(file)));
+      menu.addSeparator();
+      menu.addItem(item => item.setTitle("历史健康检查").setIcon("activity").onClick(() => void this.plugin.openHistoryHealth(file)));
+    }
+    menu.addItem(item => item.setTitle("恢复记录与撤销").setIcon("history").onClick(() => new RestoreHistoryModal(this.app, this.plugin).open()));
+    menu.addItem(item => item.setTitle("插件设置").setIcon("settings").onClick(() => {
+      const settings = (this.app as typeof this.app & { setting?: { open(): void; openTabById(id: string): void } }).setting;
+      settings?.open();
+      settings?.openTabById(this.plugin.manifest.id);
+    }));
+    menu.showAtMouseEvent(event);
   }
 
   private renderPathHistory(container: HTMLElement): void {
