@@ -4,6 +4,11 @@
 
 在 Obsidian 里查看一篇笔记的 Git 历史，比较任意两个版本，只把需要的那一段、那一块或整篇安全地取回来。
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/compare-dark.jpg">
+  <img src="docs/screenshots/compare.jpg" width="860">
+</picture>
+
 > Desktop only. Your vault has to be inside a Git repository (for example one kept by the Obsidian Git plugin or a daily backup script). This plugin only *reads* Git; it never commits, pushes, checks out or resets.
 
 ## Why
@@ -18,7 +23,11 @@ Daily Git backups mean every old version of a note is still there. The problem i
 - **Paragraph history** for the paragraph under the cursor, including versions where it was later deleted.
 - **Search old content**: find a sentence that used to exist, see when it appeared and when it was removed, and open the versions on either side.
 
-### Lab tools
+#<img src="docs/screenshots/timeline.jpg" width="860">
+
+<img src="docs/screenshots/restore.jpg" width="860">
+
+## Lab tools
 
 Behind a single switch in settings (*Show lab tools*) are the more experimental views: a review inbox for changed notes, work-event view across files, knowledge-boundary tracing, content-age lens, provenance lens that reads commit trailers, version annotations, history health checks, knowledge-graph playback, historical sandboxes (read-only time capsules of the whole vault at a commit), and a map of every history source (Git, local snapshots, File Recovery, Sync). They are off by default so the command palette stays short.
 
