@@ -27,7 +27,7 @@ Every iteration commits the source, documentation, tracked build output, and ver
 
    The local target file is ignored by Git. It must include every active development Vault. The current machine uses Projects, the second test vault, and the inbox vault; do not commit their absolute paths.
 7. Open the plugin in every affected target and complete the feature-specific real Obsidian checks. A successful file copy or hash comparison does not count as UI verification; confirm the installed version, entry points, layout, read-only boundaries, and preservation of local `data.json`.
-8. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
+8. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add machine-specific paths, credentials, or local Obsidian state.
 9. After explicit publication approval, create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
 
    - `dist/git-note-history-<version>.zip`

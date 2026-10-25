@@ -1,9 +1,10 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.7.7",
+  "version": "0.8.0",
   "minAppVersion": "1.8.0",
-  "description": "Review note history, signal quality, repository health, provenance, annotations, and recovery impact.",
+  "description": "Browse a note's Git history, compare any two versions, and restore a paragraph, a block or the whole note — read-only Git, checked writes, undo.",
   "author": "Rexxall",
-  "isDesktopOnly": true
+  "isDesktopOnly": true,
+  "authorUrl": "https://github.com/Rexxall"
 }

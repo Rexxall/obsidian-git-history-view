@@ -1,222 +1,80 @@
 # Git Note History
 
-在 Obsidian 内用笔记时光机审阅 Markdown 的 Git 历史、一次工作的跨文件上下文、段落演变、知识关系和冲突，并安全恢复整篇、单个修改块或单个段落。
+**See how a note changed, and take back only the part you need.**
 
-## 功能
+在 Obsidian 里查看一篇笔记的 Git 历史，比较任意两个版本，只把需要的那一段、那一块或整篇安全地取回来。
 
-- 右侧栏显示按日期分组的 Git 时间线，主编辑区显示版本详情。
-- 拖动时间滑杆连续浏览任意历史时刻，或从旧到新自动播放笔记演变。
-- 当前工作区卡片显示未暂存、已暂存、冲突和 `+/-` 行数。
-- 四类清晰查看任务：原始对比、阅读式 Markdown 改动、双 Markdown 预览和结构 / 链接影响；各自的细分选项只在需要时出现。
-- Markdown 结构比较会区分多行 YAML 属性、标题、段落、列表、任务、表格单元格、Callout、代码、Mermaid、公式和 Wiki 链接，并识别修改与移动。
-- 超长 YAML 属性会在原始 Diff 中自动折叠为带属性名、方向、字符数和行数的单行摘要；顶部会说明折叠了什么，也可从“过滤”随时展开。
-- 侧栏可直接搜索历史正文和 YAML 属性；内容轨迹会标出首次出现、最后存在与删除位置，并可直接打开对应前后版本。
-- 独立“知识边界追踪”工作台可判断一句话、YAML 属性、链接、Markdown 结构或内置规则从哪一版开始成立或失效；它会区分二分候选、逐版确认、反复变化和未知间隙。
-- “恢复篮子”可从不同 Git 版本收集同一篇笔记的修改块和 YAML 属性，检查重叠、属性覆盖、重复内容与断链后，先展示合并后的完整 Markdown，再一次写回。
-- “历史沙盒”可从任意 commit 创建整套旧 Vault 的隔离只读时间胶囊；明确升级后可在旧世界中试改，再把选中的修改块、属性或新笔记安全带回当前 Vault。
-- 时间胶囊不会切换当前工作区，历史社区插件默认全部禁用；独立 Vault 始终显示历史身份，管理器可核对改动、导出二进制 Git patch、归档或删除。
-- “历史来源”把 Git、当前工作区、插件本地快照、File Recovery 和 Obsidian Sync 放在同一能力地图中；可直接读取的版本进入混合时间线，原生服务保持明确交接，不偷读私有数据库。
-- 本地快照由用户手动保存，不会在 Vault 中制造 backup 文件，也不会干扰“当前最新版”判断；相同内容自动去重，可与当前内容比较、送入恢复篮子或明确删除。
-- “知识图谱时间机”只播放真正发生变化的关系边界，可按链接、嵌入、附件、标签和脚注筛选，并从局部图谱回到目标笔记或冻结版本对比。
-- 恢复预览会先计算“冲击波”，提示恢复后新增的断链、已经不存在的附件、会失效的反链标题 / 块锚点和被移除的别名引用。
-- “来源可信度镜头”按 Markdown 块显示最近修改来源，区分人工、Agent、自动化、脚本、当前工作区和未知；它读取 commit trailer 与本地复查点，标出尚未被人工复查覆盖的块。
-- 当正文表述变化而原有链接、脚注或附件引用集合完全未变时，可信度镜头会给出引用同步复核提示；提示不等于内容错误，也不会把 Agent 来源当作正确性判断。
-- “版本批注”把待处理、已解决和无需处理的审阅意见绑定到当前工作区、指定 commit 或 Markdown 内容块，不修改笔记正文与 commit；内容移动后会尝试重定位，失败时仍保留原始上下文。
-- 批注可复制成 Markdown 审阅包；也可在明确确认后写入专用 `refs/notes/git-note-history-review`。插件会保留同一 Git note 中的其他文字，并明确提醒普通 `git push` 默认不包含 notes。
-- “历史健康中心”把有效内容与重复、时间戳属性、生成字段、属性排序和纯格式 revision 分开解释；平衡、严格和原始 Git 三种预设按 Vault 保存，任何过滤都能一键回到完整原始列表。
-- 健康诊断会明确报告浅克隆、部分克隆、缺失对象、LFS 指针、读取上限、upstream、仅本地 commit、未提交工作区和插件本地快照；只给修复建议，不自动 fetch、push、stage、commit 或拉取 LFS。
-- 知识追踪支持人工逐版判断，但人工结果始终标为人工候选；当前工作区正文会在发起时冻结，随后变化只会把结果标成过期。
-- 笔记路径轨迹会连接 Git 中确认过的重命名与复制事件；旧文件名可搜索，点击路径事件可直接比较迁移前后的版本。
-- 可把重要版本命名为已发送、材料已提交、已确认、已导出、重要草稿或自定义里程碑；同一 commit 可记录多个现实事件、备注和实际发生时间。
-- 中央“工作事件”页会汇总同一 commit 涉及的笔记、Canvas、附件、配置和关系变化；自动备份可在明确标注“推测”的前提下组成连续编辑会话。
-- 当前未提交工作可作为打开时快照查看；文件列表突出当前笔记和删除 / 冲突，技术文件默认收起，Markdown 预览只显示修改并忽略空行。
-- 工作事件只读取 Vault 内内容；仓库中的 Vault 外文件仅报告数量。大文件或大事件超过分析上限时会明确提示，不伪装成完整结果。
-- 时间线可一键只看里程碑，并快速比较上次发送版、提交版或确认版；超过常规读取上限的已保存里程碑仍有独立入口。
-- 双栏对比打开时只显示真正改动的行并忽略空行：相同开头与结尾完全隐藏，中间相同区间收成极细分隔；上下文入口放在“更多”菜单。
-- 任意选择两个 commit 比较，不限于“历史版本 vs 当前内容”。
-- 中央对比页提供双版本工作台：左右版本可独立搜索、前后切换、交换或快速指向当前工作区。
-- 使用 `git log --follow` 延续笔记重命名前的历史。
-- 为 commit 设置本地命名里程碑和固定比较基线，不修改 Git。
-- 支持整篇恢复、单个变更块恢复、复制当前/历史修改块和定位当前行。
-- 按 Markdown 区块追踪当前段落的历史，即使段落移动过位置；可复制、插入或安全替换旧段落。
-- 比较 Wikilink、Markdown 链接、嵌入和标签，显示未解析目标、反链数和局部关系图。
-- 三栏显示 Git 共同祖先、本地和远端 Markdown，逐冲突选择结果并预览后安全写回。
-- 全库复查收件箱同时汇总起点之后的已提交版本和当前工作区变化，按紧急、未提交、今天、最近与积压分组。
-- 解析 commit trailer：`Agent`、`Authority`、`Send-Gate`、`Workflow-Status`。
-- 搜索提交、作者、日期、标签、trailer 和历史内容，悬停快速预览完整版本。
-- 键盘浏览时间线，并记住每篇笔记最后使用的详情模式。
-- 主对比页支持真正的专注审阅：会临时收起左右侧栏，退出时恢复进入前的布局；按 `F` 进入，按 `Esc` 退出。
-- 当时间线被挤在分割侧栏中时，可点击“在中央完整打开”切到主工作区查看。
-- 每篇笔记可建立本地复查点，侧栏直接汇总“自上次确认后”的有效版本和当前工作区变化。
-- 默认把密集自动备份聚合成有效版本，并识别重复内容；可随时展开或切回原始 commit。
-- 中央审阅页提供标题级变化地图、前后差异导航、内容年龄镜头和窄屏响应式 Diff。
-- 恢复前预演最终内容、结构与链接影响；保存最多 12 步撤销内容，并记录可查看的恢复回执。
-- 若恢复后笔记又被修改，会停止自动撤销，避免覆盖新内容，同时保留恢复记录。
-- 长历史按 40 条渐进显示，并明确提示是否达到 Git 提交读取上限。
+> Desktop only. Your vault has to be inside a Git repository (for example one kept by the Obsidian Git plugin or a daily backup script). This plugin only *reads* Git; it never commits, pushes, checks out or resets.
 
-## 要求
+## Why
 
-- Obsidian 桌面版 1.8.0 或更高版本。
-- 系统已安装 Git，并可通过 `git` 命令调用。
-- Vault 位于 Git 仓库内，或者在插件设置中指定仓库根目录。
-- 单篇历史、对比与恢复面向 `.md` 文件；工作事件会只读列出同一事件中的 Canvas、附件和配置文件。
+Daily Git backups mean every old version of a note is still there. The problem is getting one line back: restoring a whole file overwrites everything written since. Git Note History treats a note's history as something to read and pick from, not something to roll back wholesale.
 
-## 安装
+- **Timeline** of the current note in the right sidebar, grouped by day, with `+/-` counts and milestones you name yourself (*sent*, *submitted*, *confirmed*).
+- **Compare** any two versions: side by side, unified diff, rendered Markdown changes, two previews, or a structure view that understands YAML properties, headings, lists, tasks, tables, callouts, code and wiki links.
+- **Restore just a part.** Bring back a paragraph, a change block, or several blocks collected from different versions, after a preview that shows the merged result and any links that would break.
+- **Safe writes.** Right before writing, the note is compared with what you saw; if it changed in between, the restore stops. Every restore can be undone (12 steps), and undo also stops if you have edited since.
+- **Conflict resolver** for Git merge conflicts in a note, three panes, writes only the working file.
+- **Paragraph history** for the paragraph under the cursor, including versions where it was later deleted.
+- **Search old content**: find a sentence that used to exist, see when it appeared and when it was removed, and open the versions on either side.
 
-### 本地构建
+### Lab tools
+
+Behind a single switch in settings (*Show lab tools*) are the more experimental views: a review inbox for changed notes, work-event view across files, knowledge-boundary tracing, content-age lens, provenance lens that reads commit trailers, version annotations, history health checks, knowledge-graph playback, historical sandboxes (read-only time capsules of the whole vault at a commit), and a map of every history source (Git, local snapshots, File Recovery, Sync). They are off by default so the command palette stays short.
+
+The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.md).
+
+## Quick start
+
+1. Download `main.js`, `manifest.json` and `styles.css` from the latest release and put them in `<vault>/.obsidian/plugins/git-note-history/`.
+2. Enable **Git Note History** in *Settings → Community plugins*.
+3. Open a Markdown note and run **Open Git history of the current note** (command palette, ribbon icon, or the file menu).
+4. Click a version to compare it with the current note. In the comparison, hover a change block and choose *Restore this block*, or use *Recovery basket* to collect blocks from several versions first.
+
+Requirements: Obsidian 1.8 or later on macOS, Windows or Linux; `git` on your PATH (or set the path in settings).
+
+## Safety and privacy
+
+| What the plugin does | What it never does |
+|---|---|
+| Runs `git log`, `git show`, `git diff`, `git status` and similar read-only commands on your repository | Commit, push, pull, fetch, checkout, reset, revert, stage, or move HEAD |
+| Writes to the working file only when you confirm a restore, after re-checking the file | Write anything to the repository on its own |
+| Stores milestones, snapshots, undo history and settings in this vault's plugin data | Send anything over the network |
+| Reads Obsidian's own File Recovery / Sync only through documented, read-only paths | Open their private databases |
+
+Try it on a test vault first.
+
+## Limits
+
+- Desktop only (it spawns `git`).
+- Large repositories: history reads are bounded (default 100 commits per note, configurable); long histories show a clear "more available" state rather than loading forever.
+- Shallow or partial clones, LFS pointers and missing objects are reported as such; the plugin does not try to repair them.
+- Renames are followed with `git log --follow`; copies and moves detected by Git are shown, heuristics are not invented.
+
+## Development
 
 ```bash
 npm install
-npm run check
+npm run check          # type-check, tests, build
+npm run package:release
 ```
 
-把下列文件复制到：
-
-```text
-<Vault>/.obsidian/plugins/git-note-history/
-├── main.js
-├── manifest.json
-└── styles.css
-```
-
-然后在 Obsidian 的“第三方插件”中启用 **Git Note History**。
-
-## 使用
-
-主要入口：
-
-1. 点击左侧 Ribbon 的历史图标。
-2. 打开命令面板，运行“Git Note History: 打开当前笔记的 Git 历史”。
-3. 在文件列表中右键 Markdown 笔记，选择“查看 Git 历史”。
-4. 点击复查收件箱图标，或运行“打开复查收件箱”。
-5. 在编辑器中运行“查看当前段落或选中文本的 Git 历史”。
-6. 冲突笔记可从当前工作区卡片点击“解决冲突”，或运行“三栏 Git 冲突解决器”。
-7. 运行“打开当前笔记的知识图谱时间机”，或在文件列表右键笔记选择同名入口。
-7. 运行“查看当前未提交工作”，或从原始 commit、有效版本组、当前工作区卡片及详情页“更多”菜单打开中央工作事件。
-8. 在当前 Markdown 笔记中运行“追踪当前笔记的知识变化边界”；选中文本后运行会自动把选区带入文本判断。
-9. 在历史对比的修改块或“影响 → 结构”属性旁点击“加入恢复篮子”，也可运行“打开当前笔记的恢复篮子”检查和应用方案。
-
-时间线操作：
-
-- 第一次打开“复查收件箱”时点击“从现在开始”；以后所有新提交与未提交 Markdown 变化会进入同一个列表。
-- 收件箱中的笔记可直接审阅、标记完成或推迟 24 小时；“全部确认”只更新本地检查点，不会修改笔记或 Git。
-- 使用“待复查 / 已提交 / 未提交 / 稍后”筛选不同队列；`backup`、插件配置与回收站默认不会进入收件箱，可在设置中调整排除目录。
-- 首次使用时点击“以当前为起点”建立复查点；以后从“待复查”卡片直接审阅并标记完成。
-- 默认显示“有效版本”；点击“查看原始提交”可检查每一个真实 commit。
-- 在“搜索版本或历史内容”中输入至少两个字符，可查找曾经存在但后来被删除或改写的句子；搜索时会自动进入精简视图，结果卡片显示命中上下文。
-- “内容轨迹”会连接 Git 版本与当前工作区，显示首次出现、最后存在、随后删除和重新出现；点击“查看首次加入 / 查看删除位置”可直接比较对应边界。
-- 笔记发生过重命名或复制时，标题下会出现默认收起的“路径轨迹”；展开可查看前后路径，点击事件可直接打开迁移边界。
-- 在版本的里程碑徽章或 `···` 菜单中选择“命名这个版本”；可添加多个事件，并补记名称、备注和实际发送 / 提交时间。
-- 点击“只看里程碑”可收起普通版本；工作区与版本菜单提供“与上次发送版 / 提交版 / 确认版比较”等快捷入口。
-- 点击 commit：与当前工作区比较。
-- 原始 commit 的 `···` 菜单选择“查看本次工作事件”可查看精确跨文件改动；有效版本组选择“查看跨文件编辑会话”时，自动备份聚合会明确标为推测结果。
-- 当前工作区卡片的“查看本次工作”打开只读快照；“未提交笔记”仍进入长期复查收件箱，两者用途不同。
-- 当前未提交工作固定为打开页面时的快照；普通全局刷新不会替换它，只有页内“重新采样当前工作区”会读取最新状态。
-- 工作事件左侧选择文件，右侧只显示修改内容与关系变化；可用“打开完整对比”进入现有审阅页。新增、删除、未跟踪或当前已不存在的文件只保留内联预览。
-- 知识边界追踪可检查文本、类型化 YAML 属性、Wikilink / Markdown 链接 / 嵌入 / 标签、ATX 标题 / 任务 / 围栏代码块 / Callout / 表格 / 公式，以及可解释的内置规则。
-- 自动判断先显示二分探测候选，再逐版验证完整读取区间；只有没有未知版本且恰好一次转变时才称为已确认。反复出现、删除后重现和不可读版本会单独说明。
-- 人工判断一次突出一个冻结版本，可选择“成立 / 不成立 / 未知”并随时修改；时间线按连续状态折叠，边界卡可打开使用本次冻结正文的只读对比。
-- 已发起追踪的笔记若继续修改、重命名或删除，当前结果不会静默更新，而会明确标记为过期；点击“重新追踪”才会读取最新工作区。
-- 拖动“笔记时光机”滑杆：在主区域预览所选历史时刻；播放按钮会按时间自动前进。
-- `Cmd/Ctrl` 点击，或使用叠层图标：选择两个 commit 比较。
-- `J/K` 或方向键：移动键盘选择；`Enter`/`D`：打开对比；`P`：打开预览。
-- `···`：设为比较基线、添加或管理里程碑、复制 commit hash。
-- 详情页按 `1/2/3/4`：切换对比、阅读、双预览和影响；对比中的并排 / 单栏、影响中的结构 / 链接可在紧邻的选项区切换。
-- 双栏默认进入聚焦审阅；需要原文上下文时，从“更多”开启“显示未修改上下文”。空行、空格、属性和长属性折叠集中在“过滤”菜单。
-- 阅读视图按排版后的 Markdown 区块展示新增、删除和修改前后；双预览默认同步左右长文的滚动位置，也可临时关闭。
-- 阅读视图顶部可展开“结构变化”概览；需要逐项检查字段、单元格、任务状态或特殊区块时，进入“影响 → 结构”查看完整卡片。
-- 对比页左右版本卡可直接搜索任意提交；两侧箭头切换更早 / 更新版本，中间“交换”与“相邻”用于快速重组比较。
-- 对比页按 `X` 交换左右版本；按 `Option + ← / →` 切换当前选中侧的版本。
-- 详情页按 `[` / `]`：移动到上一个 / 下一个变化；左侧变化地图可按 Markdown 标题直接跳转。
-- 详情页按 `F` 或点击右上角扩展按钮进入专注审阅，按 `Esc` 退出；左右侧栏会按进入前状态自动恢复。
-- 在详情页“更多”菜单或命令面板中打开“内容年龄镜头”，查看区块首次出现和最近变化时间。
-- 从历史侧栏眼睛图标、文件右键菜单或命令“打开当前笔记的来源可信度镜头”进入临时镜头；可筛选待复查、Agent / 自动化和引用待核，点击来源徽章进入只读版本对比，按 `Esc` 立即退出。
-- “标记当前内容已人工复查”只更新插件本地复查点，不修改笔记、commit、Git notes、HEAD、分支或暂存区。
-- 运行“查看 Git 恢复历史与撤销栈”可检查恢复来源、内容指纹和撤销状态。
-
-如果团队或本地工具在 commit message 尾部写入：
-
-```text
-Agent: local-tool
-Authority: working_master
-Send-Gate: user_review_not_sent
-Workflow-Status: review
-```
-
-时间线会把这些字段渲染成可搜索徽章。
-
-恢复只会把目标 commit 中的文本写入当前笔记。它不会自动 commit，也不会执行 `git checkout`、`git reset` 或 `git revert`。
-
-## 安全边界
-
-- 工作事件页及其“打开完整对比”均为只读：不会恢复文件、另存副本、修改里程碑、暂存、提交、切换分支或移动 HEAD；需要恢复时应从正常的单篇历史入口重新进入并独立确认。
-- 知识边界追踪及其冻结边界对比同样只读；只调用 Git 读取命令，不运行 `git bisect`、checkout，不移动 HEAD，也不修改索引或对象库。
-- 恢复篮子首版只合并同一篇笔记、同一冻结基线上的项目；笔记随后变化、项目重叠或同一属性被多个来源覆盖时会阻止写回。
-- 恢复篮子确认后只写回一次，并沿用恢复回执、并发内容校验和单步撤销；不会暂存、提交或移动 Git HEAD。
-- 整篇和局部恢复只修改工作区文件，不移动 HEAD、分支或暂存区。
-- 若笔记在恢复读取与写入之间发生变化，恢复会停止。
-- 恢复后可连续运行“撤销上次 Git 恢复”，最多保留 12 步。如果恢复后又编辑了笔记，自动撤销会停止，防止覆盖这些新编辑。
-- Git 历史只包含已提交版本。插件不会自动提交或推送。
-- 冲突解决器只写回工作区文件，不会自动 `git add`；写回后必须自行检查并暂存。
-
-建议先在测试 Vault 中验证恢复行为，再用于重要笔记库。
-
-## 开发
-
-```bash
-npm run dev
-npm run build
-npm test
-npm run check
-```
-
-项目文档：
-
-- [维护交接与当前状态](HANDOFF.md)
-- [产品路线图](ROADMAP.md)
-- [交互研究与头脑风暴](docs/UX_RESEARCH_BRAINSTORM_2026-07-21.md)
-- [发布流程](RELEASING.md)
-
-仓库结构：
-
-```text
-src/        插件源码
-tests/      自动化测试
-scripts/    构建与发布校验工具
-docs/       研究与设计文档
-dist/       本地安装包输出，不提交到 Git
-```
-
-### 同步到本地 Vault
-
-复制 `.local-install-targets.example.json` 为 `.local-install-targets.json`，填写需要同步的 Obsidian 插件目录。真实路径文件已被 Git 忽略。
-
-```bash
-npm run release:local
-```
-
-该命令会完成构建、测试、安装包校验，并把 `main.js`、`manifest.json`、`styles.css` 同步到所有配置目标。覆盖前会备份旧插件目录，已有的 `data.json` 不会被删除。
-
-核心代码：
-
-```text
-src/
-├── diff/         Markdown 语义差异
-├── analysis/     Wikilink、标签和知识关系影响
-├── conflict/     Git 冲突标记解析与安全合并结果
-├── git/          Git 调用、log/status 解析
-├── history/      Markdown 区块识别与跨版本匹配
-├── knowledge-trace/  知识声明、三态判断、边界搜索和只读版本物化
-├── review/       全库复查收件箱聚合、筛选与目录排除
-├── restore/      安全恢复和撤销
-├── work-events/  commit、推测编辑会话与当前工作区快照
-├── persistence/  本地数据迁移与兼容投影
-├── ui/           Diff、里程碑、段落历史和确认框
-├── views/        时间线、详情页和工作区审阅
-├── main.ts       插件入口、命令和文件菜单
-└── settings.ts   插件设置
-```
+TypeScript + esbuild, tested with Vitest (240 tests). See [RELEASING.md](RELEASING.md) for the release checklist and [CHANGELOG.md](CHANGELOG.md) for versions. Design notes live in [docs/](docs/).
 
 ## License
 
 MIT
+
+---
+
+## 中文说明
+
+**这是什么：** 一个 Obsidian 桌面插件。笔记放在 Git 仓库里（比如用 Obsidian Git 或每日备份脚本），它就能在侧栏显示这篇笔记的全部历史版本，任选两个版本比较，并把需要的内容取回来。
+
+**为什么做：** 每天自动备份，旧版本都在；但要找回其中一段时，整篇恢复会冲掉后来写的内容。所以这个插件把“恢复”的单位从整篇改成一段、一个修改块，甚至从不同版本各取一块合并回来。
+
+**安全：** 只读 Git，从不 commit、push、checkout、reset。写回前会再比对一次笔记，中途被改过就停下；每次恢复都能撤销。
+
+**用法：** 把 `main.js`、`manifest.json`、`styles.css` 放进 `<库>/.obsidian/plugins/git-note-history/`，启用插件，打开一篇笔记，运行“打开当前笔记的 Git 历史”。
+
+**实验功能：** 复查收件箱、工作事件、知识边界追踪、来源可信度镜头、版本批注、历史健康中心、知识图谱时间机、历史沙盒等，默认关闭，在设置里打开“显示实验功能”即可使用。完整功能清单见 [docs/FEATURES_zh.md](docs/FEATURES_zh.md)。

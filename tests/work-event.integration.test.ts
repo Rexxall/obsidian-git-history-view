@@ -43,7 +43,8 @@ const settings: GitNoteHistorySettings = {
   historySignalProfile: "balanced",
   historyIgnoredProperties: [],
   historyGeneratedProperties: [],
-  useBlameIgnoreRevs: true
+  useBlameIgnoreRevs: true,
+  showLabTools: false
 };
 
 const repositories: string[] = [];

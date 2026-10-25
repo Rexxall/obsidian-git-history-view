@@ -40,7 +40,8 @@ const settings: GitNoteHistorySettings = {
   historySignalProfile: "balanced",
   historyIgnoredProperties: [],
   historyGeneratedProperties: [],
-  useBlameIgnoreRevs: true
+  useBlameIgnoreRevs: true,
+  showLabTools: false
 };
 
 function git(root: string, args: string[]): string {

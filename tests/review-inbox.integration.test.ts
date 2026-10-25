@@ -42,7 +42,8 @@ const settings: GitNoteHistorySettings = {
   historySignalProfile: "balanced",
   historyIgnoredProperties: [],
   historyGeneratedProperties: [],
-  useBlameIgnoreRevs: true
+  useBlameIgnoreRevs: true,
+  showLabTools: false
 };
 
 describe("review inbox with a real temporary Git vault", () => {

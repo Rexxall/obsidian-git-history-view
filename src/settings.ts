@@ -25,7 +25,8 @@ export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
     "generated-at",
     "generated_at"
   ],
-  useBlameIgnoreRevs: true
+  useBlameIgnoreRevs: true,
+  showLabTools: false
 };
 
 export class GitNoteHistorySettingTab extends PluginSettingTab {
@@ -170,6 +171,17 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
           await this.plugin.savePluginData();
           this.plugin.refreshOpenViews();
         }));
+
+    new Setting(containerEl)
+      .setName("显示实验功能")
+      .setDesc("打开后，命令面板和右键菜单会多出复查收件箱、工作事件、知识边界追踪、来源镜头、版本批注、历史健康、知识图谱时间机和历史沙盒等工具。关闭时只保留时间线、对比、恢复和冲突解决。")
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.showLabTools).onChange(async (value) => {
+          this.plugin.settings.showLabTools = value;
+          await this.plugin.savePluginData();
+          this.plugin.refreshOpenViews();
+        })
+      );
 
     new Setting(containerEl)
       .setName("显示作者邮箱")

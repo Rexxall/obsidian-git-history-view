@@ -1,5 +1,6 @@
 import path from "node:path";
 import {
+  type Command,
   FileSystemAdapter,
   MarkdownView,
   Notice,
@@ -217,6 +218,28 @@ export default class GitNoteHistoryPlugin extends Plugin {
   >();
   private isUnloading = false;
 
+  /** Lab tools stay registered but hidden until the setting is on; ids and hotkeys are unchanged. */
+  private addLabCommand(command: Command): Command {
+    const enabled = (): boolean => this.settings.showLabTools;
+    const wrapped: Command = { ...command };
+    if (command.callback) {
+      const run = command.callback;
+      delete wrapped.callback;
+      wrapped.checkCallback = (checking) => {
+        if (!enabled()) return false;
+        if (!checking) run();
+        return true;
+      };
+    } else if (command.checkCallback) {
+      const check = command.checkCallback;
+      wrapped.checkCallback = (checking) => (enabled() ? check(checking) : false);
+    } else if (command.editorCheckCallback) {
+      const check = command.editorCheckCallback;
+      wrapped.editorCheckCallback = (checking, editor, view) => (enabled() ? check(checking, editor, view) : false);
+    }
+    return this.addCommand(wrapped);
+  }
+
   async onload(): Promise<void> {
     this.isUnloading = false;
     await this.loadPluginData();
@@ -297,9 +320,11 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.addRibbonIcon("list-checks", "打开复查收件箱", () => {
       void this.activateWorkspaceReview();
     });
-    this.addRibbonIcon("boxes", "打开历史沙盒", () => {
-      void this.openHistoricalSandboxManager();
-    });
+    if (this.settings.showLabTools) {
+      this.addRibbonIcon("boxes", "打开历史沙盒", () => {
+        void this.openHistoricalSandboxManager();
+      });
+    }
 
     this.addCommand({
       id: "open-current-note-git-history",
@@ -318,7 +343,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       callback: () => void this.activateWorkspaceReview()
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-current-working-event",
       name: "查看当前未提交工作",
       callback: () => {
@@ -364,7 +389,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "trace-current-note-knowledge-boundary",
       name: "追踪当前笔记的知识变化边界",
       editorCheckCallback: (checking, editor, view) => {
@@ -379,7 +404,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "show-current-note-content-age",
       name: "打开当前笔记的内容年龄镜头",
       checkCallback: (checking) => {
@@ -446,13 +471,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-historical-sandbox-manager",
       name: "打开历史沙盒管理器",
       callback: () => void this.openHistoricalSandboxManager()
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-current-note-history-sources",
       name: "查看当前笔记的全部历史来源",
       checkCallback: (checking) => {
@@ -463,7 +488,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-current-note-knowledge-graph-time-machine",
       name: "打开当前笔记的知识图谱时间机",
       checkCallback: (checking) => {
@@ -476,7 +501,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-current-note-provenance-lens",
       name: "打开当前笔记的来源可信度镜头",
       checkCallback: (checking) => {
@@ -489,7 +514,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-current-note-review-annotations",
       name: "打开当前笔记的版本批注",
       checkCallback: (checking) => {
@@ -500,7 +525,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "annotate-current-note-version",
       name: "批注当前笔记的工作区版本",
       checkCallback: (checking) => {
@@ -511,7 +536,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "annotate-selected-markdown-block",
       name: "批注当前段落或选中内容块",
       editorCheckCallback: (checking, editor, view) => {
@@ -531,7 +556,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "open-current-note-history-health",
       name: "打开当前笔记的历史健康中心",
       checkCallback: (checking) => {
@@ -542,7 +567,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       }
     });
 
-    this.addCommand({
+    this.addLabCommand({
       id: "mark-current-note-git-history-reviewed",
       name: "把当前笔记标记为已复查",
       checkCallback: (checking) => {
@@ -581,6 +606,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
             .setIcon("history")
             .onClick(() => void this.activateHistoryView(file))
         );
+        if (!this.settings.showLabTools) return;
         menu.addItem((item) =>
           item
             .setTitle("查看全部历史来源")

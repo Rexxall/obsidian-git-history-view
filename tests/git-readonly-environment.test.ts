@@ -39,7 +39,8 @@ const settings: GitNoteHistorySettings = {
   historySignalProfile: "balanced",
   historyIgnoredProperties: [],
   historyGeneratedProperties: [],
-  useBlameIgnoreRevs: true
+  useBlameIgnoreRevs: true,
+  showLabTools: false
 };
 
 describe("GitClient read-only environment", () => {

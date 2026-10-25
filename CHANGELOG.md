@@ -1,12 +1,20 @@
-# 0.7.7 — 2026-09-19
+# Changelog
+
+## 0.8.0 — 2026-10-25
+
+- Lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, sandboxes, history sources) are now behind a single **Show lab tools** setting, off by default; command ids and hotkeys are unchanged.
+- Git commands time out after 120 seconds with a clear message instead of spinning forever.
+- An invalid "max commits" setting falls back to 100 instead of breaking the timeline.
+- Added a regression test that documents selective restore: only the deleted paragraph comes back, text written later stays.
+- README rewritten; the full Chinese feature list moved to `docs/FEATURES_zh.md`.
+
+## 0.7.7 — 2026-09-19
 
 - Add a direct plugin-settings toolbar entry and keyboard-accessible setting jump navigation.
 
 - Group secondary history tools under a labeled menu while keeping follow, basket, refresh, and main-view actions visible.
 - Preserve theme-compatible timeline cards and improve keyboard focus.
 - Restore complete Git read-only and semantic-diff implementations from the committed baseline; all 235 regression tests pass.
-
-# Changelog
 
 ## 0.7.6
 
