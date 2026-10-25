@@ -2,30 +2,40 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+const core = readFileSync(new URL("../styles/core.css", import.meta.url), "utf8");
 
 function rule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return styles.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
+  return core.match(new RegExp(`(?:^|\\n\\n|\\*/\\n)${escaped}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
 }
 
 describe("timeline style contract", () => {
-  it("keeps the full-row activation button visually transparent", () => {
+  it("keeps the full-row activation button as an invisible overlay", () => {
     const trigger = rule(".git-note-history-row-trigger");
 
-    expect(trigger).toContain("appearance: none !important");
-    expect(trigger).toContain("background: transparent !important");
-    expect(trigger).toContain("background-image: none !important");
-    expect(trigger).toContain("box-shadow: none !important");
+    expect(trigger).toContain("position: absolute");
+    expect(trigger).toContain("inset: 0");
+    expect(trigger).toContain("opacity: 0");
+    expect(trigger).toContain("z-index: 1");
   });
 
-  it("renders timeline text above the full-row activation button", () => {
-    const trigger = rule(".git-note-history-row-trigger");
+  it("renders timeline text and actions above the activation button", () => {
     const content = rule(".git-note-history-commit-content");
     const rail = rule(".git-note-history-rail");
+    const actions = rule(".git-note-history-row-actions");
 
-    expect(trigger).toContain("z-index: 1");
-    expect(content).toContain("position: relative");
-    expect(content).toContain("z-index: 2");
-    expect(rail).toContain("z-index: 2");
+    for (const block of [content, rail, actions]) {
+      expect(block).toContain("position: relative");
+      expect(block).toContain("z-index: 2");
+    }
+  });
+
+  it("shows keyboard focus on the row instead of the hidden button", () => {
+    expect(core).toContain(".git-note-history-commit:has(> .git-note-history-row-trigger:focus-visible)");
+  });
+
+  it("ships without !important and with the built stylesheet in sync", () => {
+    expect(styles.match(/!important/g)).toBeNull();
+    expect(styles).toContain(core.trimEnd());
   });
 });

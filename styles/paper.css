@@ -1,0 +1,202 @@
+/*
+  Paper & ink: the optional look (settings → 显示 → 纸与墨外观).
+
+  The plugin adds `gnh-paper` to <body> while the setting is on. Everything
+  here is a token swap on the same --gnh-* variables core.css already uses:
+  paper-coloured surfaces, thin ink lines, serif headings, dark red for what
+  was removed or will be taken back, teal for what was added or kept. The
+  layout does not change. Dark mode is the same paper at night.
+*/
+
+body.gnh-paper .git-note-history-view,
+body.gnh-paper .git-note-history-detail-view,
+body.gnh-paper .git-note-history-settings,
+body.gnh-paper .git-note-history-restore-preview-modal,
+body.gnh-paper .git-note-history-restore-history-modal,
+body.gnh-paper .git-note-history-paragraph-modal,
+body.gnh-paper .git-note-history-block-age-modal {
+  --gnh-paper: #f3efe6;
+  --gnh-sheet: #fbf9f4;
+  --gnh-ink: #26231f;
+  --gnh-muted: #6f6a60;
+  --gnh-faint: #9a948a;
+  --gnh-line: rgba(38, 35, 31, 0.22);
+  --gnh-line-soft: rgba(38, 35, 31, 0.1);
+  --gnh-surface: var(--gnh-paper);
+  --gnh-surface-2: #ebe6da;
+  --gnh-hover: rgba(38, 35, 31, 0.05);
+  --gnh-accent: #b8463a;
+  --gnh-on-accent: #fbf9f4;
+  --gnh-accent-soft: rgba(184, 70, 58, 0.1);
+  --gnh-add: #2f7f86;
+  --gnh-add-soft: rgba(47, 127, 134, 0.12);
+  --gnh-del: #b8463a;
+  --gnh-del-soft: rgba(184, 70, 58, 0.1);
+  --gnh-warn: #a4672a;
+  --gnh-warn-soft: rgba(164, 103, 42, 0.12);
+  --gnh-radius: 6px;
+  --gnh-radius-s: 3px;
+  --gnh-heading-font: Georgia, "Iowan Old Style", "Songti SC", "Noto Serif CJK SC", serif;
+  --gnh-heading-weight: 500;
+  --gnh-dot-hollow: var(--gnh-paper);
+  background: var(--gnh-paper);
+  color: var(--gnh-ink);
+}
+
+body.theme-dark.gnh-paper .git-note-history-view,
+body.theme-dark.gnh-paper .git-note-history-detail-view,
+body.theme-dark.gnh-paper .git-note-history-settings,
+body.theme-dark.gnh-paper .git-note-history-restore-preview-modal,
+body.theme-dark.gnh-paper .git-note-history-restore-history-modal,
+body.theme-dark.gnh-paper .git-note-history-paragraph-modal,
+body.theme-dark.gnh-paper .git-note-history-block-age-modal {
+  --gnh-paper: #1b1916;
+  --gnh-sheet: #221f1b;
+  --gnh-ink: #e9e3d6;
+  --gnh-muted: #a39c8e;
+  --gnh-faint: #716b60;
+  --gnh-line: rgba(233, 227, 214, 0.2);
+  --gnh-line-soft: rgba(233, 227, 214, 0.09);
+  --gnh-surface-2: #26231e;
+  --gnh-hover: rgba(233, 227, 214, 0.06);
+  --gnh-accent: #d9685b;
+  --gnh-on-accent: #1b1916;
+  --gnh-accent-soft: rgba(217, 104, 91, 0.14);
+  --gnh-add: #5fb3b8;
+  --gnh-add-soft: rgba(95, 179, 184, 0.14);
+  --gnh-del: #d9685b;
+  --gnh-del-soft: rgba(217, 104, 91, 0.13);
+  --gnh-warn: #c98b4a;
+  --gnh-warn-soft: rgba(201, 139, 74, 0.14);
+}
+
+/* The sheet: documents and previews sit on a slightly whiter paper. */
+
+body.gnh-paper .git-note-history-reader-document,
+body.gnh-paper .git-note-history-preview-document,
+body.gnh-paper .git-note-history-restore-markdown-preview,
+body.gnh-paper .git-note-history-side-grid,
+body.gnh-paper .git-note-history-hunk,
+body.gnh-paper .git-note-history-review-inbox,
+body.gnh-paper .git-note-history-working-card,
+body.gnh-paper .git-note-history-time-machine,
+body.gnh-paper .git-note-history-version-card,
+body.gnh-paper .git-note-history-restore-preflight,
+body.gnh-paper .git-note-history-line-commit {
+  background: var(--gnh-sheet);
+}
+
+body.gnh-paper .git-note-history-reader-document {
+  padding: var(--size-4-4) var(--size-4-6);
+  border: 1px solid var(--gnh-line-soft);
+  border-radius: var(--gnh-radius);
+}
+
+/* Ink lines instead of grey borders where the line is the whole design. */
+
+body.gnh-paper .git-note-history-header,
+body.gnh-paper .git-note-history-detail-toolbar {
+  border-bottom-color: var(--gnh-line);
+}
+
+body.gnh-paper .git-note-history-rail::before {
+  background: var(--gnh-line);
+}
+
+body.gnh-paper .git-note-history-dot {
+  border-color: var(--gnh-ink);
+  color: var(--gnh-ink);
+}
+
+body.gnh-paper .git-note-history-commit:first-of-type .git-note-history-dot,
+body.gnh-paper .git-note-history-commit.is-selected .git-note-history-dot {
+  border-color: var(--gnh-accent);
+  background: var(--gnh-accent);
+}
+
+body.gnh-paper .git-note-history-date-group {
+  font-family: var(--gnh-heading-font);
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Removed text reads like a margin note: red underline, faint red wash. */
+
+body.gnh-paper .git-note-history-reader-version.is-before .git-note-history-rendered-markdown {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--gnh-del) 70%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+body.gnh-paper .is-word-removed {
+  text-decoration: underline;
+  text-decoration-color: var(--gnh-del);
+  text-underline-offset: 2px;
+}
+
+/* Pill buttons in ink; secondary buttons keep only a thin line. */
+
+body.gnh-paper .git-note-history-restore-primary,
+body.gnh-paper .git-note-history-restore-preview-modal .mod-warning,
+body.gnh-paper .git-note-history-review-inbox-actions .mod-cta,
+body.gnh-paper .git-note-history-compare-bar .mod-cta {
+  border: 1px solid var(--gnh-ink);
+  border-radius: 999px;
+  background: var(--gnh-ink);
+  color: var(--gnh-paper);
+}
+
+body.gnh-paper .git-note-history-restore-primary:hover,
+body.gnh-paper .git-note-history-restore-preview-modal .mod-warning:hover,
+body.gnh-paper .git-note-history-review-inbox-actions .mod-cta:hover,
+body.gnh-paper .git-note-history-compare-bar .mod-cta:hover {
+  background: var(--gnh-accent);
+  border-color: var(--gnh-accent);
+  color: var(--gnh-on-accent);
+}
+
+body.gnh-paper .git-note-history-review-inbox-actions button:not(.mod-cta),
+body.gnh-paper .git-note-history-working-actions button,
+body.gnh-paper .git-note-history-content-lifecycle-actions button,
+body.gnh-paper .git-note-history-version-mode-actions button,
+body.gnh-paper .git-note-history-timeline-footer button,
+body.gnh-paper .git-note-history-time-machine-footer button,
+body.gnh-paper .git-note-history-hunk-actions button,
+body.gnh-paper .git-note-history-paragraph-actions button:not(.mod-warning),
+body.gnh-paper .git-note-history-detail-action-group > button:not(.git-note-history-restore-primary),
+body.gnh-paper .git-note-history-restore-preview-modal .setting-item button:not(.mod-warning) {
+  border: 1px solid var(--gnh-line);
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--gnh-ink);
+}
+
+body.gnh-paper .git-note-history-detail-mode-group,
+body.gnh-paper .git-note-history-detail-context-group {
+  border-radius: 999px;
+}
+
+body.gnh-paper .git-note-history-detail-mode-group button,
+body.gnh-paper .git-note-history-detail-context-group button,
+body.gnh-paper .git-note-history-filter-button {
+  border-radius: 999px;
+}
+
+body.gnh-paper .git-note-history-detail-mode-group button.is-active,
+body.gnh-paper .git-note-history-detail-context-group button.is-active {
+  background: var(--gnh-ink);
+  color: var(--gnh-paper);
+}
+
+body.gnh-paper .git-note-history-compare-bar {
+  border-color: var(--gnh-line);
+  background: var(--gnh-sheet);
+}
+
+body.gnh-paper .git-note-history-principles {
+  font-family: var(--gnh-heading-font);
+  font-style: italic;
+}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — 2026-10-26
+
+- Rewrote the stylesheet from scratch. The sidebar, compare view, restore modals and settings now take every colour, radius and spacing from Obsidian's theme variables, so the plugin follows the active theme in light and dark. The old hard-coded palette layer is gone.
+- Optional **Paper & ink** look (settings → 显示 → 纸与墨外观): paper surfaces, serif headings, thin ink lines, dark red for what was removed or will be taken back, teal for what was added or kept. Off by default; works in dark mode.
+- Timeline is a thin line with dots instead of cards; row actions appear on hover; the full-row button is an invisible overlay, so no `!important` is needed anywhere (17 → 0).
+- Sidebar “more” menu is grouped (find changes / find sources / maintenance) and only shows lab tools when they are enabled; plugin settings moved into it. A footer states the three rules: read-only Git, preview before writing back, undo last.
+- Settings page is grouped into 基本 / 显示 / 实验功能 / 历史信噪比; the jump-to select is gone.
+- Styles are built from `styles/core.css`, `styles/paper.css` and `styles/lab.css` into `styles.css` (9,811 → 8,322 lines). Lab views keep their previous rules in `styles/lab.css` and migrate view by view.
+
 ## 0.8.0 — 2026-10-25
 
 - Lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, sandboxes, history sources) are now behind a single **Show lab tools** setting, off by default; command ids and hotkeys are unchanged.
