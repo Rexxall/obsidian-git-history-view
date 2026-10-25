@@ -25,8 +25,8 @@ Every iteration commits the source, documentation, tracked build output, and ver
    npm run install:local
    ```
 
-   The local target file is ignored by Git. It must include the active both test vaults vault plugin directories on the development machine.
-7. Open the plugin in both both test vaults and complete the feature-specific real Obsidian checks. A successful file copy or hash comparison does not count as UI verification; confirm the installed version, entry points, layout, read-only boundaries, and preservation of local `data.json`.
+   The local target file is ignored by Git. It must include every active development Vault. The current machine uses Projects, the second test vault, and the inbox vault; do not commit their absolute paths.
+7. Open the plugin in every affected target and complete the feature-specific real Obsidian checks. A successful file copy or hash comparison does not count as UI verification; confirm the installed version, entry points, layout, read-only boundaries, and preservation of local `data.json`.
 8. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add generated attribution, automated co-author trailers, machine-specific paths, credentials, or local Obsidian state.
 9. After explicit publication approval, create a GitHub Release whose tag exactly matches `manifest.json`, and attach:
 
@@ -116,4 +116,12 @@ The install archive must contain exactly:
 - [x] Pure tests cover timestamp and generated fields, property ordering, line endings, strict whitespace, YAML comments, substantive changes, ignore-revs, missing content, truncated history, and separate repository-health diagnostics.
 - [x] A real repository with a bare upstream confirms ahead / behind and `.git-blame-ignore-revs` detection while HEAD and status remain unchanged.
 - [ ] Obsidian 1.12.7 checks in both test vaults: command, file-menu and history shortcuts; diagnostics; balanced / strict / raw profiles; raw revision comparison; settings persistence; narrow layout; and light/dark rendering.
+- Publication state: local only. Push, tag, and GitHub Release require separate user approval.
+
+## v0.7.6 local acceptance
+
+- [x] `npm run release:check` passes with 235 tests across 26 files, including the timeline style-contract regression.
+- [x] `dist/git-note-history-0.7.6.zip` contains only `main.js`, `manifest.json`, and `styles.css`, and matches the tracked build. The initial acceptance archive had SHA-256 `012238bb3415dd1d8048a31b97996ed4cfef578f4a10751ae593ea35ae2fc9e6`; a 2026-07-31 rebuild has SHA-256 `05253998345bb9f8a614bf842def319740ff008f21ed02d6a31a0225fe95dc87` because ZIP entry timestamps are not normalized.
+- [x] both test vaults installs match the tracked build. Both pre-upgrade `data.json` files remain in their 0.7.5 installation backups; the second test vault stayed byte-identical, while Projects performed the expected schema-v5-to-v6 migration when Obsidian loaded the plugin.
+- [x] Obsidian 1.12.7 in Projects confirms dates, commit subjects, change statistics, and property summaries remain visible under the active theme, including the raw-commit timeline.
 - Publication state: local only. Push, tag, and GitHub Release require separate user approval.

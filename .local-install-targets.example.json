@@ -7,6 +7,10 @@
     {
       "name": "Second vault",
       "pluginDir": "/absolute/path/to/Another Vault/.obsidian/plugins/git-note-history"
+    },
+    {
+      "name": "Inbox vault",
+      "pluginDir": "/absolute/path/to/Inbox Vault/.obsidian/plugins/git-note-history"
     }
   ]
 }

@@ -172,6 +172,7 @@ npm run check
 
 项目文档：
 
+- [维护交接与当前状态](HANDOFF.md)
 - [产品路线图](ROADMAP.md)
 - [交互研究与头脑风暴](docs/UX_RESEARCH_BRAINSTORM_2026-07-21.md)
 - [发布流程](RELEASING.md)
