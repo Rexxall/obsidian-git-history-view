@@ -64,6 +64,8 @@ const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
 const WORK_EVENT_LOG_FORMAT =
   "%x1e%H%x1f%h%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%s%x1f%B%x1d";
 const MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024;
+// Same limit as the sandbox runner: a stuck Git (lock, prompt, huge repo) must not hang the view forever.
+export const GIT_COMMAND_TIMEOUT_MS = 120_000;
 const EXACT_UNSTAGED_RENAME_MAX_BYTES = 512 * 1024;
 const EXACT_UNSTAGED_RENAME_MAX_CANDIDATES = 64;
 const WORK_EVENT_ANALYSIS_LIMITS = {
@@ -76,6 +78,12 @@ const WORK_EVENT_ANALYSIS_LIMITS = {
 const PROVENANCE_LENS_MAX_BYTES = 2 * 1024 * 1024;
 const PROVENANCE_LENS_MAX_COMMITS = 240;
 const HISTORY_HEALTH_MAX_COMMITS = 120;
+
+export function normalizeMaxCommits(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.max(1, Math.min(1000, Math.trunc(parsed)));
+}
 
 function parseWorkEventCommitLog(raw: string): WorkEventCommit[] {
   const commits: WorkEventCommit[] = [];
@@ -199,10 +207,7 @@ export class GitClient {
   ): Promise<GitFileHistory> {
     const context = await this.resolveContext(file);
     const settings = this.getSettings();
-    const maxCommits = Math.max(
-      1,
-      Math.min(1000, Math.trunc(requestedMaxCommits ?? settings.maxCommits))
-    );
+    const maxCommits = normalizeMaxCommits(requestedMaxCommits ?? settings.maxCommits);
 
     const [logOutput, numStatOutput, statusOutput, branchOutput] = await Promise.all([
       this.runGit(context.repositoryRoot, [
@@ -2147,6 +2152,7 @@ export class GitClient {
         {
           encoding: "utf8",
           maxBuffer: MAX_GIT_OUTPUT_BYTES,
+          timeout: GIT_COMMAND_TIMEOUT_MS,
           windowsHide: true,
           env: {
             ...process.env,
@@ -2162,6 +2168,13 @@ export class GitClient {
           }
 
           const detail = stderr.trim() || error.message;
+          if ((error as { killed?: boolean }).killed) {
+            reject(new GitCommandError(
+              `Git 命令超过 ${GIT_COMMAND_TIMEOUT_MS / 1000} 秒未完成，已停止。`,
+              detail
+            ));
+            return;
+          }
           if (/not a git repository/i.test(detail)) {
             reject(new GitCommandError("这个 Vault 不在 Git 仓库中。", detail));
             return;
