@@ -533,6 +533,11 @@ button.git-note-history-milestone-badge:hover {
   gap: var(--size-4-2);
 }
 
+/* Icon and text only: keep the text next to the icon. */
+.git-note-history-review-inbox-heading {
+  justify-content: flex-start;
+}
+
 .git-note-history-review-inbox-heading > div,
 .git-note-history-stored-milestones-heading > div {
   display: grid;
@@ -1683,7 +1688,7 @@ button.git-note-history-milestone-badge:hover {
 
 .git-note-history-side-grid {
   display: grid;
-  grid-template-columns: 3.5ch minmax(0, 1fr) 3.5ch minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
   border: 1px solid var(--gnh-line);
   border-radius: var(--gnh-radius);
   overflow: hidden;
@@ -1700,6 +1705,8 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-line-number {
+  min-width: 2ch;
+  white-space: nowrap;
   color: var(--gnh-faint);
   text-align: right;
   user-select: none;
