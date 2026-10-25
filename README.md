@@ -42,6 +42,8 @@ The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.
 
 Looks: follows your Obsidian theme by default. Settings → 显示 → 纸与墨外观 switches on an optional paper-and-ink look (paper surfaces, serif headings, dark red for removed, teal for added), light and dark.
 
+<img src="docs/screenshots/paper-compare.jpg" width="860">
+
 Requirements: Obsidian 1.8 or later on macOS, Windows or Linux; `git` on your PATH (or set the path in settings).
 
 ## Safety and privacy
