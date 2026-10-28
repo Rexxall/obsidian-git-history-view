@@ -329,6 +329,139 @@
 .is-mobile .ap { --ap-blur: blur(16px) saturate(160%); --ap-blur-thin: blur(10px) saturate(150%); }
 .ap-list .ap-glass, .ap-group .ap-glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--ap-glass-solid); }
 
+/* ===== styles/kit-pending.css ===== */
+
+/*
+  Four shared components the glass kit is about to gain (bottom action bar,
+  hover row actions, capsule picker, disclosure row). Written here with the
+  kit's own tokens until styles/apple-kit.css ships them; then this file goes.
+*/
+
+/* Bottom action bar: glass, sticks to the bottom of a scrolling view. */
+.ap-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--ap-s2);
+  margin-top: auto;
+  padding: var(--ap-s3) var(--ap-s4);
+  background: var(--ap-glass);
+  -webkit-backdrop-filter: var(--ap-blur);
+  backdrop-filter: var(--ap-blur);
+  box-shadow: inset 0 0.5px 0 var(--ap-sep);
+}
+
+.ap-action-bar > .ap-action-bar-note {
+  margin-right: auto;
+  font: var(--ap-subhead);
+  color: var(--ap-label-2);
+}
+
+/* Row actions: hidden until the row is hovered or holds focus. */
+.ap-row-actions {
+  opacity: 0;
+  transition: opacity var(--ap-fast) var(--ap-ease);
+}
+
+:hover > .ap-row-actions,
+:focus-within > .ap-row-actions,
+.ap-row-actions:has([aria-expanded="true"], .is-active) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ap-row-actions { opacity: 1; }
+}
+
+/* Capsule picker: a value with a chevron, opens a menu. */
+.ap-picker {
+  all: unset;
+  cursor: pointer;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 5px 10px 5px 12px;
+  border-radius: var(--ap-r-pill);
+  background: var(--ap-fill);
+  color: var(--ap-label);
+  font: 500 12px/16px var(--ap-font);
+  white-space: nowrap;
+  transition: background var(--ap-fast) var(--ap-ease);
+}
+
+.ap-picker:hover { background: var(--ap-fill-strong); }
+.ap-picker:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 1px; }
+.ap-picker svg { width: 14px; height: 14px; color: var(--ap-label-2); }
+
+/* Disclosure row: one line that opens more (a view, a section, a menu). */
+.ap-disclosure-row {
+  all: unset;
+  cursor: pointer;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--ap-s3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--ap-s2) var(--ap-s3);
+  border-radius: var(--ap-r-group);
+  background: var(--ap-group);
+  box-shadow: var(--ap-hair);
+  color: var(--ap-label);
+  transition: background var(--ap-fast) var(--ap-ease);
+}
+
+.ap-disclosure-row:hover { background: color-mix(in srgb, var(--text-normal) 7%, var(--ap-page)); }
+.ap-disclosure-row:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 1px; }
+
+.ap-disclosure-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--ap-accent-tint);
+  color: var(--ap-accent);
+}
+
+.ap-disclosure-icon svg { width: 16px; height: 16px; }
+
+.ap-disclosure-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.ap-disclosure-title {
+  font: var(--ap-headline);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-disclosure-sub {
+  font: var(--ap-subhead);
+  color: var(--ap-label-2);
+}
+
+.ap-disclosure-chevron { display: inline-flex; flex: none; color: var(--ap-label-3); }
+.ap-disclosure-chevron svg { width: 14px; height: 14px; }
+.ap-disclosure-row[aria-expanded="true"] .ap-disclosure-chevron { transform: rotate(90deg); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .ap-action-bar {
+    background: var(--ap-glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* ===== styles/core.css ===== */
 
 /*
@@ -2629,15 +2762,6 @@ button.git-note-history-impact-row:hover {
 
   .git-note-history-preview-pair {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .git-note-history-detail-action-group {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .git-note-history-detail-action-group > :first-child {
-    margin-right: auto;
   }
 }
 
@@ -8516,7 +8640,7 @@ button.git-note-history-graph-machine-relation:hover {
 }
 
 /* Buttons are capsules; icon buttons are soft squares. */
-.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .git-note-history-path-disclosure)),
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .git-note-history-path-disclosure, .ap-seg > button, .ap-disclosure-row)),
 .ap.git-note-history-detail-view button:where(:not(.clickable-icon, .git-note-history-version-chooser)),
 .modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)) {
   border: 0;
@@ -8529,13 +8653,13 @@ button.git-note-history-graph-machine-relation:hover {
   transition: background var(--ap-fast) var(--ap-ease), transform var(--ap-fast) var(--ap-ease);
 }
 
-.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title)):hover,
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .ap-seg > button, .ap-disclosure-row)):hover,
 .ap.git-note-history-detail-view button:where(:not(.clickable-icon, .git-note-history-version-chooser)):hover,
 .modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)):hover {
   background: var(--ap-fill-strong);
 }
 
-.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger)):active,
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .ap-seg > button, .ap-disclosure-row)):active,
 .ap.git-note-history-detail-view button:where(:not(.clickable-icon)):active,
 .modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)):active {
   transform: scale(0.96);
@@ -8595,7 +8719,21 @@ button.git-note-history-graph-machine-relation:hover {
 /* ------------------------------------------------------- history sidebar */
 
 .ap.git-note-history-view {
+  display: flex;
+  flex-direction: column;
   background: var(--ap-page);
+}
+
+.ap.git-note-history-view > * {
+  flex: none;
+}
+
+.ap .git-note-history-header-actions {
+  gap: var(--ap-s2);
+}
+
+.ap .git-note-history-scope button {
+  padding: 4px 12px;
 }
 
 .ap .git-note-history-header {
@@ -8643,7 +8781,6 @@ button.git-note-history-graph-machine-relation:hover {
 }
 
 /* Cards in the sidebar sit on the grouped fill, no outline. */
-.ap .git-note-history-review-inbox,
 .ap .git-note-history-time-machine,
 .ap .git-note-history-working-card,
 .ap .git-note-history-empty {
@@ -8651,15 +8788,6 @@ button.git-note-history-graph-machine-relation:hover {
   border-radius: var(--ap-r-group);
   background: var(--ap-group);
   box-shadow: var(--ap-hair);
-}
-
-.ap .git-note-history-review-inbox {
-  padding: var(--ap-s3) var(--ap-s4);
-}
-
-.ap .git-note-history-review-inbox-heading strong,
-.ap .git-note-history-review-inbox-heading > div:first-child {
-  font: var(--ap-headline);
 }
 
 .ap .git-note-history-time-machine {
@@ -8753,8 +8881,45 @@ button.git-note-history-graph-machine-relation:hover {
   background: var(--ap-fill);
 }
 
-.ap .git-note-history-commit.is-keyboard-selected {
-  background: var(--ap-accent-tint);
+/* The selected version is a solid accent row with white text, as in Finder. */
+.ap .git-note-history-commit.is-keyboard-selected,
+.ap .git-note-history-commit.is-keyboard-selected:hover {
+  background: var(--ap-accent);
+  color: var(--ap-on-accent);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected :is(.git-note-history-commit-subject, .git-note-history-commit-stats span, .clickable-icon) {
+  color: var(--ap-on-accent);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected :is(.git-note-history-commit-meta, .git-note-history-commit-meta code) {
+  color: color-mix(in srgb, var(--ap-on-accent) 78%, transparent);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected .git-note-history-dot {
+  border-color: var(--ap-on-accent);
+  background: var(--ap-on-accent);
+  color: var(--ap-accent);
+  box-shadow: none;
+}
+
+.ap .git-note-history-commit.is-keyboard-selected .clickable-icon:hover {
+  background: rgb(255 255 255 / 0.18);
+}
+
+/* Review entry row above the list. */
+.ap .git-note-history-review-inbox {
+  padding: var(--ap-s2) var(--ap-s3);
+  border: 0;
+  border-radius: var(--ap-r-group);
+  background: var(--ap-group);
+  box-shadow: var(--ap-hair);
+}
+
+.ap .git-note-history-review-inbox .git-note-history-review-inbox-metrics {
+  display: inline-flex;
+  gap: 6px;
+  font: 500 11px/14px var(--ap-font-round);
 }
 
 .ap .git-note-history-commit.is-selected,
@@ -8786,10 +8951,8 @@ button.git-note-history-graph-machine-relation:hover {
   box-shadow: 0 0 0 2px var(--ap-page);
 }
 
-.ap .git-note-history-principles {
-  font: var(--ap-caption);
-  color: var(--ap-label-3);
-  border-top: 0;
+.ap .git-note-history-action-bar button {
+  padding-block: 6px;
 }
 
 /* ---------------------------------------------------------- compare view */

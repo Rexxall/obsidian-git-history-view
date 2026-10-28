@@ -335,11 +335,11 @@ export class GitNoteHistoryView extends ItemView {
       const overview = container.createDiv({ cls: "git-note-history-overview" });
       this.renderReviewInbox(overview, state);
       this.renderWorkingTreeCard(overview, state);
-      this.renderTimeMachine(container);
+      if (!overview.hasChildNodes()) overview.remove();
+      if (this.timeMachineExpanded) this.renderTimeMachine(container);
     }
     this.renderCompareBar(container);
 
-    this.renderVersionModeToggle(container);
     const storedMilestoneMatches = this.renderStoredMilestones(container, state);
     this.renderContentLifecycle(container);
 
@@ -419,7 +419,7 @@ export class GitNoteHistoryView extends ItemView {
         this.renderCommitRow(timeline, commit, index, state);
       });
       this.renderTimelineFooter(timeline, window.visible, window.total);
-      this.renderPrinciples(container);
+      this.renderActionBar(container);
       return;
     }
 
@@ -440,14 +440,59 @@ export class GitNoteHistoryView extends ItemView {
       this.renderEffectiveGroupRow(timeline, group, index, groups, state);
     });
     this.renderTimelineFooter(timeline, window.visible, window.total);
-    this.renderPrinciples(container);
+    this.renderActionBar(container);
   }
 
-  private renderPrinciples(container: HTMLElement): void {
-    container.createDiv({
-      cls: "git-note-history-principles",
-      text: "只读 Git · 写回前预览 · 撤销上次"
+  /** The glass bar under the list: both actions work on the selected version. */
+  private renderActionBar(container: HTMLElement): void {
+    const bar = container.createDiv({ cls: "ap-action-bar git-note-history-action-bar" });
+    const compare = bar.createEl("button", { text: "和当前比较" });
+    compare.addEventListener("click", () => {
+      const commit = this.selectedTimelineCommit();
+      if (commit) void this.openAgainstWorking(commit);
     });
+    const restore = bar.createEl("button", { cls: "mod-cta", text: "恢复这一版" });
+    restore.addEventListener("click", () => {
+      const commit = this.selectedTimelineCommit();
+      if (commit) void this.restoreFromTimeline(commit);
+    });
+  }
+
+  private filteredTimelineCommits(): GitCommitVersion[] {
+    if (!this.history) return [];
+    const state = this.plugin.getFileReviewState(this.history.context);
+    const visible = (commit: GitCommitVersion): boolean =>
+      matchesSearch(commit, this.query, state, this.contentSearchMatches)
+      && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash));
+    return this.showRawCommits
+      ? this.history.commits.filter(visible)
+      : this.effectiveGroups
+          .filter((group) => group.commits.some(visible))
+          .map((group) => group.representative);
+  }
+
+  private selectedTimelineCommit(): GitCommitVersion | undefined {
+    const commits = this.filteredTimelineCommits();
+    return commits[Math.min(this.selectedIndex, commits.length - 1)];
+  }
+
+  private async restoreFromTimeline(commit: GitCommitVersion): Promise<void> {
+    if (!this.targetFile || !this.history) return;
+    await this.plugin.openDetail({
+      filePath: this.targetFile.path,
+      repositoryRoot: this.history.context.repositoryRoot,
+      base: { kind: "commit", commit },
+      target: { kind: "working", label: "当前工作区" },
+      initialMode: this.plugin.getFileReviewState(this.history.context).detailMode ?? this.plugin.settings.defaultDetailMode
+    }, { restore: true });
+  }
+
+  private selectRow(row: HTMLElement, index: number): void {
+    this.selectedIndex = index;
+    row.parentElement
+      ?.querySelectorAll(".git-note-history-commit.is-keyboard-selected")
+      .forEach((candidate) => candidate.classList.remove("is-keyboard-selected"));
+    row.classList.add("is-keyboard-selected");
   }
 
   private timelineCommits(): GitCommitVersion[] {
@@ -697,37 +742,18 @@ export class GitNoteHistoryView extends ItemView {
     }
   }
 
+  /** Pending review shows as one entry row above the list; setting or clearing the point lives in the "…" menu. */
   private renderReviewInbox(container: HTMLElement, state: FileReviewState): void {
     if (!this.history || !this.targetFile) return;
     const latest = this.history.commits[0];
-    if (!latest) return;
     const checkpoint = state.reviewCheckpoint;
-    const card = container.createDiv({ cls: "git-note-history-review-inbox" });
-    const heading = card.createDiv({ cls: "git-note-history-review-inbox-heading" });
-    const icon = heading.createSpan();
-    setIcon(icon, checkpoint ? "inbox" : "circle-dot-dashed");
-    const title = heading.createDiv();
-    title.createEl("strong", { text: checkpoint ? "待复查" : "建立复查起点" });
-
-    if (!checkpoint) {
-      title.createDiv({ text: "设一个起点，以后只看新增变化。" });
-      const actions = card.createDiv({ cls: "git-note-history-review-inbox-actions" });
-      const hasWorkingChanges = this.history.status.staged
-        || this.history.status.unstaged
-        || this.history.status.untracked;
-      if (hasWorkingChanges) {
-        const review = actions.createEl("button", { text: "查看改动" });
-        review.addEventListener("click", () => void this.openAgainstWorking(latest));
-      }
-      const mark = actions.createEl("button", { cls: "mod-cta", text: "设为复查起点" });
-      mark.addEventListener("click", () => void this.markCurrentReviewed(latest));
-      return;
-    }
+    if (!latest || !checkpoint) return;
 
     const pendingGroups = groupsSinceCheckpoint(this.effectiveGroups, checkpoint.commitHash);
     const workingChanged = checkpoint.workingFingerprint
       ? checkpoint.workingFingerprint !== this.currentFingerprint
       : this.history.status.staged || this.history.status.unstaged || this.history.status.untracked;
+    if (pendingGroups.length === 0 && !workingChanged) return;
     const pendingStats = pendingGroups.reduce(
       (total, group) => ({
         added: total.added + group.addedLines,
@@ -735,29 +761,6 @@ export class GitNoteHistoryView extends ItemView {
       }),
       { added: this.history.workingTreeStats.addedLines, deleted: this.history.workingTreeStats.deletedLines }
     );
-    const checkpointDate = formatCommitTime(checkpoint.reviewedAt, true);
-    if (pendingGroups.length === 0 && !workingChanged) {
-      card.addClass("is-reviewed");
-      title.createDiv({ text: `已复查到 ${checkpointDate}，目前没有新变化。` });
-      const clear = heading.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "清除复查点" } });
-      setIcon(clear, "x");
-      clear.addEventListener("click", () => void (async () => {
-        await this.plugin.clearReviewCheckpoint(this.history!.context);
-        this.render();
-      })());
-      return;
-    }
-
-    title.createDiv({
-      text: `自 ${checkpointDate}：${pendingGroups.length} 个有效版本${workingChanged ? "，含当前工作区" : ""}`
-    });
-    const metrics = card.createDiv({ cls: "git-note-history-review-inbox-metrics" });
-    metrics.createSpan({ cls: "is-added", text: `+${pendingStats.added}` });
-    metrics.createSpan({ cls: "is-removed", text: `−${pendingStats.deleted}` });
-    const folded = pendingGroups.reduce((count, group) => count + Math.max(0, group.commits.length - 1), 0);
-    if (folded > 0) metrics.createSpan({ text: `已折叠 ${folded} 次备份` });
-
-    const actions = card.createDiv({ cls: "git-note-history-review-inbox-actions" });
     const checkpointCommit = this.history.commits.find((commit) => commit.hash === checkpoint.commitHash)
       ?? {
         ...latest,
@@ -769,10 +772,51 @@ export class GitNoteHistoryView extends ItemView {
         addedLines: 0,
         deletedLines: 0
       };
-    const review = actions.createEl("button", { cls: "mod-cta", text: "审阅这些变化" });
-    review.addEventListener("click", () => void this.openAgainstWorking(checkpointCommit));
-    const mark = actions.createEl("button", { text: "标记已复查" });
-    mark.addEventListener("click", () => void this.markCurrentReviewed(latest));
+
+    const entry = container.createEl("button", {
+      cls: "ap-disclosure-row git-note-history-review-inbox",
+      attr: { type: "button", "aria-label": "审阅自上次复查以来的变化" }
+    });
+    setIcon(entry.createSpan({ cls: "ap-disclosure-icon" }), "inbox");
+    const copy = entry.createSpan({ cls: "ap-disclosure-copy" });
+    copy.createSpan({
+      cls: "ap-disclosure-title",
+      text: `待复查 ${pendingGroups.length} 个版本${workingChanged ? "＋当前工作区" : ""}`
+    });
+    copy.createSpan({
+      cls: "ap-disclosure-sub",
+      text: `自 ${formatCommitTime(checkpoint.reviewedAt, true)}`
+    });
+    const metrics = entry.createSpan({ cls: "git-note-history-review-inbox-metrics" });
+    metrics.createSpan({ cls: "is-added", text: `+${pendingStats.added}` });
+    metrics.createSpan({ cls: "is-removed", text: `−${pendingStats.deleted}` });
+    setIcon(entry.createSpan({ cls: "ap-disclosure-chevron" }), "chevron-right");
+    entry.addEventListener("click", () => void this.openAgainstWorking(checkpointCommit));
+  }
+
+  private addReviewMenuItems(menu: Menu): void {
+    const history = this.history;
+    const latest = history?.commits[0];
+    if (!history || !latest) return;
+    const checkpoint = this.plugin.getFileReviewState(history.context).reviewCheckpoint;
+    if (!checkpoint) {
+      menu.addItem(item => item
+        .setTitle("设为复查起点")
+        .setIcon("circle-dot-dashed")
+        .onClick(() => void this.markCurrentReviewed(latest)));
+      return;
+    }
+    menu.addItem(item => item
+      .setTitle("标记已复查")
+      .setIcon("check-check")
+      .onClick(() => void this.markCurrentReviewed(latest)));
+    menu.addItem(item => item
+      .setTitle("清除复查点")
+      .setIcon("x")
+      .onClick(async () => {
+        await this.plugin.clearReviewCheckpoint(history.context);
+        this.render();
+      }));
   }
 
   private async markCurrentReviewed(latest: GitCommitVersion): Promise<void> {
@@ -785,61 +829,6 @@ export class GitNoteHistoryView extends ItemView {
       this.commitContents
     );
     this.render();
-  }
-
-  private renderVersionModeToggle(container: HTMLElement): void {
-    if (!this.history) return;
-    const state = this.plugin.getFileReviewState(this.history.context);
-    const milestoneEvents = namedMilestoneEvents(state);
-    if (this.history.commits.length === 0 && milestoneEvents.length === 0) return;
-    const milestoneVersionCount = new Set(
-      milestoneEvents.map((milestone) => milestone.commitHash)
-    ).size;
-    const bar = container.createDiv({ cls: "git-note-history-version-mode" });
-    const label = bar.createDiv();
-    label.createEl("strong", {
-      text: this.showNamedMilestonesOnly
-        ? "命名里程碑"
-        : this.showRawCommits
-          ? "原始提交"
-          : "版本"
-    });
-    label.createSpan({
-      text: this.showNamedMilestonesOnly
-        ? ` ${milestoneVersionCount} 个版本 · ${milestoneEvents.length} 个事件`
-        : this.showRawCommits
-          ? ` ${this.history.commits.length} 条`
-          : ` ${this.effectiveGroups.length} 组${this.refiningGroups ? " · 正在识别重复内容…" : ""}`
-    });
-
-    const actions = bar.createDiv({ cls: "git-note-history-version-mode-actions" });
-    const milestones = actions.createEl("button", {
-      text: this.showNamedMilestonesOnly
-        ? "显示全部"
-        : `只看里程碑${milestoneVersionCount ? ` ${milestoneVersionCount}` : ""}`,
-      attr: { "aria-pressed": String(this.showNamedMilestonesOnly) }
-    });
-    milestones.disabled = milestoneEvents.length === 0 && !this.showNamedMilestonesOnly;
-    milestones.addEventListener("click", () => {
-      this.showNamedMilestonesOnly = !this.showNamedMilestonesOnly;
-      this.stopTimeMachinePlayback(false);
-      this.timeMachinePosition = this.timelineCommits().length;
-      this.selectedIndex = 0;
-      this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
-      this.render();
-    });
-
-    const toggle = actions.createEl("button", {
-      text: this.showRawCommits ? "显示有效版本" : "显示原始提交",
-      attr: { "aria-pressed": String(this.showRawCommits) }
-    });
-    toggle.addEventListener("click", () => {
-      this.showRawCommits = !this.showRawCommits;
-      this.timeMachinePosition = this.timelineCommits().length;
-      this.selectedIndex = 0;
-      this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
-      this.render();
-    });
   }
 
   private renderStoredMilestones(
@@ -1078,13 +1067,7 @@ export class GitNoteHistoryView extends ItemView {
       cls: "git-note-history-row-trigger-label",
       text: group.summary
     });
-    trigger.addEventListener("focus", () => {
-      this.selectedIndex = index;
-      row.parentElement
-        ?.querySelectorAll(".git-note-history-commit.is-keyboard-selected")
-        .forEach((candidate) => candidate.classList.remove("is-keyboard-selected"));
-      row.classList.add("is-keyboard-selected");
-    });
+    trigger.addEventListener("focus", () => this.selectRow(row, index));
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const size = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(group.addedLines + group.deletedLines + 1) / 4)));
     const dot = rail.createSpan({ cls: `git-note-history-dot change-${representative.changeType.toLowerCase()} size-${size}` });
@@ -1123,7 +1106,7 @@ export class GitNoteHistoryView extends ItemView {
       );
     }
 
-    const actions = row.createDiv({ cls: "git-note-history-row-actions" });
+    const actions = row.createDiv({ cls: "ap-row-actions git-note-history-row-actions" });
     if (group.commits.length > 1) {
       const expand = actions.createEl("button", {
         cls: this.expandedGroups.has(group.id) ? "clickable-icon is-active" : "clickable-icon",
@@ -1145,9 +1128,13 @@ export class GitNoteHistoryView extends ItemView {
     });
     trigger.addEventListener("click", (event) => {
       event.stopPropagation();
+      this.selectRow(row, index);
       void this.openEffectiveGroupComparison(group, index, visibleGroups);
     });
-    row.addEventListener("click", () => void this.openEffectiveGroupComparison(group, index, visibleGroups));
+    row.addEventListener("click", () => {
+      this.selectRow(row, index);
+      void this.openEffectiveGroupComparison(group, index, visibleGroups);
+    });
 
     if (this.expandedGroups.has(group.id)) {
       const members = container.createDiv({ cls: "git-note-history-effective-members" });
@@ -1307,63 +1294,32 @@ export class GitNoteHistoryView extends ItemView {
     brand.createEl("h4", { text: "版本历史" });
 
     const controls = title.createDiv({ cls: "git-note-history-header-actions" });
-    const follow = controls.createEl("button", {
-      cls: "clickable-icon",
-      attr: {
-        "aria-label": this.followActiveNote ? "正在跟随当前笔记；点击固定" : "已固定笔记；点击重新跟随",
-        "aria-pressed": String(this.followActiveNote)
+    if (this.targetFile && this.history) {
+      const segment = controls.createDiv({ cls: "ap-seg git-note-history-scope", attr: { role: "group", "aria-label": "显示范围" } });
+      const scopes: Array<[boolean, string]> = [[false, "全部"], [true, "里程碑"]];
+      for (const [milestonesOnly, label] of scopes) {
+        const button = segment.createEl("button", {
+          cls: this.showNamedMilestonesOnly === milestonesOnly ? "is-active" : "",
+          text: label,
+          attr: { "aria-pressed": String(this.showNamedMilestonesOnly === milestonesOnly) }
+        });
+        button.addEventListener("click", () => {
+          if (this.showNamedMilestonesOnly === milestonesOnly) return;
+          this.showNamedMilestonesOnly = milestonesOnly;
+          this.stopTimeMachinePlayback(false);
+          this.timeMachinePosition = this.timelineCommits().length;
+          this.selectedIndex = 0;
+          this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
+          this.render();
+        });
       }
-    });
-    setIcon(follow, this.followActiveNote ? "scan-eye" : "pin");
-    follow.addEventListener("click", () => {
-      this.followActiveNote = !this.followActiveNote;
-      this.render();
-    });
-
-    if (this.targetFile) {
-      const basketCount = this.plugin.getRecoveryBasketCount(this.targetFile.path);
-      const basket = controls.createEl("button", {
-        cls: basketCount > 0 ? "clickable-icon git-note-history-basket-shortcut has-items" : "clickable-icon",
-        attr: {
-          "aria-label": basketCount > 0
-            ? `打开恢复篮子，已有 ${basketCount} 项`
-            : "打开恢复篮子"
-        }
-      });
-      setIcon(basket, "shopping-basket");
-      if (basketCount > 0) basket.dataset.count = String(basketCount);
-      basket.addEventListener("click", () => {
-        void this.plugin.openRecoveryBasket(this.targetFile!);
-      });
-
-      const more = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: { "aria-label": "更多", "title": "更多" }
-      });
-      setIcon(more, "ellipsis");
-      more.addEventListener("click", event => {
-        const file = this.targetFile;
-        if (!file) return;
-        this.openMoreMenu(event, file);
-      });
     }
-
-    const refresh = controls.createEl("button", {
+    const more = controls.createEl("button", {
       cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
-      attr: { "aria-label": this.loading ? "正在刷新" : "刷新", "aria-busy": String(this.loading) }
+      attr: { "aria-label": "更多", "aria-haspopup": "menu", "aria-busy": String(this.loading) }
     });
-    refresh.disabled = this.loading;
-    setIcon(refresh, this.loading ? "loader-circle" : "refresh-cw");
-    refresh.addEventListener("click", () => void this.refresh());
-
-    if (this.targetFile && this.leaf.getRoot() !== this.app.workspace.rootSplit) {
-      const openMain = controls.createEl("button", {
-        cls: "clickable-icon",
-        attr: { "aria-label": "在中央完整打开" }
-      });
-      setIcon(openMain, "panel-top-open");
-      openMain.addEventListener("click", () => void this.plugin.activateHistoryInMain(this.targetFile));
-    }
+    setIcon(more, this.loading ? "loader-circle" : "ellipsis");
+    more.addEventListener("click", event => this.openMoreMenu(event, this.targetFile));
 
     if (this.targetFile) header.createDiv({ cls: "git-note-history-file-path", text: this.targetFile.path });
     this.renderPathHistory(header);
@@ -1401,8 +1357,54 @@ export class GitNoteHistoryView extends ItemView {
     }
   }
 
-  private openMoreMenu(event: MouseEvent, file: TFile): void {
+  private openMoreMenu(event: MouseEvent, file: TFile | null): void {
     const menu = new Menu();
+    menu.addItem(item => item
+      .setTitle("跟随当前笔记")
+      .setIcon("scan-eye")
+      .setChecked(this.followActiveNote)
+      .onClick(() => {
+        this.followActiveNote = !this.followActiveNote;
+        this.render();
+      }));
+    menu.addItem(item => item.setTitle("刷新").setIcon("refresh-cw").onClick(() => void this.refresh()));
+    if (file && this.leaf.getRoot() !== this.app.workspace.rootSplit) {
+      menu.addItem(item => item.setTitle("在中央完整打开").setIcon("panel-top-open").onClick(() => void this.plugin.activateHistoryInMain(file)));
+    }
+    if (!file) {
+      menu.showAtMouseEvent(event);
+      return;
+    }
+    menu.addSeparator();
+    this.addReviewMenuItems(menu);
+    if (this.history && this.timelineCommits().length > 0) {
+      menu.addItem(item => item
+        .setTitle("笔记时光机")
+        .setIcon("history")
+        .setChecked(this.timeMachineExpanded)
+        .onClick(() => {
+          this.timeMachineExpanded = !this.timeMachineExpanded;
+          if (!this.timeMachineExpanded) this.stopTimeMachinePlayback(false);
+          this.render();
+        }));
+    }
+    menu.addItem(item => item
+      .setTitle("显示原始提交")
+      .setIcon("git-commit-horizontal")
+      .setChecked(this.showRawCommits)
+      .onClick(() => {
+        this.showRawCommits = !this.showRawCommits;
+        this.timeMachinePosition = this.timelineCommits().length;
+        this.selectedIndex = 0;
+        this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
+        this.render();
+      }));
+    const basketCount = this.plugin.getRecoveryBasketCount(file.path);
+    menu.addItem(item => item
+      .setTitle(basketCount > 0 ? `恢复篮子（${basketCount}）` : "恢复篮子")
+      .setIcon("shopping-basket")
+      .onClick(() => void this.plugin.openRecoveryBasket(file)));
+    menu.addSeparator();
     if (this.plugin.settings.showLabTools) {
       menu.addItem(item => item.setTitle("追踪内容从哪一版变化").setIcon("scan-search").onClick(() => this.plugin.openKnowledgeTraceSetup(file)));
       menu.addItem(item => item.setTitle("查看版本批注").setIcon("message-square-text").onClick(() => void this.plugin.openReviewAnnotations(file)));
@@ -1773,13 +1775,7 @@ export class GitNoteHistoryView extends ItemView {
       cls: "git-note-history-row-trigger-label",
       text: commit.subject || "（无提交说明）"
     });
-    trigger.addEventListener("focus", () => {
-      this.selectedIndex = filteredIndex;
-      row.parentElement
-        ?.querySelectorAll(".git-note-history-commit.is-keyboard-selected")
-        .forEach((candidate) => candidate.classList.remove("is-keyboard-selected"));
-      row.classList.add("is-keyboard-selected");
-    });
+    trigger.addEventListener("focus", () => this.selectRow(row, filteredIndex));
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const dot = rail.createSpan({ cls: `git-note-history-dot change-${commit.changeType.toLowerCase()}` });
     setIcon(dot, commit.changeType === "R" ? "file-symlink" : commit.changeType === "C" ? "copy" : "git-commit-horizontal");
@@ -1811,7 +1807,7 @@ export class GitNoteHistoryView extends ItemView {
       this.addBadge(badges, key === "agent" ? "bot" : "shield-check", value, `is-${key}`);
     }
 
-    const actions = row.createDiv({ cls: "git-note-history-row-actions" });
+    const actions = row.createDiv({ cls: "ap-row-actions git-note-history-row-actions" });
     const select = actions.createEl("button", {
       cls: this.compareSelection.has(commit.hash) ? "clickable-icon is-active" : "clickable-icon",
       attr: { "aria-label": "选择用于双版本比较", "aria-pressed": String(this.compareSelection.has(commit.hash)) }
@@ -1832,11 +1828,17 @@ export class GitNoteHistoryView extends ItemView {
     trigger.addEventListener("click", (event) => {
       event.stopPropagation();
       if (event.metaKey || event.ctrlKey) this.toggleCompare(commit.hash);
-      else void this.openAgainstWorking(commit);
+      else {
+        this.selectRow(row, filteredIndex);
+        void this.openAgainstWorking(commit);
+      }
     });
     row.addEventListener("click", (event) => {
       if (event.metaKey || event.ctrlKey) this.toggleCompare(commit.hash);
-      else void this.openAgainstWorking(commit);
+      else {
+        this.selectRow(row, filteredIndex);
+        void this.openAgainstWorking(commit);
+      }
     });
     row.addEventListener("mouseenter", () => this.scheduleHoverPreview(row, commit));
     row.addEventListener("mouseleave", () => {
@@ -2161,18 +2163,7 @@ export class GitNoteHistoryView extends ItemView {
       || isInteractiveKeyboardTarget(event.target)
       || !this.history
     ) return;
-    const state = this.plugin.getFileReviewState(this.history.context);
-    const filtered = this.showRawCommits
-      ? this.history.commits.filter((commit) =>
-          matchesSearch(commit, this.query, state, this.contentSearchMatches)
-          && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash))
-        )
-      : this.effectiveGroups
-          .filter((group) => group.commits.some((commit) =>
-            matchesSearch(commit, this.query, state, this.contentSearchMatches)
-            && (!this.showNamedMilestonesOnly || hasNamedMilestone(state, commit.hash))
-          ))
-          .map((group) => group.representative);
+    const filtered = this.filteredTimelineCommits();
     const activationMode = historyActivationMode(event.key);
     if (event.key.toLowerCase() === "j" || event.key === "ArrowDown") {
       event.preventDefault();

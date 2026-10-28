@@ -15,7 +15,7 @@
 
 Daily Git backups mean every old version of a note is still there. The problem is getting one line back: restoring a whole file overwrites everything written since. Git Note History treats a note's history as something to read and pick from, not something to roll back wholesale.
 
-- **Timeline** of the current note in the right sidebar, grouped by day, with `+/-` counts and milestones you name yourself (*sent*, *submitted*, *confirmed*).
+- **Timeline** of the current note in the right sidebar, grouped by day, with `+/-` counts and milestones you name yourself (*sent*, *submitted*, *confirmed*). Pick a version, then *Compare with current* or *Restore this version* from the bar at the bottom.
 - **Compare** any two versions: side by side, unified diff, rendered Markdown changes, two previews, or a structure view that understands YAML properties, headings, lists, tasks, tables, callouts, code and wiki links.
 - **Restore just a part.** Bring back a paragraph, a change block, or several blocks collected from different versions, after a preview that shows the merged result and any links that would break.
 - **Safe writes.** Right before writing, the note is compared with what you saw; if it changed in between, the restore stops. Every restore can be undone (12 steps), and undo also stops if you have edited since.
@@ -26,7 +26,10 @@ Daily Git backups mean every old version of a note is still there. The problem i
 - **Compare with last commit**: one command shows what you changed since the last backup.
 - **Version links**: right-click a version, choose *Copy version link*, and paste it into any note, for example next to "sent to the professor on 26 October". Clicking the link opens that version against the current note.
 
-<img src="docs/screenshots/timeline.jpg" width="860">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/timeline-dark.jpg">
+  <img src="docs/screenshots/timeline.jpg" width="860">
+</picture>
 
 <img src="docs/screenshots/restore.jpg" width="860">
 

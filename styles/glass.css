@@ -30,7 +30,7 @@
 }
 
 /* Buttons are capsules; icon buttons are soft squares. */
-.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .git-note-history-path-disclosure)),
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .git-note-history-path-disclosure, .ap-seg > button, .ap-disclosure-row)),
 .ap.git-note-history-detail-view button:where(:not(.clickable-icon, .git-note-history-version-chooser)),
 .modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)) {
   border: 0;
@@ -43,13 +43,13 @@
   transition: background var(--ap-fast) var(--ap-ease), transform var(--ap-fast) var(--ap-ease);
 }
 
-.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title)):hover,
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .ap-seg > button, .ap-disclosure-row)):hover,
 .ap.git-note-history-detail-view button:where(:not(.clickable-icon, .git-note-history-version-chooser)):hover,
 .modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)):hover {
   background: var(--ap-fill-strong);
 }
 
-.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger)):active,
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .ap-seg > button, .ap-disclosure-row)):active,
 .ap.git-note-history-detail-view button:where(:not(.clickable-icon)):active,
 .modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)):active {
   transform: scale(0.96);
@@ -109,7 +109,21 @@
 /* ------------------------------------------------------- history sidebar */
 
 .ap.git-note-history-view {
+  display: flex;
+  flex-direction: column;
   background: var(--ap-page);
+}
+
+.ap.git-note-history-view > * {
+  flex: none;
+}
+
+.ap .git-note-history-header-actions {
+  gap: var(--ap-s2);
+}
+
+.ap .git-note-history-scope button {
+  padding: 4px 12px;
 }
 
 .ap .git-note-history-header {
@@ -157,7 +171,6 @@
 }
 
 /* Cards in the sidebar sit on the grouped fill, no outline. */
-.ap .git-note-history-review-inbox,
 .ap .git-note-history-time-machine,
 .ap .git-note-history-working-card,
 .ap .git-note-history-empty {
@@ -165,15 +178,6 @@
   border-radius: var(--ap-r-group);
   background: var(--ap-group);
   box-shadow: var(--ap-hair);
-}
-
-.ap .git-note-history-review-inbox {
-  padding: var(--ap-s3) var(--ap-s4);
-}
-
-.ap .git-note-history-review-inbox-heading strong,
-.ap .git-note-history-review-inbox-heading > div:first-child {
-  font: var(--ap-headline);
 }
 
 .ap .git-note-history-time-machine {
@@ -267,8 +271,45 @@
   background: var(--ap-fill);
 }
 
-.ap .git-note-history-commit.is-keyboard-selected {
-  background: var(--ap-accent-tint);
+/* The selected version is a solid accent row with white text, as in Finder. */
+.ap .git-note-history-commit.is-keyboard-selected,
+.ap .git-note-history-commit.is-keyboard-selected:hover {
+  background: var(--ap-accent);
+  color: var(--ap-on-accent);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected :is(.git-note-history-commit-subject, .git-note-history-commit-stats span, .clickable-icon) {
+  color: var(--ap-on-accent);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected :is(.git-note-history-commit-meta, .git-note-history-commit-meta code) {
+  color: color-mix(in srgb, var(--ap-on-accent) 78%, transparent);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected .git-note-history-dot {
+  border-color: var(--ap-on-accent);
+  background: var(--ap-on-accent);
+  color: var(--ap-accent);
+  box-shadow: none;
+}
+
+.ap .git-note-history-commit.is-keyboard-selected .clickable-icon:hover {
+  background: rgb(255 255 255 / 0.18);
+}
+
+/* Review entry row above the list. */
+.ap .git-note-history-review-inbox {
+  padding: var(--ap-s2) var(--ap-s3);
+  border: 0;
+  border-radius: var(--ap-r-group);
+  background: var(--ap-group);
+  box-shadow: var(--ap-hair);
+}
+
+.ap .git-note-history-review-inbox .git-note-history-review-inbox-metrics {
+  display: inline-flex;
+  gap: 6px;
+  font: 500 11px/14px var(--ap-font-round);
 }
 
 .ap .git-note-history-commit.is-selected,
@@ -300,10 +341,8 @@
   box-shadow: 0 0 0 2px var(--ap-page);
 }
 
-.ap .git-note-history-principles {
-  font: var(--ap-caption);
-  color: var(--ap-label-3);
-  border-top: 0;
+.ap .git-note-history-action-bar button {
+  padding-block: 6px;
 }
 
 /* ---------------------------------------------------------- compare view */

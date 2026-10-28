@@ -1383,7 +1383,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     if (leaf.view instanceof GitWorkspaceReviewView) await leaf.view.refresh();
   }
 
-  async openDetail(request: DetailRequest): Promise<void> {
+  async openDetail(request: DetailRequest, options: { restore?: boolean } = {}): Promise<void> {
     const generation = ++this.detailOpenGeneration;
     const leaf = await this.ensureDetailLeaf();
     if (generation !== this.detailOpenGeneration) return;
@@ -1393,6 +1393,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     if (leaf.view instanceof GitHistoryDetailView) {
       await leaf.view.setRequest(request);
+      if (options.restore && generation === this.detailOpenGeneration) leaf.view.startFullRestore();
     }
   }
 

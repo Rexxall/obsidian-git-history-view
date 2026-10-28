@@ -10,6 +10,8 @@
 - Community directory readiness: the code passes the official `eslint-plugin-obsidianmd` rules (`npm run lint`, now part of `npm run check`); views are no longer detached on unload, so they keep their place after an update; the config folder comes from `Vault#configDir` instead of assuming `.obsidian`; SVG graphs use `createSvg`.
 - README discloses network use (none) and when files outside the vault are read or written.
 - **New look:** an Apple-style glass interface, shared with the author's other plugins. Content (timeline, cards, diffs, settings) is solid; the sidebar header, the compare toolbar and every dialog are glass with a light edge. Buttons are capsules, view switches are segmented controls, settings are grouped lists. Everything is derived from the theme's variables and accent colour; *Reduce transparency*, *Increase contrast* and *Reduce motion* are respected.
+- **Quieter sidebar:** the header keeps only an *All | Milestones* switch and a "…" menu (follow note, refresh, review point, time machine, raw commits, recovery basket). The selected version is a solid accent row, and a glass bar at the bottom offers *Compare with current* and *Restore this version*. A pending review shows as one row above the list instead of a card.
+- **Simpler compare toolbar:** one row with *Side by side | Unified*, *More* and *Restore*; reading, preview, structure and link views, filters, recovery basket and focus mode moved into *More*.
 - The optional *Paper and ink* look and its setting are removed; the plugin follows Obsidian's light and dark mode.
 - Minimum Obsidian version is now 1.8.7.
 

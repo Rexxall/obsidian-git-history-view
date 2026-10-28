@@ -368,31 +368,17 @@ export class GitHistoryDetailView extends ItemView {
     const heading = top.createDiv({ cls: "git-note-history-detail-heading" });
     heading.createEl("h3", { text: basenameFromVaultPath(displayPath) });
     heading.createDiv({ cls: "git-note-history-file-path", text: displayPath });
-    const focus = top.createEl("button", {
-      cls: this.focusMode ? "clickable-icon is-active" : "clickable-icon",
-      attr: {
-        "aria-label": this.focusMode ? "退出专注审阅（Esc）" : "进入专注审阅",
-        "aria-pressed": String(this.focusMode)
-      }
-    });
-    setIcon(focus, this.focusMode ? "minimize-2" : "maximize-2");
-    focus.addEventListener("click", () => {
-      this.setFocusMode(!this.focusMode);
-    });
 
     this.renderVersionWorkbench(header);
 
     const controls = header.createDiv({ cls: "git-note-history-detail-controls" });
     const viewControls = controls.createDiv({ cls: "git-note-history-detail-view-controls" });
-    const modes = viewControls.createDiv({
-      cls: "git-note-history-detail-mode-group",
+    const layout = viewControls.createDiv({
+      cls: "git-note-history-detail-context-group",
       attr: { "aria-label": "查看方式" }
     });
-    this.addTaskButton(modes, ["side-by-side", "unified"], this.lastTextDiffMode, "对比", "git-compare-arrows");
-    this.addModeButton(modes, "rendered", "阅读", "book-open");
-    this.addModeButton(modes, "preview", "双预览", "columns-2");
-    this.addTaskButton(modes, ["semantic", "impact"], this.lastImpactMode, "影响", "list-tree");
-    this.renderContextControls(viewControls);
+    this.addModeButton(layout, "side-by-side", "双栏", "columns-2");
+    this.addModeButton(layout, "unified", "单栏", "rows-3");
     const isRawDiffMode = this.mode === "side-by-side" || this.mode === "unified";
     if (
       !this.loading
@@ -405,29 +391,17 @@ export class GitHistoryDetailView extends ItemView {
     }
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
 
-    if (this.canCollectToRecoveryBasket()) {
-      const basketCount = this.plugin.getRecoveryBasketCount(this.file!.path);
-      const basket = actions.createEl("button", {
-        cls: basketCount > 0 ? "git-note-history-basket-entry has-items" : "git-note-history-basket-entry",
-        attr: { "aria-label": "打开恢复篮子" }
-      });
-      setIcon(basket.createSpan(), "shopping-basket");
-      basket.createSpan({ text: basketCount > 0 ? `恢复篮子 ${basketCount}` : "恢复篮子" });
-      basket.addEventListener("click", () => void this.plugin.openRecoveryBasket(this.file!));
-    }
-
     const moreActions = actions.createEl("button", {
-      attr: { "aria-label": "更多操作" }
+      attr: { "aria-label": "更多查看方式与操作", "aria-haspopup": "menu" }
     });
-    setIcon(moreActions.createSpan(), "ellipsis-vertical");
+    setIcon(moreActions.createSpan(), "ellipsis");
     moreActions.createSpan({ text: "更多" });
-    moreActions.disabled = !this.hasCurrentContent() || !this.file;
     moreActions.addEventListener("click", (event) => this.openActionOptions(event));
 
     if (this.request.base.kind === "commit" && !this.request.readOnly) {
-      const restore = actions.createEl("button", { cls: "mod-warning git-note-history-restore-primary" });
+      const restore = actions.createEl("button", { cls: "mod-cta git-note-history-restore-primary" });
       setIcon(restore.createSpan(), "history");
-      restore.createSpan({ text: "恢复…" });
+      restore.createSpan({ text: "恢复" });
       restore.disabled = !this.hasCurrentContent();
       restore.addEventListener("click", () => void this.confirmFullRestore());
     }
@@ -971,24 +945,6 @@ export class GitHistoryDetailView extends ItemView {
     new Notice(`已复制${side === "base" ? "左侧" : "右侧"}版本内容。`);
   }
 
-  private addTaskButton(
-    container: HTMLElement,
-    activeModes: DetailMode[],
-    targetMode: DetailMode,
-    label: string,
-    icon: string
-  ): void {
-    const button = container.createEl("button", {
-      cls: activeModes.includes(this.mode) ? "is-active" : "",
-      attr: { "aria-pressed": String(activeModes.includes(this.mode)) }
-    });
-    setIcon(button.createSpan(), icon);
-    button.createSpan({ text: label });
-    button.addEventListener("click", () => {
-      this.setDetailMode(targetMode);
-    });
-  }
-
   private addModeButton(container: HTMLElement, mode: DetailMode, label: string, icon: string): void {
     const button = container.createEl("button", {
       cls: this.mode === mode ? "is-active" : "",
@@ -1009,60 +965,47 @@ export class GitHistoryDetailView extends ItemView {
     this.render();
   }
 
-  private renderContextControls(container: HTMLElement): void {
-    const context = container.createDiv({
-      cls: "git-note-history-detail-context-group",
-      attr: { "aria-label": "当前视图选项" }
-    });
-    if (this.mode === "side-by-side" || this.mode === "unified") {
-      this.addModeButton(context, "side-by-side", "双栏", "columns-2");
-      this.addModeButton(context, "unified", "单栏", "rows-3");
-      this.renderDiffFilterButton(context);
-      return;
-    }
-    if (this.mode === "rendered") {
-      this.renderDiffFilterButton(context);
-      return;
+  private addViewMenuItems(menu: Menu): void {
+    const views: Array<[DetailMode, string, string]> = [
+      ["rendered", "阅读视图", "book-open"],
+      ["preview", "双预览", "columns-2"],
+      ["semantic", "结构变化", "list-tree"],
+      ["impact", "链接影响", "git-fork"]
+    ];
+    for (const [mode, title, icon] of views) {
+      menu.addItem((item) => item
+        .setTitle(title)
+        .setIcon(icon)
+        .setChecked(this.mode === mode)
+        .onClick(() => this.setDetailMode(this.mode === mode ? this.lastTextDiffMode : mode)));
     }
     if (this.mode === "preview") {
-      this.addToggleButton(
-        context,
-        "同步滚动",
-        "panel-top-open",
-        this.syncPreviewScroll,
-        () => {
+      menu.addItem((item) => item
+        .setTitle("同步滚动")
+        .setIcon("panel-top-open")
+        .setChecked(this.syncPreviewScroll)
+        .onClick(() => {
           this.syncPreviewScroll = !this.syncPreviewScroll;
           this.render();
-        }
-      );
-      return;
+        }));
     }
-    this.addModeButton(context, "semantic", "结构", "list-tree");
-    this.addModeButton(context, "impact", "链接", "git-fork");
+    menu.addSeparator();
+    if (["side-by-side", "unified", "rendered"].includes(this.mode)) this.addDiffFilterItems(menu);
+    if (this.canCollectToRecoveryBasket()) {
+      const basketCount = this.plugin.getRecoveryBasketCount(this.file!.path);
+      menu.addItem((item) => item
+        .setTitle(basketCount > 0 ? `恢复篮子（${basketCount}）` : "恢复篮子")
+        .setIcon("shopping-basket")
+        .onClick(() => void this.plugin.openRecoveryBasket(this.file!)));
+    }
+    menu.addItem((item) => item
+      .setTitle(this.focusMode ? "退出专注审阅" : "专注审阅")
+      .setIcon(this.focusMode ? "minimize-2" : "maximize-2")
+      .onClick(() => this.setFocusMode(!this.focusMode)));
+    menu.addSeparator();
   }
 
-  private renderDiffFilterButton(container: HTMLElement): void {
-    const activeCount = [
-      this.ignoreBlankLines,
-      this.plugin.settings.ignoreWhitespace,
-      this.ignoreFrontmatter,
-      this.collapseLongProperties
-    ].filter(Boolean).length;
-    const button = container.createEl("button", {
-      cls: activeCount > 0 ? "git-note-history-filter-button is-active" : "git-note-history-filter-button",
-      attr: {
-        "aria-label": `内容过滤，已启用 ${activeCount} 项`,
-        "aria-haspopup": "menu"
-      }
-    });
-    setIcon(button.createSpan(), "list-filter");
-    button.createSpan({ text: "过滤" });
-    button.createSpan({ cls: "git-note-history-filter-count", text: String(activeCount) });
-    button.addEventListener("click", (event) => this.openDiffFilterOptions(event));
-  }
-
-  private openDiffFilterOptions(event: MouseEvent): void {
-    const menu = new Menu();
+  private addDiffFilterItems(menu: Menu): void {
     menu.addItem((item) => item
       .setTitle("忽略空行")
       .setIcon("list-minus")
@@ -1096,30 +1039,16 @@ export class GitHistoryDetailView extends ItemView {
         this.collapseLongProperties = !this.collapseLongProperties;
         this.render();
       }));
-    menu.showAtMouseEvent(event);
-  }
-
-  private addToggleButton(
-    container: HTMLElement,
-    label: string,
-    icon: string,
-    active: boolean,
-    onClick: () => void | Promise<void>
-  ): void {
-    const button = container.createEl("button", {
-      cls: active ? "is-active" : "",
-      attr: {
-        "aria-label": label,
-        "aria-pressed": String(active)
-      }
-    });
-    setIcon(button.createSpan(), icon);
-    button.createSpan({ text: label });
-    button.addEventListener("click", () => void onClick());
+    menu.addSeparator();
   }
 
   private openActionOptions(event: MouseEvent): void {
-    if (!this.hasCurrentContent() || !this.request || !this.file) return;
+    const menu = new Menu();
+    this.addViewMenuItems(menu);
+    if (!this.hasCurrentContent() || !this.request || !this.file) {
+      menu.showAtMouseEvent(event);
+      return;
+    }
     const request = this.request;
     const file = this.file;
     const generation = this.generation;
@@ -1135,7 +1064,6 @@ export class GitHistoryDetailView extends ItemView {
       new Notice("版本对比已变化，请从当前页面重新打开操作菜单。");
       return true;
     };
-    const menu = new Menu();
     if (this.mode === "side-by-side") {
       menu.addItem((item) => item
         .setTitle("显示未修改上下文")
@@ -1705,6 +1633,10 @@ export class GitHistoryDetailView extends ItemView {
       }
     }
     return new Map([...sourcesByDestination].map(([path, sources]) => [path, sources.size]));
+  }
+
+  startFullRestore(): void {
+    void this.confirmFullRestore();
   }
 
   private async confirmFullRestore(): Promise<void> {

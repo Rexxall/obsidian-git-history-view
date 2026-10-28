@@ -2297,15 +2297,6 @@ button.git-note-history-impact-row:hover {
   .git-note-history-preview-pair {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .git-note-history-detail-action-group {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .git-note-history-detail-action-group > :first-child {
-    margin-right: auto;
-  }
 }
 
 /* --------------------------------------------------------------- modals */
