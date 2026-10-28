@@ -2,6 +2,7 @@
   "name": "git-note-history",
   "version": "0.10.0",
   "private": true,
+  "license": "MIT",
   "description": "Git-backed note history viewer for Obsidian",
   "scripts": {
     "dev": "node esbuild.config.mjs",
