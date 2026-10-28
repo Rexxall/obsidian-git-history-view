@@ -44,6 +44,7 @@ const settings: GitNoteHistorySettings = {
   useBlameIgnoreRevs: true,
   showLabTools: false,
   paperStyle: false,
+  showStatusBar: false,
 };
 
 const repositories: string[] = [];

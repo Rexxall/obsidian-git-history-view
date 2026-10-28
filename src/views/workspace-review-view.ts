@@ -3,7 +3,6 @@ import {
   Menu,
   Notice,
   SearchComponent,
-  TFile,
   WorkspaceLeaf,
   normalizePath,
   setIcon
@@ -77,7 +76,7 @@ export class GitWorkspaceReviewView extends ItemView {
       const checkpoint = this.plugin.getReviewInboxCheckpoint(context.repositoryRoot);
       this.snapshot = await this.plugin.gitClient.loadReviewInbox(
         checkpoint?.commitHash,
-        this.plugin.settings.reviewExcludedPaths
+        [...this.plugin.settings.reviewExcludedPaths, this.app.vault.configDir]
       );
       this.pendingItems = await this.buildPendingItems(this.snapshot);
     } catch (error) {

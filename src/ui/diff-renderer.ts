@@ -268,8 +268,7 @@ function renderUnchangedBlock(container: HTMLElement, value: string): void {
   appendTextBlock(container, trailing, "is-unchanged");
 
   reveal.addEventListener("click", () => {
-    const expanded = reveal.ownerDocument.createElement("pre");
-    expanded.className = "git-note-history-diff-block is-unchanged";
+    const expanded = createEl("pre", { cls: "git-note-history-diff-block is-unchanged" });
     expanded.setText(hidden);
     reveal.replaceWith(expanded);
   });

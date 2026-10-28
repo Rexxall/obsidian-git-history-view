@@ -22,8 +22,11 @@ Daily Git backups mean every old version of a note is still there. The problem i
 - **Conflict resolver** for Git merge conflicts in a note, three panes, writes only the working file.
 - **Paragraph history** for the paragraph under the cursor, including versions where it was later deleted.
 - **Search old content**: find a sentence that used to exist, see when it appeared and when it was removed, and open the versions on either side.
+- **Status bar**: how long ago the active note was last committed, with a dot when it has uncommitted edits. Click it to open the timeline.
+- **Compare with last commit**: one command shows what you changed since the last backup.
+- **Version links**: right-click a version, choose *Copy version link*, and paste it into any note, for example next to "sent to the professor on 26 October". Clicking the link opens that version against the current note.
 
-#<img src="docs/screenshots/timeline.jpg" width="860">
+<img src="docs/screenshots/timeline.jpg" width="860">
 
 <img src="docs/screenshots/restore.jpg" width="860">
 
@@ -35,12 +38,14 @@ The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.
 
 ## Quick start
 
-1. Download `main.js`, `manifest.json` and `styles.css` from the latest release and put them in `<vault>/.obsidian/plugins/git-note-history/`.
-2. Enable **Git Note History** in *Settings → Community plugins*.
-3. Open a Markdown note and run **Open Git history of the current note** (command palette, ribbon icon, or the file menu).
+1. Install **Git Note History** from *Settings → Community plugins → Browse*, or download `main.js`, `manifest.json` and `styles.css` from the latest release into `<vault>/<config folder>/plugins/git-note-history/` (the config folder is `.obsidian` unless you changed it).
+2. Enable it in *Settings → Community plugins*.
+3. Open a Markdown note and run **Open Git history of the current note** (command palette, ribbon icon, the file menu, or click the status bar item).
 4. Click a version to compare it with the current note. In the comparison, hover a change block and choose *Restore this block*, or use *Recovery basket* to collect blocks from several versions first.
 
-Looks: follows your Obsidian theme by default. Settings → 显示 → 纸与墨外观 switches on an optional paper-and-ink look (paper surfaces, serif headings, dark red for removed, teal for added), light and dark.
+Looks: follows your Obsidian theme by default. *Settings → Display → Paper and ink style* switches on an optional paper-and-ink look (paper surfaces, serif headings, dark red for removed, teal for added), light and dark.
+
+Language: commands, menus, settings and the status bar follow Obsidian's language (Chinese or English). The timeline, compare and restore views are currently in Simplified Chinese; an English version of those views is planned.
 
 <img src="docs/screenshots/paper-compare.jpg" width="860">
 
@@ -54,6 +59,10 @@ Requirements: Obsidian 1.8 or later on macOS, Windows or Linux; `git` on your PA
 | Writes to the working file only when you confirm a restore, after re-checking the file | Write anything to the repository on its own |
 | Stores milestones, snapshots, undo history and settings in this vault's plugin data | Send anything over the network |
 | Reads Obsidian's own File Recovery / Sync only through documented, read-only paths | Open their private databases |
+
+**Network:** none. The plugin makes no network requests and has no telemetry. Every Git call runs with `GIT_NO_LAZY_FETCH=1` and `GIT_OPTIONAL_LOCKS=0`, so reading history never triggers a fetch from a remote or rewrites the index.
+
+**Files outside the vault:** the Git repository may start in a folder above your vault (for example when a whole Documents folder is under Git); the plugin reads that repository with `git`. The optional lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (on macOS `~/Library/Application Support/Git Note History`), outside the current vault, so they can be opened as their own vault. It only runs when you create a sandbox. Nothing else outside the vault is read or written.
 
 Try it on a test vault first.
 
@@ -72,7 +81,7 @@ npm run check          # type-check, tests, build
 npm run package:release
 ```
 
-TypeScript + esbuild, tested with Vitest (240 tests). See [RELEASING.md](RELEASING.md) for the release checklist and [CHANGELOG.md](CHANGELOG.md) for versions. Design notes live in [docs/](docs/).
+TypeScript + esbuild, tested with Vitest (247 tests) and linted with the official `eslint-plugin-obsidianmd` rules (`npm run lint`). See [RELEASING.md](RELEASING.md) for the release checklist and [CHANGELOG.md](CHANGELOG.md) for versions. Design notes live in [docs/](docs/).
 
 ## License
 
@@ -88,6 +97,10 @@ MIT
 
 **安全：** 只读 Git，从不 commit、push、checkout、reset。写回前会再比对一次笔记，中途被改过就停下；每次恢复都能撤销。
 
-**用法：** 把 `main.js`、`manifest.json`、`styles.css` 放进 `<库>/.obsidian/plugins/git-note-history/`，启用插件，打开一篇笔记，运行“打开当前笔记的 Git 历史”。
+**用法：** 在“设置 → 第三方插件 → 浏览”里搜索 Git Note History 安装；或把 `main.js`、`manifest.json`、`styles.css` 放进 `<库>/.obsidian/plugins/git-note-history/`。启用后打开一篇笔记，运行“打开当前笔记的 Git 历史”，或点状态栏上的“几小时前”。
+
+**0.10 新增：** 状态栏显示当前笔记上次提交是多久以前、有没有未提交修改；“将当前笔记与上次提交对比”一条命令看清这次改了什么；时间线右键“复制版本链接”，粘进任何笔记，点一下就打开那一版和当前笔记的对比。
+
+**网络与库外文件：** 不联网、无遥测。Git 仓库可能在库的上层目录；实验功能“历史沙盒”只在你创建沙盒时把旧版本整库复制到系统的应用数据目录（macOS 为 `~/Library/Application Support/Git Note History`），其余不读写库外文件。
 
 **实验功能：** 复查收件箱、工作事件、知识边界追踪、来源可信度镜头、版本批注、历史健康中心、知识图谱时间机、历史沙盒等，默认关闭，在设置里打开“显示实验功能”即可使用。完整功能清单见 [docs/FEATURES_zh.md](docs/FEATURES_zh.md)。

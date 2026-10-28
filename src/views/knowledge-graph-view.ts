@@ -375,48 +375,32 @@ export class GitKnowledgeGraphView extends ItemView {
     const graph = container.createDiv({
       cls: "git-note-history-graph-machine-canvas"
     });
-    const svg = graph.ownerDocument.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "svg"
-    );
+    const svg = graph.createSvg("svg");
     svg.setAttribute("viewBox", "0 0 760 330");
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "该版本边界新增和移除的知识关系");
-    graph.appendChild(svg);
     const centerX = 380;
     const centerY = 165;
     changes.forEach(({ relation, state }, index) => {
       const angle = (Math.PI * 2 * index) / Math.max(changes.length, 1) - Math.PI / 2;
       const x = centerX + Math.cos(angle) * 290;
       const y = centerY + Math.sin(angle) * 118;
-      const line = graph.ownerDocument.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "line"
-      );
+      const line = svg.createSvg("line");
       line.setAttribute("x1", String(centerX));
       line.setAttribute("y1", String(centerY));
       line.setAttribute("x2", String(x));
       line.setAttribute("y2", String(y));
       line.setAttribute("class", `is-${state}`);
-      svg.appendChild(line);
-      const circle = graph.ownerDocument.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "circle"
-      );
+      const circle = svg.createSvg("circle");
       circle.setAttribute("cx", String(x));
       circle.setAttribute("cy", String(y));
       circle.setAttribute("r", "7");
       circle.setAttribute("class", `is-${state}`);
-      svg.appendChild(circle);
-      const label = graph.ownerDocument.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "text"
-      );
+      const label = svg.createSvg("text");
       label.setAttribute("x", String(x));
       label.setAttribute("y", String(y + (y < centerY ? -13 : 22)));
       label.setAttribute("text-anchor", "middle");
       label.textContent = relationLabel(relation).slice(0, 26);
-      svg.appendChild(label);
     });
     const center = graph.createDiv({
       cls: "git-note-history-graph-machine-center",

@@ -124,3 +124,7 @@ export function parseYaml(yaml: string): unknown {
   }
   return result;
 }
+
+export function getLanguage(): string {
+  return "zh";
+}

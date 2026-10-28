@@ -91,6 +91,7 @@ describe("HistoricalSandboxManager", () => {
     const env = await fixture();
     const manager = new HistoricalSandboxManager({
       gitExecutable: "git",
+      configDir: ".obsidian",
       storageRoot: env.storageRoot,
       bundleSource: {
         pluginId: "git-note-history",
@@ -172,6 +173,7 @@ describe("HistoricalSandboxManager", () => {
     let clock = 0;
     const manager = new HistoricalSandboxManager({
       gitExecutable: "git",
+      configDir: ".obsidian",
       storageRoot: env.storageRoot,
       now: () => `2026-07-30T01:02:0${clock++}.000Z`,
       createId: () => "editable-id"
@@ -231,6 +233,7 @@ describe("HistoricalSandboxManager", () => {
     const env = await fixture();
     const manager = new HistoricalSandboxManager({
       gitExecutable: "git",
+      configDir: ".obsidian",
       storageRoot: env.storageRoot
     });
     await expect(manager.createCapsule({
@@ -269,6 +272,7 @@ describe("HistoricalSandboxManager", () => {
     const env = await fixture();
     const manager = new HistoricalSandboxManager({
       gitExecutable: "git",
+      configDir: ".obsidian",
       storageRoot: env.storageRoot
     });
     const record = await manager.createCapsule({

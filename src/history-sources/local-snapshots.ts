@@ -125,7 +125,7 @@ export class LocalSnapshotStore {
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createId = options.createId ?? (() =>
-      globalThis.crypto?.randomUUID?.()
+      (typeof crypto === "undefined" ? undefined : crypto.randomUUID?.())
       ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     );
   }

@@ -17,6 +17,8 @@ interface NameStatusEntry {
   path: string;
 }
 
+const LEADING_RECORD_SEPARATOR = new RegExp(`^${String.fromCharCode(0x1e)}`);
+
 export interface GitZeroNumStatEntry extends GitLineStats {
   path: string;
   originalPath?: string;
@@ -240,7 +242,7 @@ export function parseZeroDelimitedNumStat(raw: string): GitZeroNumStatEntry[] {
  */
 export function parseCommitMetadata(raw: string): GitCommitMetadata | null {
   const record = raw
-    .replace(/^\u001e/, "")
+    .replace(LEADING_RECORD_SEPARATOR, "")
     .replace(/^\r?\n/, "")
     .replace(/\0+$/, "")
     .replace(/\r?\n$/, "");

@@ -10,6 +10,7 @@ import type {
   GitFileHistory,
   GitLineStats,
   GitNoteHistorySettings,
+  GitNoteStatus,
   GitRepositoryContext,
   ReviewInboxSnapshot,
   GitWorkspaceReview,
@@ -59,6 +60,7 @@ import {
 } from "../provenance/provenance-lens";
 import type { GitHistoryHealthSnapshot } from "../health/types";
 
+const TRAILING_GROUP_SEPARATOR = new RegExp(`${String.fromCharCode(0x1d)}(?:\\r?\\n)?$`);
 const LOG_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%B%x1d";
 const REVIEW_LOG_FORMAT = "%x1e%H%x1f%h%x1f%aI%x1f%s%x1d";
 const WORK_EVENT_LOG_FORMAT =
@@ -90,7 +92,7 @@ function parseWorkEventCommitLog(raw: string): WorkEventCommit[] {
   for (const part of raw.split("\u001e")) {
     const record = part
       .replace(/^\r?\n/, "")
-      .replace(/\u001d(?:\r?\n)?$/, "");
+      .replace(TRAILING_GROUP_SEPARATOR, "");
     if (!record) continue;
     const metadata = parseCommitMetadata(record);
     if (metadata) commits.push(metadata);
@@ -274,6 +276,41 @@ export class GitClient {
       commits,
       hasMoreHistory: limitedHistory.hasMore,
       workingTreeStats
+    };
+  }
+
+  /** Cheap summary for the status bar: the last commit touching the note and whether it has uncommitted edits. */
+  async loadNoteStatus(file: TFile): Promise<GitNoteStatus> {
+    const context = await this.resolveContext(file);
+    const [logOutput, statusOutput] = await Promise.all([
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "log",
+        "--max-count=1",
+        `--format=${LOG_FORMAT}`,
+        "--name-status",
+        "--",
+        context.repositoryRelativePath
+      ]).catch((error: unknown) => {
+        if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) return "";
+        throw error;
+      }),
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+        "--",
+        context.repositoryRelativePath
+      ])
+    ]);
+    const status = parseGitStatus(statusOutput);
+    return {
+      context,
+      lastCommit: parseGitLog(logOutput, context.repositoryRelativePath)[0] ?? null,
+      status
     };
   }
 
@@ -2203,7 +2240,7 @@ export class GitClient {
   }
 
   private isEmptyRepositoryError(stderr: string): boolean {
-    return /does not have any commits|your current branch .* has no commits|bad revision ['\"]?HEAD|ambiguous argument ['\"]?HEAD['\"]?: unknown revision or path|needed a single revision/i.test(
+    return /does not have any commits|your current branch .* has no commits|bad revision ['"]?HEAD|ambiguous argument ['"]?HEAD['"]?: unknown revision or path|needed a single revision/i.test(
       stderr
     );
   }

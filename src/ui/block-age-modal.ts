@@ -140,10 +140,10 @@ export class BlockAgeModal extends Modal {
     const meta = body.createSpan({ cls: "git-note-history-block-age-meta" });
     meta.createSpan({ text: `首次出现 ${formatDate(item.firstSeen?.authoredAt)}` });
     meta.createSpan({ text: item.uncommitted ? "当前工作区有新修改" : `最近变化 ${formatDate(item.lastChanged?.authoredAt)}` });
-    row.addEventListener("click", async () => {
+    row.addEventListener("click", () => void (async () => {
       this.close();
       await this.plugin.openFileAtLine(this.file, item.block.startLine);
-    });
+    })());
   }
 
   onClose(): void {

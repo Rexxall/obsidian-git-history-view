@@ -16,7 +16,7 @@ import type GitNoteHistoryPlugin from "../main";
 import type {
   DetailMode,
   DetailRequest,
-  FileReviewState,
+
   GitCommitVersion,
   GitRepositoryContext,
   VersionMilestone,
@@ -1595,12 +1595,11 @@ export class GitHistoryDetailView extends ItemView {
     const height = Math.max(300, Math.ceil(relations.length / 12) * 180 + 120);
     const centerX = width / 2;
     const centerY = height / 2;
-    const svg = container.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = container.createSvg("svg");
     svg.setAttribute("class", "git-note-history-impact-graph");
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "当前笔记与新增、移除和未变化关系的局部图谱");
-    container.appendChild(svg);
 
     relations.forEach(({ relation, state }, index) => {
       const angle = (Math.PI * 2 * index) / Math.max(1, relations.length) - Math.PI / 2;
@@ -1608,37 +1607,33 @@ export class GitHistoryDetailView extends ItemView {
       const radiusY = relations.length <= 8 ? 105 : Math.max(115, height / 2 - 60);
       const x = centerX + Math.cos(angle) * radiusX;
       const y = centerY + Math.sin(angle) * radiusY;
-      const edge = container.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "line");
+      const edge = svg.createSvg("line");
       edge.setAttribute("x1", String(centerX));
       edge.setAttribute("y1", String(centerY));
       edge.setAttribute("x2", String(x));
       edge.setAttribute("y2", String(y));
       edge.setAttribute("class", `git-note-history-impact-edge is-${state}`);
-      svg.appendChild(edge);
-      const node = container.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const node = svg.createSvg("circle");
       node.setAttribute("cx", String(x));
       node.setAttribute("cy", String(y));
       node.setAttribute("r", "7");
       node.setAttribute("class", `git-note-history-impact-node is-${state}`);
-      svg.appendChild(node);
-      const label = container.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "text");
+      const label = svg.createSvg("text");
       label.setAttribute("x", String(x));
       label.setAttribute("y", String(y + (y < centerY ? -12 : 20)));
       label.setAttribute("class", "git-note-history-impact-node-label");
       label.setAttribute("text-anchor", "middle");
       label.textContent = relation.label.length > 22 ? `${relation.label.slice(0, 21)}…` : relation.label;
-      svg.appendChild(label);
     });
 
-    const center = container.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const center = svg.createSvg("rect");
     center.setAttribute("x", String(centerX - 72));
     center.setAttribute("y", String(centerY - 23));
     center.setAttribute("width", "144");
     center.setAttribute("height", "46");
     center.setAttribute("rx", "14");
     center.setAttribute("class", "git-note-history-impact-center");
-    svg.appendChild(center);
-    const centerLabel = container.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "text");
+    const centerLabel = svg.createSvg("text");
     centerLabel.setAttribute("x", String(centerX));
     centerLabel.setAttribute("y", String(centerY + 5));
     centerLabel.setAttribute("text-anchor", "middle");
@@ -1646,7 +1641,6 @@ export class GitHistoryDetailView extends ItemView {
     centerLabel.textContent = basenameFromVaultPath(
       this.file?.path ?? this.request?.filePath ?? ""
     );
-    svg.appendChild(centerLabel);
   }
 
   private renderRelationGroup(

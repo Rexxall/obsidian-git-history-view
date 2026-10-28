@@ -277,7 +277,7 @@ export class GitProvenanceLensView extends ItemView {
       cls: "git-provenance-mark-reviewed"
     });
     mark.disabled = !latest;
-    mark.addEventListener("click", async () => {
+    mark.addEventListener("click", () => void (async () => {
       if (!latest) return;
       await this.plugin.markReviewed(
         snapshot.context,
@@ -286,7 +286,7 @@ export class GitProvenanceLensView extends ItemView {
       );
       new Notice(`已把当前内容人工复查到 ${latest.shortHash}。`);
       await this.refresh();
-    });
+    })());
   }
 
   private renderToolbar(container: HTMLElement): void {

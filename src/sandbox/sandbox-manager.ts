@@ -25,7 +25,6 @@ import type {
 const MAX_COMMAND_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_SANDBOX_MARKDOWN_BYTES = 2 * 1024 * 1024;
 const SANDBOX_MARKER_FILE = ".git-note-history-sandbox.json";
-const SAFE_CONFIG_DIRECTORY = ".obsidian";
 const SANDBOX_SNIPPET_NAME = "git-note-history-sandbox";
 
 interface CommandResult {
@@ -33,8 +32,13 @@ interface CommandResult {
   stderr: string;
 }
 
+// Control characters plus characters Windows forbids in file names.
+const UNSAFE_NAME_CHARACTERS = new RegExp(`[${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}<>:"/\\\\|?*]+`, "gu");
+
 export interface HistoricalSandboxManagerOptions {
   gitExecutable: string;
+  /** Config folder name used inside sandbox vaults; the current vault's `Vault#configDir`. */
+  configDir: string;
   storageRoot?: string;
   bundleSource?: HistoricalSandboxBundleSource;
   now?: () => string;
@@ -103,7 +107,7 @@ function runCommand(
 function safeName(value: string): string {
   const compact = value
     .normalize("NFKC")
-    .replace(/[\u0000-\u001f<>:"/\\|?*]+/gu, " ")
+    .replace(UNSAFE_NAME_CHARACTERS, " ")
     .replace(/\s+/gu, " ")
     .trim();
   return compact.slice(0, 80) || "历史沙盒";
@@ -509,7 +513,7 @@ export class HistoricalSandboxManager {
   }
 
   private async prepareSafeVault(record: HistoricalSandboxRecord): Promise<void> {
-    const configRoot = path.join(record.vaultPath, SAFE_CONFIG_DIRECTORY);
+    const configRoot = path.join(record.vaultPath, this.options.configDir);
     const snippetRoot = path.join(configRoot, "snippets");
     // Historical config can contain executable community plugins or symlinks.
     // Rebuild it from a minimal known-safe set; the source commit remains intact.
@@ -553,7 +557,7 @@ export class HistoricalSandboxManager {
 
   private async writeMarker(record: HistoricalSandboxRecord): Promise<void> {
     await writeFile(
-      path.join(record.vaultPath, SAFE_CONFIG_DIRECTORY, SANDBOX_MARKER_FILE),
+      path.join(record.vaultPath, this.options.configDir, SANDBOX_MARKER_FILE),
       JSON.stringify(record, null, 2),
       "utf8"
     );
@@ -563,7 +567,7 @@ export class HistoricalSandboxManager {
     await writeFile(
       path.join(
         record.vaultPath,
-        SAFE_CONFIG_DIRECTORY,
+        this.options.configDir,
         "snippets",
         `${SANDBOX_SNIPPET_NAME}.css`
       ),
@@ -577,7 +581,7 @@ export class HistoricalSandboxManager {
       ? `${record.vaultRelativePath.split(path.sep).join("/")}/`
       : "";
     return [
-      `:(exclude)${prefix}${SAFE_CONFIG_DIRECTORY}/**`
+      `:(exclude)${prefix}${this.options.configDir}/**`
     ];
   }
 
@@ -585,7 +589,7 @@ export class HistoricalSandboxManager {
     record: HistoricalSandboxRecord,
     writable: boolean
   ): Promise<void> {
-    const configRoot = path.join(record.vaultPath, SAFE_CONFIG_DIRECTORY);
+    const configRoot = path.join(record.vaultPath, this.options.configDir);
     const visit = async (candidate: string): Promise<void> => {
       if (candidate === configRoot) return;
       const info = await lstat(candidate);
@@ -623,7 +627,7 @@ export class HistoricalSandboxManager {
     }
     const markerPath = path.join(
       record.vaultPath,
-      SAFE_CONFIG_DIRECTORY,
+      this.options.configDir,
       SANDBOX_MARKER_FILE
     );
     const marker = JSON.parse(await readFile(markerPath, "utf8")) as

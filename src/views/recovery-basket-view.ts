@@ -377,10 +377,10 @@ export class GitRecoveryBasketView extends ItemView {
     const copy = actions.createEl("button");
     setIcon(copy.createSpan(), "copy");
     copy.createSpan({ text: "复制预演" });
-    copy.addEventListener("click", async () => {
+    copy.addEventListener("click", () => void (async () => {
       await navigator.clipboard.writeText(plan.targetContent);
       new Notice("已复制最终 Markdown 预演。");
-    });
+    })());
     const apply = actions.createEl("button", {
       cls: "mod-warning"
     });

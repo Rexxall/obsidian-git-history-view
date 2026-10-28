@@ -70,7 +70,9 @@ function propertyValueText(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "string") return value;
   if (typeof value === "object") return JSON.stringify(value, null, 2);
-  return String(value);
+  return typeof value === "number" || typeof value === "boolean" || typeof value === "bigint"
+    ? value.toString()
+    : "";
 }
 
 export class KnowledgeTraceSetupModal extends Modal {

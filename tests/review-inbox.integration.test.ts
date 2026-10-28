@@ -45,6 +45,7 @@ const settings: GitNoteHistorySettings = {
   useBlameIgnoreRevs: true,
   showLabTools: false,
   paperStyle: false,
+  showStatusBar: false,
 };
 
 describe("review inbox with a real temporary Git vault", () => {

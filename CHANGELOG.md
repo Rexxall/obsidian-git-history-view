@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0 — 2026-10-29
+
+- **Status bar:** shows how long ago the active note was last committed, with a dot when it has uncommitted edits and a warning when it has a merge conflict. Click it to open the timeline. Can be turned off in settings.
+- **Compare with last commit:** new command that opens the current note against its last commit in one step.
+- **Version links:** *Copy version link* in a version's menu copies a Markdown link (`obsidian://git-note-history?...`). Clicking it later opens that version against the current note.
+- Commands, ribbon tooltips, file-menu items and the settings page follow Obsidian's language: Chinese, or English for every other language.
+- Settings: general options sit at the top without a heading, as the Obsidian guidelines ask.
+- Community directory readiness: the code passes the official `eslint-plugin-obsidianmd` rules (`npm run lint`, now part of `npm run check`); views are no longer detached on unload, so they keep their place after an update; the config folder comes from `Vault#configDir` instead of assuming `.obsidian`; SVG graphs use `createSvg`.
+- README discloses network use (none) and when files outside the vault are read or written.
+- Minimum Obsidian version is now 1.8.7.
+
 ## 0.9.0 — 2026-10-26
 
 - Rewrote the stylesheet from scratch. The sidebar, compare view, restore modals and settings now take every colour, radius and spacing from Obsidian's theme variables, so the plugin follows the active theme in light and dark. The old hard-coded palette layer is gone.

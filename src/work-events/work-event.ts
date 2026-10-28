@@ -106,15 +106,21 @@ export function countUniqueHiddenRepositoryFiles(
   return new Set([...parent.keys()].map(find)).size;
 }
 
+let configDirectories: string[] = [];
+
+/** Set from `Vault#configDir`, so a renamed config folder is still treated as configuration. */
+export function setWorkEventConfigDirectory(directory: string): void {
+  const normalized = directory.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").toLocaleLowerCase();
+  configDirectories = normalized ? [normalized] : [];
+}
+
 export function classifyWorkEventFile(repositoryPath: string): WorkEventFileKind {
   const normalized = normalizedPath(repositoryPath);
   const lower = normalized.toLocaleLowerCase();
-  if (
-    lower === ".obsidian"
-    || lower.startsWith(".obsidian/")
-    || lower.includes("/.obsidian/")
-    || lower.startsWith(".git/")
-  ) return "config";
+  const isConfig = configDirectories.some((directory) =>
+    lower === directory || lower.startsWith(`${directory}/`) || lower.includes(`/${directory}/`)
+  );
+  if (isConfig || lower.startsWith(".git/")) return "config";
   if (lower.endsWith(".md")) return "markdown";
   if (lower.endsWith(".canvas")) return "canvas";
   const name = lower.split("/").at(-1) ?? lower;

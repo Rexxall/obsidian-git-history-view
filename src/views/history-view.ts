@@ -741,10 +741,10 @@ export class GitNoteHistoryView extends ItemView {
       title.createDiv({ text: `已复查到 ${checkpointDate}，目前没有新变化。` });
       const clear = heading.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "清除复查点" } });
       setIcon(clear, "x");
-      clear.addEventListener("click", async () => {
+      clear.addEventListener("click", () => void (async () => {
         await this.plugin.clearReviewCheckpoint(this.history!.context);
         this.render();
-      });
+      })());
       return;
     }
 
@@ -2096,6 +2096,10 @@ export class GitNoteHistoryView extends ItemView {
       this.render();
     }));
     this.addMilestoneMenuItems(menu, commit, state);
+    if (this.targetFile) {
+      const file = this.targetFile;
+      menu.addItem((item) => item.setTitle("复制版本链接").setIcon("link").onClick(() => void this.plugin.copyVersionLink(file, commit)));
+    }
     menu.addItem((item) => item.setTitle("复制完整 commit hash").setIcon("copy").onClick(async () => {
       await navigator.clipboard.writeText(commit.hash);
       new Notice("已复制 commit hash。");

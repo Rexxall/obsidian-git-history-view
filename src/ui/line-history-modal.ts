@@ -164,10 +164,10 @@ export class LineHistoryModal extends Modal {
 
     if (!match || !this.currentBlock) return;
     const copy = actions.createEl("button", { text: "复制段落" });
-    copy.addEventListener("click", async () => {
+    copy.addEventListener("click", () => void (async () => {
       await navigator.clipboard.writeText(match.block.content);
       new Notice("已复制历史段落。");
-    });
+    })());
     const insert = actions.createEl("button", { text: "插入到后面" });
     insert.addEventListener("click", () => void this.confirmParagraphChange(commit, match.block.content, "insert"));
     const replace = actions.createEl("button", { cls: "mod-warning", text: "替换当前段落" });

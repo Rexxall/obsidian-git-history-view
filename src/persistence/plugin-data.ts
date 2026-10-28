@@ -81,7 +81,7 @@ function normalizePatch(value: unknown): RecoveryPatchHunk | null {
     oldLines: candidate.oldLines!,
     newStart: candidate.newStart!,
     newLines: candidate.newLines!,
-    lines: [...candidate.lines as string[]]
+    lines: [...candidate.lines]
   };
 }
 
@@ -389,7 +389,7 @@ export function migratePluginData(value: unknown): PersistedPluginData {
     typeof candidate.schemaVersion === "number"
     && candidate.schemaVersion > CURRENT_DATA_SCHEMA_VERSION
   ) {
-    return candidate as unknown as PersistedPluginData;
+    return candidate;
   }
   const rawStates = objectRecord(candidate.fileReviewStates);
   const fileReviewStates = Object.fromEntries(

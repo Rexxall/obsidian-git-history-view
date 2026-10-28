@@ -41,6 +41,12 @@ export interface GitFileHistory {
   workingTreeStats: GitLineStats;
 }
 
+export interface GitNoteStatus {
+  context: GitRepositoryContext;
+  lastCommit: GitCommitVersion | null;
+  status: GitFileStatus;
+}
+
 export interface GitLineStats {
   addedLines: number;
   deletedLines: number;
@@ -199,6 +205,7 @@ export interface GitNoteHistorySettings {
   useBlameIgnoreRevs: boolean;
   showLabTools: boolean;
   paperStyle: boolean;
+  showStatusBar: boolean;
 }
 
 export interface UndoSnapshot {

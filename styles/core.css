@@ -2774,6 +2774,35 @@ button.git-note-history-impact-row:hover {
   font-size: var(--font-ui-smaller);
 }
 
+/* ------------------------------------------------------------ status bar */
+
+.git-note-history-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+
+.git-note-history-status-icon {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+
+.git-note-history-status-icon svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+
+.git-note-history-status-dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-orange);
+}
+
+.git-note-history-status.is-conflicted .git-note-history-status-text {
+  color: var(--text-error);
+}
+
 /* ---------------------------------------------------------------- motion */
 
 @media (prefers-reduced-motion: reduce) {

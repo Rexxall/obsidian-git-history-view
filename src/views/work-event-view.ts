@@ -628,10 +628,10 @@ export class GitWorkEventView extends ItemView {
       attr: { "aria-label": "复制完整文件路径" }
     });
     setIcon(copyPath, "copy");
-    copyPath.addEventListener("click", async () => {
+    copyPath.addEventListener("click", () => void (async () => {
       await navigator.clipboard.writeText(change.vaultPath);
       new Notice("已复制完整文件路径。");
-    });
+    })());
     const canCompare = Boolean(
       currentFile
       && change.kind === "markdown"
@@ -703,7 +703,7 @@ export class GitWorkEventView extends ItemView {
         change.afterContent ?? ""
       );
       if (this.diffCache.size >= 20) {
-        const oldestKey = this.diffCache.keys().next().value as string | undefined;
+        const oldestKey = this.diffCache.keys().next().value;
         if (oldestKey) this.diffCache.delete(oldestKey);
       }
       this.diffCache.set(cacheKey, groups);

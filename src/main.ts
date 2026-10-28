@@ -4,12 +4,24 @@ import {
   FileSystemAdapter,
   MarkdownView,
   Notice,
+  normalizePath,
+  type ObsidianProtocolData,
   Plugin,
+  setIcon,
+  setTooltip,
   TFile,
   TFolder,
   WorkspaceLeaf
 } from "obsidian";
 import { GitClient, GitCommandError } from "./git/git-client";
+import { isChineseInterface, tr } from "./i18n";
+import { setWorkEventConfigDirectory } from "./work-events/work-event";
+import { formatTimeAgo } from "./history/relative-time";
+import {
+  buildVersionMarkdownLink,
+  parseVersionLinkParams,
+  VERSION_LINK_ACTION
+} from "./history/version-link";
 import type {
   DetailMode,
   DetailRequest,
@@ -217,6 +229,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     Promise<HistoricalSandboxRecord>
   >();
   private isUnloading = false;
+  private noteStatusEl: HTMLElement | null = null;
+  private noteStatusGeneration = 0;
+  private noteStatusTimer: number | null = null;
 
   /** Lab tools stay registered but hidden until the setting is on; ids and hotkeys are unchanged. */
   private addLabCommand(command: Command): Command {
@@ -244,6 +259,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.isUnloading = false;
     await this.loadPluginData();
     this.applyAppearance();
+    setWorkEventConfigDirectory(this.app.vault.configDir);
 
     this.gitClient = new GitClient(this.app, () => this.settings);
     this.historicalSandboxManager = this.createHistoricalSandboxManager();
@@ -315,21 +331,37 @@ export default class GitNoteHistoryPlugin extends Plugin {
       (leaf) => new GitHistoryHealthView(leaf, this)
     );
 
-    this.addRibbonIcon("history", "打开当前笔记的 Git 历史", () => {
+    this.addRibbonIcon("history", tr("打开当前笔记的 Git 历史", "Open Git history of the current note"), () => {
       void this.activateHistoryView(this.app.workspace.getActiveFile());
     });
-    this.addRibbonIcon("list-checks", "打开复查收件箱", () => {
+    this.addRibbonIcon("list-checks", tr("打开复查收件箱", "Open review inbox"), () => {
       void this.activateWorkspaceReview();
     });
     if (this.settings.showLabTools) {
-      this.addRibbonIcon("boxes", "打开历史沙盒", () => {
+      this.addRibbonIcon("boxes", tr("打开历史沙盒", "Open historical sandbox"), () => {
         void this.openHistoricalSandboxManager();
       });
     }
 
     this.addCommand({
+      id: "compare-current-note-with-last-commit",
+      name: tr("将当前笔记与上次提交对比", "Compare the current note with its last commit"),
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = file?.extension === "md";
+        if (available && !checking && file) void this.compareWithLastCommit(file);
+        return available;
+      }
+    });
+
+    this.registerObsidianProtocolHandler(VERSION_LINK_ACTION, (params) => {
+      void this.openVersionLink(params);
+    });
+    this.setupNoteStatus();
+
+    this.addCommand({
       id: "open-current-note-git-history",
-      name: "打开当前笔记的 Git 历史",
+      name: tr("打开当前笔记的 Git 历史", "Open Git history of the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -340,13 +372,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "open-git-workspace-review",
-      name: "打开复查收件箱",
+      name: tr("打开复查收件箱", "Open review inbox"),
       callback: () => void this.activateWorkspaceReview()
     });
 
     this.addLabCommand({
       id: "open-current-working-event",
-      name: "查看当前未提交工作",
+      name: tr("查看当前未提交工作", "Show current uncommitted work"),
       callback: () => {
         const file = this.app.workspace.getActiveFile();
         void this.openWorkEvent({
@@ -358,7 +390,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "open-current-note-git-history-main",
-      name: "在中央完整打开当前笔记的 Git 时间线",
+      name: tr("在中央完整打开当前笔记的 Git 时间线", "Open the full Git timeline of the current note in the main area"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -369,7 +401,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "show-selected-paragraph-history",
-      name: "查看当前段落或选中文本的 Git 历史",
+      name: tr("查看当前段落或选中文本的 Git 历史", "Show Git history of the current paragraph or selection"),
       editorCheckCallback: (checking, editor, view) => {
         if (!view.file || view.file.extension !== "md") return false;
         if (!checking) {
@@ -392,7 +424,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "trace-current-note-knowledge-boundary",
-      name: "追踪当前笔记的知识变化边界",
+      name: tr("追踪当前笔记的知识变化边界", "Trace where the current note changed"),
       editorCheckCallback: (checking, editor, view) => {
         if (!view.file || view.file.extension !== "md") return false;
         if (!checking) {
@@ -407,7 +439,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "show-current-note-content-age",
-      name: "打开当前笔记的内容年龄镜头",
+      name: tr("打开当前笔记的内容年龄镜头", "Show content age of the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -418,7 +450,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "resolve-current-note-git-conflict",
-      name: "打开当前笔记的三栏 Git 冲突解决器",
+      name: tr("打开当前笔记的三栏 Git 冲突解决器", "Resolve Git conflict in the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -429,13 +461,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "refresh-current-note-git-history",
-      name: "刷新当前笔记的 Git 历史",
+      name: tr("刷新当前笔记的 Git 历史", "Refresh Git history of the current note"),
       callback: () => this.refreshOpenViews()
     });
 
     this.addCommand({
       id: "undo-last-git-restore",
-      name: "撤销上次 Git 恢复",
+      name: tr("撤销上次 Git 恢复", "Undo last restore"),
       checkCallback: (checking) => {
         if (!this.restoreService.canUndo()) return false;
         if (!checking) {
@@ -455,13 +487,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addCommand({
       id: "show-git-restore-history",
-      name: "查看 Git 恢复历史与撤销栈",
+      name: tr("查看 Git 恢复历史与撤销栈", "Show restore history and undo stack"),
       callback: () => new RestoreHistoryModal(this.app, this).open()
     });
 
     this.addCommand({
       id: "open-current-note-recovery-basket",
-      name: "打开当前笔记的恢复篮子",
+      name: tr("打开当前笔记的恢复篮子", "Open recovery basket for the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -474,13 +506,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "open-historical-sandbox-manager",
-      name: "打开历史沙盒管理器",
+      name: tr("打开历史沙盒管理器", "Open historical sandbox manager"),
       callback: () => void this.openHistoricalSandboxManager()
     });
 
     this.addLabCommand({
       id: "open-current-note-history-sources",
-      name: "查看当前笔记的全部历史来源",
+      name: tr("查看当前笔记的全部历史来源", "Show all history sources of the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -491,7 +523,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "open-current-note-knowledge-graph-time-machine",
-      name: "打开当前笔记的知识图谱时间机",
+      name: tr("打开当前笔记的知识图谱时间机", "Open knowledge graph playback for the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -504,7 +536,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "open-current-note-provenance-lens",
-      name: "打开当前笔记的来源可信度镜头",
+      name: tr("打开当前笔记的来源可信度镜头", "Open provenance lens for the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -517,7 +549,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "open-current-note-review-annotations",
-      name: "打开当前笔记的版本批注",
+      name: tr("打开当前笔记的版本批注", "Open version annotations of the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -528,7 +560,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "annotate-current-note-version",
-      name: "批注当前笔记的工作区版本",
+      name: tr("批注当前笔记的工作区版本", "Annotate the working version of the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -539,7 +571,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "annotate-selected-markdown-block",
-      name: "批注当前段落或选中内容块",
+      name: tr("批注当前段落或选中内容块", "Annotate the current paragraph or selected block"),
       editorCheckCallback: (checking, editor, view) => {
         if (!view.file || view.file.extension !== "md") return false;
         if (!checking) {
@@ -559,7 +591,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "open-current-note-history-health",
-      name: "打开当前笔记的历史健康中心",
+      name: tr("打开当前笔记的历史健康中心", "Open history health of the current note"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -570,7 +602,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
     this.addLabCommand({
       id: "mark-current-note-git-history-reviewed",
-      name: "把当前笔记标记为已复查",
+      name: tr("把当前笔记标记为已复查", "Mark the current note as reviewed"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file?.extension === "md";
@@ -603,38 +635,38 @@ export default class GitNoteHistoryPlugin extends Plugin {
         if (!(file instanceof TFile) || file.extension !== "md") return;
         menu.addItem((item) =>
           item
-            .setTitle("查看 Git 历史")
+            .setTitle(tr("查看 Git 历史", "Show Git history"))
             .setIcon("history")
             .onClick(() => void this.activateHistoryView(file))
         );
         if (!this.settings.showLabTools) return;
         menu.addItem((item) =>
           item
-            .setTitle("查看全部历史来源")
+            .setTitle(tr("查看全部历史来源", "Show all history sources"))
             .setIcon("layers-3")
             .onClick(() => void this.openHistorySources(file))
         );
         menu.addItem((item) =>
           item
-            .setTitle("打开知识图谱时间机")
+            .setTitle(tr("打开知识图谱时间机", "Open knowledge graph playback"))
             .setIcon("orbit")
             .onClick(() => void this.openKnowledgeGraphTimeMachine(file))
         );
         menu.addItem((item) =>
           item
-            .setTitle("打开来源可信度镜头")
+            .setTitle(tr("打开来源可信度镜头", "Open provenance lens"))
             .setIcon("scan-eye")
             .onClick(() => void this.openProvenanceLens(file))
         );
         menu.addItem((item) =>
           item
-            .setTitle("打开版本批注")
+            .setTitle(tr("打开版本批注", "Open version annotations"))
             .setIcon("message-square-text")
             .onClick(() => void this.openReviewAnnotations(file))
         );
         menu.addItem((item) =>
           item
-            .setTitle("检查历史健康")
+            .setTitle(tr("检查历史健康", "Check history health"))
             .setIcon("activity")
             .onClick(() => void this.openHistoryHealth(file))
         );
@@ -686,35 +718,35 @@ export default class GitNoteHistoryPlugin extends Plugin {
             annotationMigration
           ]);
           if (reviewResult.status === "rejected") {
-            const reason = reviewResult.reason;
+            const reason: unknown = reviewResult.reason;
             new Notice(
               `重命名后未能迁移版本里程碑：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
           if (restoreResult.status === "rejected") {
-            const reason = restoreResult.reason;
+            const reason: unknown = restoreResult.reason;
             new Notice(
               `重命名后未能迁移恢复记录：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
           if (basketResult.status === "rejected") {
-            const reason = basketResult.reason;
+            const reason: unknown = basketResult.reason;
             new Notice(
               `重命名后未能迁移恢复篮子：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
           if (localSnapshotResult.status === "rejected") {
-            const reason = localSnapshotResult.reason;
+            const reason: unknown = localSnapshotResult.reason;
             new Notice(
               `重命名后未能迁移本地快照：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
             );
           }
           if (annotationResult.status === "rejected") {
-            const reason = annotationResult.reason;
+            const reason: unknown = annotationResult.reason;
             new Notice(
               `重命名后未能迁移版本批注：${reason instanceof Error ? reason.message : String(reason)}`,
               9000
@@ -741,6 +773,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     );
     return new HistoricalSandboxManager({
       gitExecutable: this.settings.gitExecutable,
+      configDir: this.app.vault.configDir,
       ...(this.settings.sandboxStorageRoot
         ? { storageRoot: this.settings.sandboxStorageRoot }
         : {}),
@@ -786,6 +819,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   onunload(): void {
     this.isUnloading = true;
     if (typeof document !== "undefined") document.body.classList.remove("gnh-paper");
+    if (this.noteStatusTimer) window.clearTimeout(this.noteStatusTimer);
     this.detailOpenGeneration += 1;
     this.pendingDetailLeaf = null;
     this.workEventOpenGeneration += 1;
@@ -806,19 +840,6 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.pendingReviewAnnotationsLeaf = null;
     this.historyHealthOpenGeneration += 1;
     this.pendingHistoryHealthLeaf = null;
-    this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_WORKSPACE_REVIEW_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_CONFLICT_RESOLVER_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_WORK_EVENT_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_TRACE_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_RECOVERY_BASKET_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_HISTORICAL_SANDBOX_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_HISTORY_SOURCE_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_KNOWLEDGE_GRAPH_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_PROVENANCE_LENS_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_REVIEW_ANNOTATIONS_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GIT_HISTORY_HEALTH_VIEW_TYPE);
   }
 
   async openHistoryHealth(file: TFile): Promise<void> {
@@ -1005,7 +1026,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     );
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const commits = [...history.commits].reverse();
-    const versions: KnowledgeGraphVersion[] = new Array(commits.length);
+    const versions = new Array<KnowledgeGraphVersion>(commits.length);
     const batchSize = 4;
     for (let start = 0; start < commits.length; start += batchSize) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -2100,6 +2121,149 @@ export default class GitNoteHistoryPlugin extends Plugin {
     if (leaf.view instanceof GitNoteHistoryView) await leaf.view.setFile(file);
   }
 
+  private setupNoteStatus(): void {
+    const el = this.addStatusBarItem();
+    el.addClass("git-note-history-status", "mod-clickable");
+    el.hide();
+    this.noteStatusEl = el;
+    this.registerDomEvent(el, "click", () => {
+      void this.activateHistoryView(this.app.workspace.getActiveFile());
+    });
+    this.registerEvent(this.app.workspace.on("file-open", () => this.refreshNoteStatus()));
+    this.registerEvent(this.app.vault.on("modify", (file) => {
+      if (file === this.app.workspace.getActiveFile()) this.scheduleNoteStatus();
+    }));
+    // Backups usually commit from outside Obsidian; re-check when the window comes back.
+    this.registerDomEvent(window, "focus", () => this.refreshNoteStatus());
+    this.registerInterval(window.setInterval(() => this.refreshNoteStatus(), 5 * 60_000));
+    this.app.workspace.onLayoutReady(() => this.refreshNoteStatus());
+  }
+
+  private scheduleNoteStatus(): void {
+    if (this.noteStatusTimer) window.clearTimeout(this.noteStatusTimer);
+    this.noteStatusTimer = window.setTimeout(() => {
+      this.noteStatusTimer = null;
+      this.refreshNoteStatus();
+    }, 1500);
+  }
+
+  refreshNoteStatus(): void {
+    const el = this.noteStatusEl;
+    if (!el) return;
+    const generation = ++this.noteStatusGeneration;
+    const file = this.app.workspace.getActiveFile();
+    if (!this.settings.showStatusBar || !file || file.extension !== "md") {
+      el.hide();
+      return;
+    }
+    void (async () => {
+      try {
+        const note = await this.gitClient.loadNoteStatus(file);
+        if (generation !== this.noteStatusGeneration || this.isUnloading) return;
+        this.renderNoteStatus(el, note.lastCommit, note.status);
+      } catch {
+        // No repository or Git missing: the status bar simply stays quiet.
+        if (generation === this.noteStatusGeneration) el.hide();
+      }
+    })();
+  }
+
+  private renderNoteStatus(
+    el: HTMLElement,
+    lastCommit: GitCommitVersion | null,
+    status: { staged: boolean; unstaged: boolean; untracked: boolean; conflicted: boolean }
+  ): void {
+    const chinese = isChineseInterface();
+    el.empty();
+    el.show();
+    setIcon(el.createSpan({ cls: "git-note-history-status-icon" }), "history");
+    const dirty = status.staged || status.unstaged;
+    let text: string;
+    let tooltip: string;
+    if (status.conflicted) {
+      text = tr("有冲突", "conflict");
+      tooltip = tr("这篇笔记有 Git 合并冲突。点击打开时间线。", "This note has a Git merge conflict. Click to open the timeline.");
+    } else if (!lastCommit || status.untracked) {
+      text = tr("未纳入 Git", "not in Git");
+      tooltip = tr("这篇笔记还没有提交过。", "This note has not been committed yet.");
+    } else {
+      text = formatTimeAgo(lastCommit.authoredAt, Date.now(), chinese);
+      tooltip = `${tr("上次提交", "Last commit")}: ${lastCommit.subject || lastCommit.shortHash} · ${lastCommit.authoredAt.slice(0, 16).replace("T", " ")}`;
+      if (dirty) tooltip += `\n${tr("有未提交的修改。", "Has uncommitted edits.")}`;
+      tooltip += `\n${tr("点击打开时间线。", "Click to open the timeline.")}`;
+    }
+    el.createSpan({ cls: "git-note-history-status-text", text });
+    if (dirty && !status.conflicted) {
+      el.createSpan({ cls: "git-note-history-status-dirty", attr: { "aria-hidden": "true" } });
+    }
+    el.toggleClass("is-dirty", dirty);
+    el.toggleClass("is-conflicted", status.conflicted);
+    setTooltip(el, tooltip, { placement: "top" });
+  }
+
+  async compareWithLastCommit(file: TFile): Promise<void> {
+    try {
+      const note = await this.gitClient.loadNoteStatus(file);
+      if (!note.lastCommit) {
+        new Notice(tr("这篇笔记还没有提交过。", "This note has not been committed yet."));
+        return;
+      }
+      await this.openDetail({
+        filePath: file.path,
+        repositoryRoot: note.context.repositoryRoot,
+        base: { kind: "commit", commit: note.lastCommit },
+        target: { kind: "working", label: "当前工作区" },
+        initialMode: this.settings.defaultDetailMode
+      });
+      if (!note.status.staged && !note.status.unstaged) {
+        new Notice(tr("与上次提交相比没有改动。", "No changes since the last commit."));
+      }
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error), 8000);
+    }
+  }
+
+  async copyVersionLink(file: TFile, commit: GitCommitVersion): Promise<void> {
+    const label = `${file.basename} · ${commit.authoredAt.slice(0, 10)} · ${commit.shortHash}`;
+    await navigator.clipboard.writeText(
+      buildVersionMarkdownLink(this.app.vault.getName(), file.path, commit.hash, label)
+    );
+    new Notice(tr("已复制版本链接，可以粘贴到任何笔记里。", "Version link copied. Paste it into any note."));
+  }
+
+  private async openVersionLink(params: ObsidianProtocolData): Promise<void> {
+    const target = parseVersionLinkParams(params);
+    if (!target) {
+      new Notice(tr("版本链接不完整。", "This version link is incomplete."));
+      return;
+    }
+    const file = this.app.vault.getFileByPath(normalizePath(target.filePath));
+    if (!file) {
+      new Notice(tr(`找不到笔记：${target.filePath}`, `Note not found: ${target.filePath}`));
+      return;
+    }
+    try {
+      const history = await this.gitClient.loadFileHistory(file, 1000);
+      const commit = history.commits.find((item) => item.hash.startsWith(target.commit));
+      if (!commit) {
+        new Notice(tr(
+          "在这篇笔记最近 1000 个提交里没有找到这个版本；笔记可能改过名或历史被改写。",
+          "This version is not among the last 1000 commits of the note. It may have been renamed or the history rewritten."
+        ), 9000);
+        return;
+      }
+      await this.openDetail({
+        filePath: file.path,
+        repositoryRoot: history.context.repositoryRoot,
+        base: { kind: "commit", commit },
+        target: { kind: "working", label: "当前工作区" },
+        initialMode: this.settings.defaultDetailMode
+      });
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error), 8000);
+    }
+  }
+
   applyAppearance(): void {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("gnh-paper", this.settings.paperStyle);
@@ -2287,7 +2451,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     new ReviewAnnotationModal(this.app, undefined, targetDescription, async (draft) => {
       if (!draft) return;
       const now = new Date().toISOString();
-      const id = `annotation:${globalThis.crypto?.randomUUID?.()
+      const id = `annotation:${(typeof crypto === "undefined" ? undefined : crypto.randomUUID?.())
         ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
       await this.mutateReviewAnnotations((records) => {
         const total = Object.keys(records).length;
@@ -2530,7 +2694,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
           throw new Error("复查点由复查流程管理，不能手动创建。");
         }
         const id = milestoneId
-          ?? `milestone:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+          ?? `milestone:${(typeof crypto === "undefined" ? undefined : crypto.randomUUID?.()) ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
         const existing = milestones[id];
         const createdAt = existing?.createdAt || new Date().toISOString();
         milestones[id] = {
@@ -2875,7 +3039,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   }
 
   private async loadPluginData(): Promise<void> {
-    const rawData = await this.loadData();
+    const rawData: unknown = await this.loadData();
     const previousSchema = rawData && typeof rawData === "object"
       ? (rawData as { schemaVersion?: unknown }).schemaVersion
       : undefined;

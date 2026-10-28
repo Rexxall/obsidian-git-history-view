@@ -1,6 +1,5 @@
 import {
   ItemView,
-  Notice,
   TFile,
   WorkspaceLeaf,
   setIcon

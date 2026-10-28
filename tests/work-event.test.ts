@@ -7,9 +7,12 @@ import {
   isAutomaticBackupSubject,
   mergeWorkEventChanges,
   selectInferredSessionCommits,
+  setWorkEventConfigDirectory,
   shouldRenderWorkEventSearch,
   workEventMetrics
 } from "../src/work-events/work-event";
+
+setWorkEventConfigDirectory(".obsidian");
 import type { WorkEventCommit, WorkEventFileChange } from "../src/work-events/types";
 
 function commit(
