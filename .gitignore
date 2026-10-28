@@ -6,3 +6,4 @@ git-note-history-*.zip
 .DS_Store
 coverage/
 .vite/
+/main.js

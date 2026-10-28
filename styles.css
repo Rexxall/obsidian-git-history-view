@@ -9103,3 +9103,9 @@ button.git-note-history-graph-machine-relation:hover {
   color: var(--ap-on-accent);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
+
+/* Increase contrast: the faintest text (date groups, placeholders) moves up to secondary. */
+@media (prefers-contrast: more) {
+  .ap { --ap-label-3: var(--ap-label-2); }
+  .ap .git-note-history-search input::placeholder { color: var(--ap-label-2); }
+}

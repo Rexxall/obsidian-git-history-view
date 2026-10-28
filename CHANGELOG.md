@@ -13,6 +13,8 @@
 - **Quieter sidebar:** the header keeps only an *All | Milestones* switch and a "…" menu (follow note, refresh, review point, time machine, raw commits, recovery basket). The selected version is a solid accent row, and a glass bar at the bottom offers *Compare with current* and *Restore this version*. A pending review shows as one row above the list instead of a card.
 - **Simpler compare toolbar:** one row with *Side by side | Unified*, *More* and *Restore*; reading, preview, structure and link views, filters, recovery basket and focus mode moved into *More*.
 - The optional *Paper and ink* look and its setting are removed; the plugin follows Obsidian's light and dark mode.
+- With *Increase contrast*, the faintest text (date groups, the search placeholder) is shown at secondary strength.
+- `main.js` is no longer committed; it is the output of `npm run build` and is attached to each release.
 - Minimum Obsidian version is now 1.8.7.
 
 ## 0.9.0 — 2026-10-26
