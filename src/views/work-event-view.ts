@@ -249,7 +249,7 @@ export class GitWorkEventView extends ItemView {
     this.filterTimer = null;
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-work-event-view");
+    container.addClass("ap", "git-work-event-view");
     container.toggleClass("is-narrow", this.narrow);
     container.toggleClass("is-detail-open", this.detailOpen);
     this.renderHeader(container);

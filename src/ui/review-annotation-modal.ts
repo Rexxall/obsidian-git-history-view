@@ -33,6 +33,7 @@ export class ReviewAnnotationModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("ap", "ap-modal");
     this.setTitle(this.current ? "编辑版本批注" : "添加版本批注");
     this.contentEl.createDiv({
       cls: "git-review-annotation-target",

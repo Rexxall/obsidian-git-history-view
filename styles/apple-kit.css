@@ -1,0 +1,326 @@
+/* ==========================================================================
+   Glass kit (final, 2026-10-29) — shared by the Obsidian plugins and the web apps.
+   Two layers, as in Apple's Liquid Glass: solid content, glass only for the
+   controls that float above it (bars, sheets, popovers, toasts).
+   Everything is scoped under .ap; colours come from Obsidian's variables.
+   ========================================================================== */
+
+.ap {
+  /* Colour: one accent (the user's), labels in three steps, semantic colours apart */
+  --ap-accent: var(--interactive-accent);
+  --ap-on-accent: var(--text-on-accent);
+  --ap-accent-tint: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  --ap-label: var(--text-normal);
+  --ap-label-2: var(--text-muted);
+  --ap-label-3: var(--text-faint);
+  --ap-good: var(--color-green);
+  --ap-warn: var(--color-orange);
+  --ap-bad: var(--color-red);
+
+  /* Content layer: always solid */
+  --ap-page: var(--background-primary);
+  --ap-group: color-mix(in srgb, var(--text-normal) 4%, var(--background-primary));
+  --ap-fill: color-mix(in srgb, var(--text-normal) 7%, transparent);
+  --ap-fill-strong: color-mix(in srgb, var(--text-normal) 12%, transparent);
+  --ap-sep: color-mix(in srgb, var(--text-normal) 10%, transparent);
+  --ap-hair: 0 0 0 0.5px color-mix(in srgb, var(--text-normal) 14%, transparent);
+
+  /* Functional layer: glass. Regular for bars, sheets, popovers; thin only over images. */
+  --ap-glass: color-mix(in srgb, var(--background-primary) 68%, transparent);
+  --ap-glass-thin: color-mix(in srgb, var(--background-primary) 45%, transparent);
+  --ap-glass-solid: color-mix(in srgb, var(--background-primary) 96%, var(--text-normal));
+  --ap-blur: blur(28px) saturate(170%);
+  --ap-blur-thin: blur(18px) saturate(160%);
+  /* Light catching the top edge, a faint rim, and the hairline that separates glass from content */
+  --ap-glint: rgb(255 255 255 / 0.55);
+  --ap-rim: rgb(255 255 255 / 0.28);
+  --ap-glass-edge: inset 0 1px 0 var(--ap-glint), inset 0 0 0 0.5px var(--ap-rim), var(--ap-hair);
+
+  /* Type: macOS text styles (HIG Typography, macOS table) */
+  --ap-font: var(--font-interface, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans", system-ui, sans-serif);
+  --ap-font-round: ui-rounded, "SF Pro Rounded", var(--ap-font);
+  --ap-large-title: 600 26px/32px var(--ap-font);
+  --ap-title-2: 600 17px/22px var(--ap-font);
+  --ap-title-3: 600 15px/20px var(--ap-font);
+  --ap-headline: 600 13px/16px var(--ap-font);
+  --ap-body: 400 13px/18px var(--ap-font);
+  --ap-callout: 400 12px/15px var(--ap-font);
+  --ap-subhead: 400 11px/14px var(--ap-font);
+  --ap-caption: 500 10px/13px var(--ap-font);
+
+  /* Space: 4-point grid on Obsidian's --size-4-* */
+  --ap-s1: var(--size-4-1, 4px);
+  --ap-s2: var(--size-4-2, 8px);
+  --ap-s3: var(--size-4-3, 12px);
+  --ap-s4: var(--size-4-4, 16px);
+  --ap-s5: var(--size-4-5, 20px);
+  --ap-s6: var(--size-4-6, 24px);
+
+  /* Shape: round, and concentric (inner radius = outer radius - padding) */
+  --ap-r-pill: 999px;
+  --ap-r-field: 10px;
+  --ap-r-group: 12px;
+  --ap-r-card: 16px;
+  --ap-r-sheet: 22px;
+
+  /* Depth */
+  --ap-shadow-1: var(--ap-hair), 0 1px 2px rgb(0 0 0 / 0.05), 0 2px 8px rgb(0 0 0 / 0.04);
+  --ap-shadow-2: 0 8px 28px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06);
+  --ap-shadow-3: 0 28px 70px -14px rgb(0 0 0 / 0.30), 0 10px 24px rgb(0 0 0 / 0.10);
+
+  /* Motion */
+  --ap-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ap-ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ap-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --ap-fast: 120ms;
+  --ap-base: 200ms;
+  --ap-slow: 340ms;
+
+  font: var(--ap-body);
+  color: var(--ap-label);
+  -webkit-font-smoothing: antialiased;
+}
+.theme-dark .ap, .ap.is-dark {
+  --ap-glass: color-mix(in srgb, var(--background-primary) 62%, transparent);
+  --ap-glint: rgb(255 255 255 / 0.16);
+  --ap-rim: rgb(255 255 255 / 0.10);
+}
+
+/* ---------- Glass surface ---------- */
+.ap-glass {
+  background: var(--ap-glass);
+  -webkit-backdrop-filter: var(--ap-blur);
+  backdrop-filter: var(--ap-blur);
+  box-shadow: var(--ap-glass-edge), var(--ap-shadow-2);
+}
+.ap-glass.is-thin { background: var(--ap-glass-thin); -webkit-backdrop-filter: var(--ap-blur-thin); backdrop-filter: var(--ap-blur-thin); }
+/* A bar that content scrolls under: glass plus a soft fade at its lower edge (scroll edge effect) */
+.ap-bar-glass {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--ap-glass);
+  -webkit-backdrop-filter: var(--ap-blur);
+  backdrop-filter: var(--ap-blur);
+  box-shadow: inset 0 -0.5px 0 var(--ap-sep);
+}
+.ap-bar-glass::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px; pointer-events: none;
+  background: linear-gradient(var(--ap-glass), transparent);
+}
+
+/* ---------- Grouped list (content layer: solid) ---------- */
+.ap-section { display: grid; gap: var(--ap-s2); margin-block: var(--ap-s5); }
+.ap-section-title { font: var(--ap-headline); color: var(--ap-label); padding-inline: var(--ap-s1); }
+.ap-section-note { font: var(--ap-callout); color: var(--ap-label-2); padding-inline: var(--ap-s1); margin: 0; }
+.ap-group { background: var(--ap-group); border-radius: var(--ap-r-group); box-shadow: var(--ap-hair); overflow: hidden; }
+.ap-row { display: flex; align-items: center; gap: var(--ap-s3); min-height: 44px; padding: var(--ap-s2) var(--ap-s4); position: relative; }
+.ap-row + .ap-row::before { content: ""; position: absolute; top: 0; right: 0; left: var(--ap-s4); border-top: 0.5px solid var(--ap-sep); }
+.ap-row-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ap-row-title { font: var(--ap-body); color: var(--ap-label); }
+.ap-row-desc { font: var(--ap-subhead); color: var(--ap-label-2); }
+.ap-row-value { font: var(--ap-body); color: var(--ap-label-2); }
+.ap-row.is-link { cursor: pointer; }
+.ap-row.is-link:hover { background: var(--ap-fill); }
+.ap-chevron { width: 7px; height: 12px; color: var(--ap-label-3); }
+
+/* Obsidian's native settings as grouped lists: add "ap ap-settings" to the tab's containerEl.
+   Rows between two headings form one group; setHeading() becomes the group title. */
+/* Obsidian 1.14 gives each row its own margin and radius; rows of one group sit flush instead */
+.ap-settings .setting-item { border: 0; margin: 0; border-radius: 0; padding: var(--ap-s2) var(--ap-s4); min-height: 44px; background: var(--ap-group); position: relative; }
+.ap-settings .setting-item:not(.setting-item-heading) + .setting-item:not(.setting-item-heading)::before {
+  content: ""; position: absolute; top: 0; right: 0; left: var(--ap-s4); border-top: 0.5px solid var(--ap-sep);
+}
+.ap-settings .setting-item:not(.setting-item-heading):first-child,
+.ap-settings .setting-item-heading + .setting-item,
+.ap-settings > :not(.setting-item) + .setting-item { border-top-left-radius: var(--ap-r-group); border-top-right-radius: var(--ap-r-group); }
+.ap-settings .setting-item:not(.setting-item-heading):has(+ .setting-item-heading),
+.ap-settings .setting-item:not(.setting-item-heading):last-child,
+.ap-settings .setting-item:not(.setting-item-heading):has(+ :not(.setting-item)) { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
+.ap-settings .setting-item-heading { background: none; padding: var(--ap-s6) var(--ap-s1) var(--ap-s2); min-height: 0; }
+.ap-settings .setting-item-heading .setting-item-name { font: var(--ap-headline); }
+.ap-settings .setting-item-heading .setting-item-description { padding-top: 4px; }
+.ap-settings .setting-item-name { font: var(--ap-body); }
+.ap-settings .setting-item-description { font: var(--ap-subhead); color: var(--ap-label-2); padding-top: 2px; }
+.ap-settings input[type="text"], .ap-settings input[type="password"], .ap-settings select, .ap-settings textarea { border-radius: var(--ap-r-field); }
+.ap-settings button { border-radius: var(--ap-r-pill); }
+
+/* ---------- Switch: the knob stretches while pressed ---------- */
+.ap-switch {
+  appearance: none; flex: none; cursor: pointer; margin: 0;
+  width: 40px; height: 24px; border-radius: var(--ap-r-pill);
+  background: var(--ap-fill-strong); position: relative;
+  transition: background var(--ap-base) var(--ap-ease);
+}
+.ap-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: var(--ap-r-pill);
+  background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.22), 0 0 0 0.5px rgb(0 0 0 / 0.05);
+  transition: transform var(--ap-base) var(--ap-ease-spring), width var(--ap-fast) var(--ap-ease);
+}
+.ap-switch:active::after { width: 26px; }
+.ap-switch:checked { background: var(--ap-accent); }
+.ap-switch:checked::after { transform: translateX(16px); }
+.ap-switch:checked:active::after { transform: translateX(10px); }
+.ap-switch:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 2px; }
+/* Obsidian's own toggle, same look */
+.ap .checkbox-container { width: 40px; height: 24px; border-radius: var(--ap-r-pill); background: var(--ap-fill-strong); box-shadow: none; }
+.ap .checkbox-container.is-enabled { background: var(--ap-accent); }
+.ap .checkbox-container::after { width: 20px; height: 20px; top: 2px; left: 2px; border-radius: var(--ap-r-pill); box-shadow: 0 1px 3px rgb(0 0 0 / 0.22); transition: transform var(--ap-base) var(--ap-ease-spring); }
+.ap .checkbox-container.is-enabled::after { transform: translateX(16px); }
+
+/* ---------- Segmented control: capsule track, glass thumb ---------- */
+.ap-seg {
+  display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  padding: 2px; border-radius: var(--ap-r-pill); background: var(--ap-fill);
+}
+.ap-seg button {
+  all: unset; cursor: pointer; text-align: center; white-space: nowrap;
+  font: 500 12px/16px var(--ap-font); color: var(--ap-label);
+  padding: 5px 14px; border-radius: var(--ap-r-pill);
+  transition: background var(--ap-base) var(--ap-ease), box-shadow var(--ap-base) var(--ap-ease);
+}
+.ap-seg button[aria-pressed="true"], .ap-seg button.is-active {
+  background: var(--ap-page);
+  box-shadow: inset 0 1px 0 var(--ap-glint), 0 0 0 0.5px color-mix(in srgb, var(--text-normal) 10%, transparent), 0 2px 6px rgb(0 0 0 / 0.10);
+}
+.ap-seg button:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 1px; }
+
+/* ---------- Buttons: capsules ---------- */
+.ap-btn {
+  all: unset; cursor: pointer; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: 500 13px/18px var(--ap-font); padding: 6px 14px; border-radius: var(--ap-r-pill);
+  background: var(--ap-fill); color: var(--ap-label); white-space: nowrap;
+  transition: background var(--ap-fast) var(--ap-ease), transform var(--ap-fast) var(--ap-ease);
+}
+.ap-btn:hover { background: var(--ap-fill-strong); }
+.ap-btn:active { transform: scale(0.96); }
+.ap-btn:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 2px; }
+.ap-btn.is-primary { background: var(--ap-accent); color: var(--ap-on-accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25); }
+.ap-btn.is-primary:hover { background: color-mix(in srgb, var(--ap-accent) 88%, black); }
+.ap-btn.is-tinted { background: var(--ap-accent-tint); color: var(--ap-accent); }
+.ap-btn.is-plain { background: none; color: var(--ap-accent); padding-inline: 6px; }
+.ap-btn.is-plain:hover { background: var(--ap-fill); }
+.ap-btn.is-danger { color: var(--ap-bad); }
+.ap-btn.is-outline { background: var(--ap-page); box-shadow: var(--ap-hair); }
+.ap-btn.is-outline:hover { background: var(--ap-group); }
+.ap-btn.is-large { font: 600 14px/20px var(--ap-font); padding: 10px 20px; }
+.ap-btn:disabled, .ap-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; transform: none; }
+
+/* ---------- Field ---------- */
+.ap-field {
+  box-sizing: border-box; font: var(--ap-body); color: var(--ap-label); background: var(--ap-page);
+  border: 0; border-radius: var(--ap-r-field); padding: 6px 10px; box-shadow: var(--ap-hair); min-width: 0;
+}
+.ap-field:focus { outline: none; box-shadow: 0 0 0 1px var(--ap-accent), 0 0 0 4px var(--ap-accent-tint); }
+.ap-search { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: var(--ap-r-pill); background: var(--ap-fill); color: var(--ap-label-3); }
+.ap-search input { all: unset; flex: 1; min-width: 0; font: var(--ap-body); color: var(--ap-label); }
+
+/* ---------- Sidebar list ---------- */
+.ap-list { display: grid; gap: 2px; padding: var(--ap-s1); }
+.ap-list-head { font: var(--ap-caption); color: var(--ap-label-3); padding: var(--ap-s3) var(--ap-s3) var(--ap-s1); }
+.ap-item {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--ap-s2) var(--ap-s3);
+  padding: 8px var(--ap-s3); border-radius: var(--ap-r-field); cursor: pointer;
+  transition: background var(--ap-fast) var(--ap-ease);
+}
+.ap-item:hover { background: var(--ap-fill); }
+.ap-item[aria-selected="true"], .ap-item.is-selected { background: var(--ap-accent); color: var(--ap-on-accent); }
+.ap-item[aria-selected="true"] .ap-item-sub, .ap-item.is-selected .ap-item-sub { color: color-mix(in srgb, var(--ap-on-accent) 78%, transparent); }
+.ap-item-title { font: var(--ap-body); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-item-sub { font: var(--ap-subhead); color: var(--ap-label-2); }
+
+/* ---------- Card ---------- */
+.ap-card { background: var(--ap-page); border-radius: var(--ap-r-card); box-shadow: var(--ap-shadow-1); padding: var(--ap-s4); }
+.ap-card.is-inset { background: var(--ap-group); box-shadow: var(--ap-hair); }
+.ap-card.is-nest { background: var(--ap-group); box-shadow: var(--ap-hair); border-radius: calc(var(--ap-r-card) + 6px); padding: 6px; }
+.ap-card.is-nest > .ap-card { border-radius: var(--ap-r-card); }
+.ap-big { font: 600 34px/40px var(--ap-font-round); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ap-unit { font: 500 12px/16px var(--ap-font); color: var(--ap-label-2); margin-left: 2px; }
+/* Card head: icon tile, title and one line under it, a status pill on the right */
+.ap-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--ap-s3); padding: var(--ap-s3) var(--ap-s4); }
+.ap-icon-tile { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--ap-accent-tint); color: var(--ap-accent); }
+.ap-icon-tile svg { width: 18px; height: 18px; }
+.ap-card-title { font: var(--ap-headline); }
+.ap-card-sub { font: var(--ap-subhead); color: var(--ap-label-2); }
+/* A row of figures split by hairlines */
+.ap-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.ap-stat { display: grid; gap: 4px; padding: var(--ap-s1) var(--ap-s4); min-width: 0; }
+.ap-stat + .ap-stat { box-shadow: inset 0.5px 0 0 var(--ap-sep); }
+.ap-stat-label { font: var(--ap-subhead); color: var(--ap-label-2); }
+.ap-stat-value { font: 600 22px/26px var(--ap-font-round); font-variant-numeric: tabular-nums; }
+.ap-eyebrow { font: var(--ap-caption); letter-spacing: 0.04em; color: var(--ap-label-2); }
+
+/* ---------- Sheet (modal): glass, centred title, actions bottom right ---------- */
+.ap-sheet {
+  border-radius: var(--ap-r-sheet); width: min(560px, 100%); overflow: hidden;
+  background: var(--ap-glass); -webkit-backdrop-filter: var(--ap-blur); backdrop-filter: var(--ap-blur);
+  box-shadow: var(--ap-glass-edge), var(--ap-shadow-3);
+  animation: ap-sheet-in var(--ap-slow) var(--ap-ease-sheet);
+}
+.ap-sheet-head { display: grid; gap: 2px; padding: var(--ap-s5) var(--ap-s5) var(--ap-s3); text-align: center; }
+.ap-sheet-title { font: var(--ap-title-3); }
+.ap-sheet-body { padding: 0 var(--ap-s5) var(--ap-s4); }
+.ap-sheet-body .ap-group { background: color-mix(in srgb, var(--text-normal) 5%, transparent); }
+.ap-sheet-foot { display: flex; justify-content: flex-end; gap: var(--ap-s2); padding: var(--ap-s3) var(--ap-s5) var(--ap-s5); }
+@keyframes ap-sheet-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } }
+/* Obsidian's Modal: add "ap ap-modal" to modalEl */
+.modal.ap-modal { border: 0; border-radius: var(--ap-r-sheet); background: var(--ap-glass); -webkit-backdrop-filter: var(--ap-blur); backdrop-filter: var(--ap-blur); box-shadow: var(--ap-glass-edge), var(--ap-shadow-3); animation: ap-sheet-in var(--ap-slow) var(--ap-ease-sheet); }
+.modal.ap-modal .modal-title { font: var(--ap-title-3); text-align: center; }
+
+/* ---------- Empty state ---------- */
+.ap-empty { display: grid; justify-items: center; gap: var(--ap-s2); text-align: center; padding: var(--ap-s6) var(--ap-s4); }
+.ap-empty svg { width: 40px; height: 40px; color: var(--ap-label-3); }
+.ap-empty-title { font: var(--ap-title-3); }
+.ap-empty-text { font: var(--ap-callout); color: var(--ap-label-2); max-width: 32ch; }
+
+/* ---------- Progress, pill, notice, toast ---------- */
+.ap-meter { height: 6px; border-radius: var(--ap-r-pill); background: var(--ap-fill); overflow: hidden; }
+.ap-meter > i { display: block; height: 100%; width: var(--ap-value, 0%); border-radius: inherit; background: var(--ap-accent); transition: width var(--ap-slow) var(--ap-ease); }
+.ap-pill { white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 4px; font: 500 11px/14px var(--ap-font); padding: 3px 9px; border-radius: var(--ap-r-pill); background: var(--ap-fill); color: var(--ap-label-2); }
+.ap-pill.is-good { background: color-mix(in srgb, var(--ap-good) 15%, transparent); color: var(--ap-good); }
+.ap-pill.is-warn { background: color-mix(in srgb, var(--ap-warn) 15%, transparent); color: var(--ap-warn); }
+.ap-pill.is-bad { background: color-mix(in srgb, var(--ap-bad) 14%, transparent); color: var(--ap-bad); }
+.ap-pill.is-accent { background: var(--ap-accent-tint); color: var(--ap-accent); }
+.ap-notice {
+  display: flex; gap: var(--ap-s2); align-items: flex-start; font: var(--ap-callout);
+  padding: var(--ap-s3) var(--ap-s4); border-radius: var(--ap-r-group);
+  background: color-mix(in srgb, var(--ap-warn) 11%, var(--ap-page)); color: var(--ap-label);
+}
+.ap-toast {
+  display: inline-flex; align-items: center; gap: var(--ap-s2); font: 500 12px/16px var(--ap-font);
+  padding: 9px 16px; border-radius: var(--ap-r-pill);
+  background: var(--ap-glass); -webkit-backdrop-filter: var(--ap-blur); backdrop-filter: var(--ap-blur);
+  box-shadow: var(--ap-glass-edge), var(--ap-shadow-2);
+}
+
+/* ---------- Obsidian's translucent window ----------
+   With Appearance → Translucent window on, Obsidian adds .is-translucent to body and the
+   wallpaper shows through the app. Panel backgrounds then step back to a faint tint so it
+   can, while cards, lists and fields keep enough body for text. */
+.is-translucent .ap.ap-view { background: transparent; }
+.is-translucent .ap { --ap-group: color-mix(in srgb, var(--background-primary) 72%, transparent); }
+.is-translucent .ap .ap-card:not(.is-inset):not(.is-nest) { background: color-mix(in srgb, var(--background-primary) 88%, transparent); }
+
+/* ---------- Fallbacks ---------- */
+/* No backdrop-filter: glass becomes an almost opaque surface, so text stays readable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ap { --ap-glass: var(--ap-glass-solid); --ap-glass-thin: var(--ap-glass-solid); }
+}
+/* Reduce transparency: solid surfaces, a firmer edge */
+@media (prefers-reduced-transparency: reduce) {
+  .ap, .is-translucent .ap { --ap-glass: var(--ap-glass-solid); --ap-glass-thin: var(--ap-glass-solid); --ap-blur: none; --ap-blur-thin: none; --ap-glint: transparent; --ap-group: color-mix(in srgb, var(--text-normal) 4%, var(--background-primary)); }
+}
+/* Increase contrast: solid surfaces and stronger lines */
+@media (prefers-contrast: more) {
+  .ap {
+    --ap-glass: var(--background-primary); --ap-glass-thin: var(--background-primary); --ap-blur: none; --ap-blur-thin: none;
+    --ap-sep: color-mix(in srgb, var(--text-normal) 32%, transparent);
+    --ap-fill: color-mix(in srgb, var(--text-normal) 14%, transparent);
+    --ap-hair: 0 0 0 1px color-mix(in srgb, var(--text-normal) 40%, transparent);
+  }
+}
+/* Reduce motion: no movement, state changes are instant */
+@media (prefers-reduced-motion: reduce) {
+  .ap, .ap *, .modal.ap-modal { animation: none !important; transition: none !important; }
+}
+/* Phones: lighter blur, no blur on anything inside a scrolling list */
+.is-mobile .ap { --ap-blur: blur(16px) saturate(160%); --ap-blur-thin: blur(10px) saturate(150%); }
+.ap-list .ap-glass, .ap-group .ap-glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--ap-glass-solid); }

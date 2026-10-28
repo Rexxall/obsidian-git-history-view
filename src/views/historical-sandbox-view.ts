@@ -100,7 +100,7 @@ export class GitHistoricalSandboxView extends ItemView {
   private render(): void {
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
-    container.addClass("git-note-history-root", "git-note-history-sandbox-root");
+    container.addClass("ap", "git-note-history-root", "git-note-history-sandbox-root");
 
     const header = container.createDiv({ cls: "git-note-history-sandbox-header" });
     const heading = header.createDiv({ cls: "git-note-history-sandbox-heading" });

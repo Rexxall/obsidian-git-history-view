@@ -258,7 +258,6 @@ export default class GitNoteHistoryPlugin extends Plugin {
   async onload(): Promise<void> {
     this.isUnloading = false;
     await this.loadPluginData();
-    this.applyAppearance();
     setWorkEventConfigDirectory(this.app.vault.configDir);
 
     this.gitClient = new GitClient(this.app, () => this.settings);
@@ -818,7 +817,6 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
   onunload(): void {
     this.isUnloading = true;
-    if (typeof document !== "undefined") document.body.classList.remove("gnh-paper");
     if (this.noteStatusTimer) window.clearTimeout(this.noteStatusTimer);
     this.detailOpenGeneration += 1;
     this.pendingDetailLeaf = null;
@@ -2262,11 +2260,6 @@ export default class GitNoteHistoryPlugin extends Plugin {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : String(error), 8000);
     }
-  }
-
-  applyAppearance(): void {
-    if (typeof document === "undefined") return;
-    document.body.classList.toggle("gnh-paper", this.settings.paperStyle);
   }
 
   refreshOpenViews(): void {

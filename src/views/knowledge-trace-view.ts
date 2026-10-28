@@ -352,7 +352,7 @@ export class GitKnowledgeTraceView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-knowledge-trace-view");
+    container.addClass("ap", "git-knowledge-trace-view");
     this.renderHeader(container);
 
     if (this.loading) {

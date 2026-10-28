@@ -28,7 +28,6 @@ export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
   ],
   useBlameIgnoreRevs: true,
   showLabTools: false,
-  paperStyle: false,
   showStatusBar: true
 };
 
@@ -40,7 +39,7 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.addClass("git-note-history-settings");
+    containerEl.addClass("ap", "ap-settings", "git-note-history-settings");
     this.renderBasics(containerEl);
     this.renderAppearance(containerEl);
     this.renderLab(containerEl);
@@ -126,17 +125,6 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
 
   private renderAppearance(containerEl: HTMLElement): void {
     new Setting(containerEl).setName(tr("显示", "Display")).setHeading();
-
-    new Setting(containerEl)
-      .setName(tr("纸与墨外观", "Paper and ink style"))
-      .setDesc(tr("Paper & ink style：纸色底、衬线标题、细墨线，暗红标记删掉与取回，青绿标记新增与保留。关闭时跟随 Obsidian 主题。", "Paper surfaces, serif headings and thin ink lines; dark red marks what was removed or will be taken back, teal marks what was added or kept. When off, the plugin follows your theme."))
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.paperStyle).onChange(async (value) => {
-          this.plugin.settings.paperStyle = value;
-          this.plugin.applyAppearance();
-          await this.save();
-        })
-      );
 
     new Setting(containerEl)
       .setName(tr("状态栏显示上次提交", "Show last commit in status bar"))

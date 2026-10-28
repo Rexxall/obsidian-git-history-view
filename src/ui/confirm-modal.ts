@@ -12,6 +12,7 @@ export class ConfirmActionModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("ap", "ap-modal");
     this.setTitle(this.titleText);
     this.contentEl.createEl("p", { text: this.description });
 

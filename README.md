@@ -43,11 +43,10 @@ The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.
 3. Open a Markdown note and run **Open Git history of the current note** (command palette, ribbon icon, the file menu, or click the status bar item).
 4. Click a version to compare it with the current note. In the comparison, hover a change block and choose *Restore this block*, or use *Recovery basket* to collect blocks from several versions first.
 
-Looks: follows your Obsidian theme by default. *Settings → Display → Paper and ink style* switches on an optional paper-and-ink look (paper surfaces, serif headings, dark red for removed, teal for added), light and dark.
+Looks: a light, Apple-style "glass" interface. The timeline, cards and diffs are solid; only the bars that content scrolls under and the dialogs are translucent. Colours come from your Obsidian theme and accent colour, light and dark follow Obsidian, and with *Reduce transparency* (macOS) the glass turns solid. *Reduce motion* switches the animations off.
 
 Language: commands, menus, settings and the status bar follow Obsidian's language (Chinese or English). The timeline, compare and restore views are currently in Simplified Chinese; an English version of those views is planned.
 
-<img src="docs/screenshots/paper-compare.jpg" width="860">
 
 Requirements: Obsidian 1.8 or later on macOS, Windows or Linux; `git` on your PATH (or set the path in settings).
 
@@ -98,6 +97,8 @@ MIT
 **安全：** 只读 Git，从不 commit、push、checkout、reset。写回前会再比对一次笔记，中途被改过就停下；每次恢复都能撤销。
 
 **用法：** 在“设置 → 第三方插件 → 浏览”里搜索 Git Note History 安装；或把 `main.js`、`manifest.json`、`styles.css` 放进 `<库>/.obsidian/plugins/git-note-history/`。启用后打开一篇笔记，运行“打开当前笔记的 Git 历史”，或点状态栏上的“几小时前”。
+
+**外观：** 0.10 换成苹果“玻璃”风：时间线、卡片、对比内容是实底，只有顶栏和弹窗是半透明玻璃；颜色跟随你的主题和强调色，深浅色跟随 Obsidian；系统打开“降低透明度”时玻璃自动变实底。原来的“纸与墨外观”已删除。
 
 **0.10 新增：** 状态栏显示当前笔记上次提交是多久以前、有没有未提交修改；“将当前笔记与上次提交对比”一条命令看清这次改了什么；时间线右键“复制版本链接”，粘进任何笔记，点一下就打开那一版和当前笔记的对比。
 

@@ -178,7 +178,7 @@ export class GitKnowledgeGraphView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-note-history-graph-machine");
+    container.addClass("ap", "git-note-history-graph-machine");
     this.renderHeader(container);
     if (!this.file) {
       this.renderEmpty(container, "file-text", "请先打开一篇 Markdown 笔记");

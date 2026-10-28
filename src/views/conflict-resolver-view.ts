@@ -92,7 +92,7 @@ export class GitConflictResolverView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-note-history-conflict-view");
+    container.addClass("ap", "git-note-history-conflict-view");
 
     const toolbar = container.createDiv({ cls: "git-note-history-conflict-toolbar" });
     const heading = toolbar.createDiv({ cls: "git-note-history-conflict-heading" });

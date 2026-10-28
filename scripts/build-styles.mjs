@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const parts = ["core.css", "paper.css", "lab.css"];
+const parts = ["apple-kit.css", "core.css", "lab.css", "glass.css"];
 
 export function buildStyles() {
   const banner = "/* Built from styles/*.css by scripts/build-styles.mjs. Edit the sources, not this file. */\n\n";

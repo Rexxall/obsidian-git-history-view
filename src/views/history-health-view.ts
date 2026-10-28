@@ -163,7 +163,7 @@ export class GitHistoryHealthView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-history-health-view");
+    container.addClass("ap", "git-history-health-view");
     const header = container.createDiv({ cls: "git-history-health-header" });
     const title = header.createDiv();
     title.createDiv({

@@ -74,7 +74,7 @@ export class GitReviewAnnotationsView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-review-annotations-view");
+    container.addClass("ap", "git-review-annotations-view");
     const header = container.createDiv({ cls: "git-review-annotations-header" });
     const title = header.createDiv();
     title.createDiv({ cls: "git-review-annotations-eyebrow", text: "本地审阅层 · 不改正文与 commit" });

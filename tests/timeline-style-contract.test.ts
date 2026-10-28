@@ -34,8 +34,10 @@ describe("timeline style contract", () => {
     expect(core).toContain(".git-note-history-commit:has(> .git-note-history-row-trigger:focus-visible)");
   });
 
-  it("ships without !important and with the built stylesheet in sync", () => {
-    expect(styles.match(/!important/g)).toBeNull();
+  it("ships without !important (except to switch motion off) and with the built stylesheet in sync", () => {
+    // The glass kit's reduced-motion rule must beat every transition, so it alone may use !important.
+    const withoutReducedMotion = styles.replace(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\}\s*\}/g, "");
+    expect(withoutReducedMotion.match(/!important/g)).toBeNull();
     expect(styles).toContain(core.trimEnd());
   });
 });

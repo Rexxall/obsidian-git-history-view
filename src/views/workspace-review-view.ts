@@ -132,7 +132,7 @@ export class GitWorkspaceReviewView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-workspace-review-view", "git-review-inbox-view");
+    container.addClass("ap", "git-workspace-review-view", "git-review-inbox-view");
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
 
     const header = container.createDiv({ cls: "git-review-inbox-header" });

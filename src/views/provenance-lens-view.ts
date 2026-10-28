@@ -193,7 +193,7 @@ export class GitProvenanceLensView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-provenance-lens-view");
+    container.addClass("ap", "git-provenance-lens-view");
     const header = container.createDiv({ cls: "git-provenance-lens-header" });
     const title = header.createDiv();
     title.createDiv({ cls: "git-provenance-lens-eyebrow", text: "临时只读镜头 · Esc 退出" });

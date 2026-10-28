@@ -119,7 +119,7 @@ export class KnowledgeTraceSetupModal extends Modal {
   }
 
   onOpen(): void {
-    this.modalEl.addClass("git-knowledge-trace-setup-modal");
+    this.modalEl.addClass("ap", "ap-modal", "git-knowledge-trace-setup-modal");
     this.setTitle("追踪知识变化边界");
 
     const intro = this.contentEl.createDiv({

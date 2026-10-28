@@ -1,0 +1,456 @@
+/*
+  Git Note History — glass layer (0.10).
+
+  Applies the shared glass kit (styles/apple-kit.css) to the plugin's own
+  surfaces. Two layers, as the kit asks: the timeline, cards and diffs are solid
+  content; only the bars that content scrolls under (sidebar header, compare
+  toolbar) and the modals are glass. Colours, radii and type come from the
+  --ap-* tokens, which in turn come from the user's Obsidian theme.
+*/
+
+/* ------------------------------------------------------- shared tokens */
+
+.ap.git-note-history-view,
+.ap.git-note-history-detail-view,
+.ap.git-note-history-settings,
+.ap.git-note-history-restore-preview-modal,
+.ap.git-note-history-restore-history-modal,
+.ap.git-note-history-paragraph-modal,
+.ap.git-note-history-block-age-modal {
+  --gnh-line: var(--ap-sep);
+  --gnh-line-soft: var(--ap-sep);
+  --gnh-surface-2: var(--ap-group);
+  --gnh-hover: var(--ap-fill);
+  --gnh-accent-soft: var(--ap-accent-tint);
+  --gnh-radius: var(--ap-r-field);
+  --gnh-radius-s: 8px;
+  --gnh-heading-weight: 600;
+  --gnh-motion: var(--ap-fast);
+  font: var(--ap-body);
+}
+
+/* Buttons are capsules; icon buttons are soft squares. */
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title, .git-note-history-path-disclosure)),
+.ap.git-note-history-detail-view button:where(:not(.clickable-icon, .git-note-history-version-chooser)),
+.modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)) {
+  border: 0;
+  border-radius: var(--ap-r-pill);
+  padding-inline: 14px;
+  background: var(--ap-fill);
+  box-shadow: none;
+  color: var(--ap-label);
+  font: 500 13px/18px var(--ap-font);
+  transition: background var(--ap-fast) var(--ap-ease), transform var(--ap-fast) var(--ap-ease);
+}
+
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger, .git-note-history-time-machine-title)):hover,
+.ap.git-note-history-detail-view button:where(:not(.clickable-icon, .git-note-history-version-chooser)):hover,
+.modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)):hover {
+  background: var(--ap-fill-strong);
+}
+
+.ap.git-note-history-view button:where(:not(.clickable-icon, .git-note-history-row-trigger)):active,
+.ap.git-note-history-detail-view button:where(:not(.clickable-icon)):active,
+.modal.ap-modal button:where(:not(.clickable-icon, .modal-close-button)):active {
+  transform: scale(0.96);
+}
+
+.ap.git-note-history-view button.mod-cta,
+.ap.git-note-history-detail-view button.mod-cta,
+.ap.git-note-history-detail-view button.git-note-history-restore-primary,
+.modal.ap-modal button.mod-cta,
+.modal.ap-modal button.mod-warning {
+  background: var(--ap-accent);
+  color: var(--ap-on-accent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+.ap.git-note-history-view button.mod-cta:hover,
+.ap.git-note-history-detail-view button.git-note-history-restore-primary:hover,
+.modal.ap-modal button.mod-cta:hover,
+.modal.ap-modal button.mod-warning:hover {
+  background: color-mix(in srgb, var(--ap-accent) 88%, black);
+}
+
+/* Destructive buttons (setWarning) only turn their text red. */
+.modal.ap-modal button.mod-destructive,
+.ap.ap-settings button.mod-destructive,
+.ap .git-note-history-danger {
+  background: var(--ap-fill);
+  color: var(--ap-bad);
+  box-shadow: none;
+}
+
+.ap.git-note-history-view .clickable-icon,
+.ap.git-note-history-detail-view .clickable-icon {
+  border-radius: 8px;
+  color: var(--ap-label-2);
+}
+
+.ap.git-note-history-view .clickable-icon:hover,
+.ap.git-note-history-detail-view .clickable-icon:hover {
+  background: var(--ap-fill);
+  color: var(--ap-label);
+}
+
+/* Search fields are capsules on a soft fill. */
+.ap .git-note-history-search .search-input-container input,
+.ap .git-note-history-search input[type="search"] {
+  border: 0;
+  border-radius: var(--ap-r-pill);
+  background: var(--ap-fill);
+  box-shadow: none;
+}
+
+.ap .git-note-history-search .search-input-container input:focus {
+  box-shadow: 0 0 0 1px var(--ap-accent), 0 0 0 4px var(--ap-accent-tint);
+}
+
+/* ------------------------------------------------------- history sidebar */
+
+.ap.git-note-history-view {
+  background: var(--ap-page);
+}
+
+.ap .git-note-history-header {
+  padding: var(--ap-s4) var(--ap-s4) var(--ap-s3);
+  border-bottom: 0;
+  background: var(--ap-glass);
+  -webkit-backdrop-filter: var(--ap-blur);
+  backdrop-filter: var(--ap-blur);
+  box-shadow: inset 0 -0.5px 0 var(--ap-sep);
+}
+
+.ap .git-note-history-header::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: 14px;
+  background: linear-gradient(var(--ap-glass), transparent);
+  pointer-events: none;
+}
+
+.ap .git-note-history-brand h4 {
+  font: var(--ap-title-2);
+  letter-spacing: -0.01em;
+}
+
+.ap .git-note-history-brand > span {
+  color: var(--ap-accent);
+}
+
+.ap .git-note-history-header .git-note-history-file-path {
+  font: var(--ap-subhead);
+  color: var(--ap-label-2);
+}
+
+.ap .git-note-history-search {
+  margin-top: var(--ap-s3);
+}
+
+.ap .git-note-history-overview {
+  display: grid;
+  gap: var(--ap-s3);
+  padding: var(--ap-s4) var(--ap-s4) 0;
+}
+
+/* Cards in the sidebar sit on the grouped fill, no outline. */
+.ap .git-note-history-review-inbox,
+.ap .git-note-history-time-machine,
+.ap .git-note-history-working-card,
+.ap .git-note-history-empty {
+  border: 0;
+  border-radius: var(--ap-r-group);
+  background: var(--ap-group);
+  box-shadow: var(--ap-hair);
+}
+
+.ap .git-note-history-review-inbox {
+  padding: var(--ap-s3) var(--ap-s4);
+}
+
+.ap .git-note-history-review-inbox-heading strong,
+.ap .git-note-history-review-inbox-heading > div:first-child {
+  font: var(--ap-headline);
+}
+
+.ap .git-note-history-time-machine {
+  margin: var(--ap-s3) var(--ap-s4) 0;
+}
+
+.ap .git-note-history-time-machine-header {
+  padding: var(--ap-s1);
+}
+
+.ap .git-note-history-time-machine-title {
+  border-radius: var(--ap-r-field);
+  background: transparent;
+  box-shadow: none;
+  font: var(--ap-headline);
+}
+
+.ap .git-note-history-time-machine-count,
+.ap .git-note-history-filter-count {
+  border-radius: var(--ap-r-pill);
+  padding: 1px 8px;
+  background: var(--ap-fill);
+  color: var(--ap-label-2);
+  font: 500 11px/14px var(--ap-font);
+}
+
+/* "Versions" header: section title on the left, a segmented choice on the right. */
+.ap .git-note-history-version-mode {
+  padding: var(--ap-s5) var(--ap-s4) var(--ap-s1);
+  font: var(--ap-headline);
+}
+
+.ap .git-note-history-version-mode-actions,
+.ap .git-note-history-detail-mode-group,
+.ap .git-note-history-detail-view-controls > div,
+.ap .git-note-history-detail-context-group {
+  display: inline-flex;
+  gap: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--ap-r-pill);
+  background: var(--ap-fill);
+  box-shadow: none;
+}
+
+.ap .git-note-history-version-mode-actions button,
+.ap .git-note-history-detail-mode-group button,
+.ap .git-note-history-detail-context-group button,
+.ap.git-note-history-detail-view .git-note-history-detail-view-controls button {
+  height: auto;
+  padding: 4px 12px;
+  border-radius: var(--ap-r-pill);
+  background: transparent;
+  color: var(--ap-label);
+  font: 500 12px/16px var(--ap-font);
+}
+
+.ap .git-note-history-version-mode-actions button.is-active,
+.ap .git-note-history-version-mode-actions button[aria-pressed="true"],
+.ap .git-note-history-detail-mode-group button.is-active,
+.ap .git-note-history-detail-context-group button.is-active,
+.ap.git-note-history-detail-view .git-note-history-detail-view-controls button.is-active {
+  background: var(--ap-page);
+  color: var(--ap-label);
+  box-shadow: inset 0 1px 0 var(--ap-glint), 0 0 0 0.5px color-mix(in srgb, var(--text-normal) 10%, transparent), 0 2px 6px rgb(0 0 0 / 0.10);
+}
+
+.ap .git-note-history-version-mode-actions button:not(.is-active):hover,
+.ap .git-note-history-detail-mode-group button:not(.is-active):hover,
+.ap .git-note-history-detail-context-group button:not(.is-active):hover {
+  background: var(--ap-fill);
+}
+
+/* Timeline: soft rows, the dot rail stays as the only line. */
+.ap .git-note-history-timeline {
+  padding: 0 var(--ap-s2) var(--ap-s4);
+}
+
+.ap .git-note-history-date-group > :first-child:not(.git-note-history-commit) {
+  padding: var(--ap-s3) var(--ap-s3) var(--ap-s1);
+  font: var(--ap-caption);
+  color: var(--ap-label-3);
+}
+
+.ap .git-note-history-commit {
+  border-radius: var(--ap-r-field);
+  transition: background var(--ap-fast) var(--ap-ease);
+}
+
+.ap .git-note-history-commit:hover {
+  background: var(--ap-fill);
+}
+
+.ap .git-note-history-commit.is-keyboard-selected {
+  background: var(--ap-accent-tint);
+}
+
+.ap .git-note-history-commit.is-selected,
+.ap .git-note-history-commit.is-active,
+.ap .git-note-history-commit.is-compared {
+  background: var(--ap-accent);
+  color: var(--ap-on-accent);
+}
+
+.ap .git-note-history-commit.is-selected .git-note-history-commit-meta,
+.ap .git-note-history-commit.is-active .git-note-history-commit-meta,
+.ap .git-note-history-commit.is-compared .git-note-history-commit-meta {
+  color: color-mix(in srgb, var(--ap-on-accent) 78%, transparent);
+}
+
+.ap .git-note-history-commit-subject {
+  font: 500 13px/18px var(--ap-font);
+}
+
+.ap .git-note-history-commit-meta {
+  font: var(--ap-subhead);
+}
+
+.ap .git-note-history-commit-stats {
+  font: 500 11px/14px var(--ap-font-round);
+}
+
+.ap .git-note-history-dot {
+  box-shadow: 0 0 0 2px var(--ap-page);
+}
+
+.ap .git-note-history-principles {
+  font: var(--ap-caption);
+  color: var(--ap-label-3);
+  border-top: 0;
+}
+
+/* ---------------------------------------------------------- compare view */
+
+.ap.git-note-history-detail-view {
+  background: var(--ap-page);
+}
+
+.ap .git-note-history-detail-toolbar {
+  padding: var(--ap-s4) var(--ap-s5) var(--ap-s3);
+  border-bottom: 0;
+  background: var(--ap-glass);
+  -webkit-backdrop-filter: var(--ap-blur);
+  backdrop-filter: var(--ap-blur);
+  box-shadow: inset 0 -0.5px 0 var(--ap-sep);
+}
+
+.ap .git-note-history-detail-heading h2,
+.ap .git-note-history-detail-heading h3,
+.ap .git-note-history-detail-heading > div:first-child {
+  font: var(--ap-title-2);
+  letter-spacing: -0.01em;
+}
+
+.ap .git-note-history-version-card {
+  border: 0;
+  border-radius: var(--ap-r-group);
+  background: var(--ap-group);
+  box-shadow: var(--ap-hair);
+}
+
+.ap .git-note-history-version-card.is-active {
+  box-shadow: 0 0 0 1.5px var(--ap-accent);
+}
+
+.ap .git-note-history-version-role,
+.ap .git-note-history-version-position {
+  font: var(--ap-caption);
+  color: var(--ap-label-2);
+}
+
+.ap .git-note-history-version-chooser {
+  border: 0;
+  border-radius: var(--ap-r-field);
+  background: var(--ap-page);
+  box-shadow: var(--ap-hair);
+}
+
+.ap .git-note-history-version-chooser:hover {
+  background: color-mix(in srgb, var(--text-normal) 3%, var(--ap-page));
+}
+
+.ap .git-note-history-version-title {
+  font: 500 13px/18px var(--ap-font);
+}
+
+.ap .git-note-history-version-meta {
+  font: var(--ap-subhead);
+  color: var(--ap-label-2);
+}
+
+.ap .git-note-history-version-direction {
+  border-radius: var(--ap-r-pill);
+  background: var(--ap-fill);
+  font: 500 11px/14px var(--ap-font);
+}
+
+.ap .git-note-history-responsive-note {
+  border: 0;
+  border-radius: var(--ap-r-field);
+  background: var(--ap-group);
+  font: var(--ap-callout);
+  color: var(--ap-label-2);
+}
+
+.ap .git-note-history-diff-legend {
+  font: var(--ap-caption);
+}
+
+.ap .git-note-history-diff-block {
+  border-radius: 6px;
+}
+
+/* ---------------------------------------------------------------- modals */
+
+.modal.ap-modal .git-note-history-restore-summary,
+.modal.ap-modal .git-note-history-restore-preview,
+.modal.ap-modal .git-note-history-paragraph-match {
+  border: 0;
+  border-radius: var(--ap-r-group);
+  background: color-mix(in srgb, var(--text-normal) 5%, transparent);
+}
+
+.modal.ap-modal .modal-button-container,
+.modal.ap-modal .git-note-history-modal-actions {
+  gap: var(--ap-s2);
+}
+
+.modal.ap-modal input[type="text"],
+.modal.ap-modal textarea,
+.modal.ap-modal select {
+  border-radius: var(--ap-r-field);
+}
+
+/* ------------------------------------------------------------- settings */
+
+/* Obsidian 1.13 spaces and rounds every setting row on its own; the kit joins
+   the rows between two headings into one group, so take those back. */
+.ap.ap-settings :where(.setting-item) {
+  margin-block: 0;
+  border-radius: 0;
+}
+
+.ap.ap-settings .setting-item-heading {
+  margin-top: var(--ap-s2);
+  border: 0;
+  box-shadow: none;
+}
+
+.ap.git-note-history-settings .setting-item-heading .setting-item-name {
+  font: var(--ap-headline);
+}
+
+.ap.git-note-history-settings .git-note-history-settings-group-note {
+  padding-inline: var(--ap-s1);
+  font: var(--ap-callout);
+  color: var(--ap-label-2);
+}
+
+/* ------------------------------------------------------- reduce effects */
+
+@media (prefers-reduced-transparency: reduce) {
+  .ap .git-note-history-header,
+  .ap .git-note-history-detail-toolbar {
+    background: var(--ap-page);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .ap .git-note-history-header::after {
+    display: none;
+  }
+}
+
+/* Restoring can always be undone, so its confirm button stays the primary action. */
+.modal.ap-modal.git-note-history-restore-preview-modal button.mod-cta {
+  background: var(--ap-accent);
+  color: var(--ap-on-accent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+}

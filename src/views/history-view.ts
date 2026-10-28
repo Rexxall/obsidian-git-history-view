@@ -312,7 +312,7 @@ export class GitNoteHistoryView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-note-history-view");
+    container.addClass("ap", "ap-view", "git-note-history-view");
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
     this.renderHeader(container);
 

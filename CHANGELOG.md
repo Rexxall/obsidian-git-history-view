@@ -9,6 +9,8 @@
 - Settings: general options sit at the top without a heading, as the Obsidian guidelines ask.
 - Community directory readiness: the code passes the official `eslint-plugin-obsidianmd` rules (`npm run lint`, now part of `npm run check`); views are no longer detached on unload, so they keep their place after an update; the config folder comes from `Vault#configDir` instead of assuming `.obsidian`; SVG graphs use `createSvg`.
 - README discloses network use (none) and when files outside the vault are read or written.
+- **New look:** an Apple-style glass interface, shared with the author's other plugins. Content (timeline, cards, diffs, settings) is solid; the sidebar header, the compare toolbar and every dialog are glass with a light edge. Buttons are capsules, view switches are segmented controls, settings are grouped lists. Everything is derived from the theme's variables and accent colour; *Reduce transparency*, *Increase contrast* and *Reduce motion* are respected.
+- The optional *Paper and ink* look and its setting are removed; the plugin follows Obsidian's light and dark mode.
 - Minimum Obsidian version is now 1.8.7.
 
 ## 0.9.0 — 2026-10-26

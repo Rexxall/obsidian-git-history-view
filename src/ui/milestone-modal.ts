@@ -47,6 +47,7 @@ export class VersionMilestoneModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("ap", "ap-modal");
     this.setTitle(this.current ? "编辑里程碑" : "命名这个版本");
     this.contentEl.createDiv({
       cls: "git-note-history-milestone-intro",

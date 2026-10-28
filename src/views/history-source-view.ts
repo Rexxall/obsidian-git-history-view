@@ -132,7 +132,7 @@ export class GitHistorySourceView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-note-history-source-view");
+    container.addClass("ap", "git-note-history-source-view");
     this.renderHeader(container);
 
     if (!this.targetFile) {

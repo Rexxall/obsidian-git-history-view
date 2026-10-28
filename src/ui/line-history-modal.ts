@@ -44,7 +44,7 @@ export class LineHistoryModal extends Modal {
   }
 
   onOpen(): void {
-    this.modalEl.addClass("git-note-history-paragraph-modal");
+    this.modalEl.addClass("ap", "ap-modal", "git-note-history-paragraph-modal");
     this.setTitle(`段落历史 · 第 ${this.startLine}–${this.endLine} 行`);
     if (this.selectedText) {
       const quote = this.contentEl.createEl("pre", { cls: "git-note-history-line-selection" });

@@ -36,7 +36,7 @@ export class BlockAgeModal extends Modal {
   }
 
   onOpen(): void {
-    this.modalEl.addClass("git-note-history-block-age-modal");
+    this.modalEl.addClass("ap", "ap-modal", "git-note-history-block-age-modal");
     this.setTitle(`内容年龄镜头 · ${this.file.basename}`);
     const intro = this.contentEl.createDiv({ cls: "git-note-history-block-age-intro" });
     setIcon(intro.createSpan(), "scan-eye");

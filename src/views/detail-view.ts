@@ -122,6 +122,7 @@ class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
     private readonly onChoose: (reference: VersionReference) => void
   ) {
     super(app);
+    this.modalEl.addClass("ap", "ap-modal");
     this.setPlaceholder(`搜索并选择${sideLabel}…`);
   }
 
@@ -352,7 +353,7 @@ export class GitHistoryDetailView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-note-history-detail-view");
+    container.addClass("ap", "ap-view", "git-note-history-detail-view");
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
     container.toggleClass("is-focus", this.focusMode);
 

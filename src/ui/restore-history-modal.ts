@@ -19,7 +19,7 @@ export class RestoreHistoryModal extends Modal {
   }
 
   onOpen(): void {
-    this.modalEl.addClass("git-note-history-restore-history-modal");
+    this.modalEl.addClass("ap", "ap-modal", "git-note-history-restore-history-modal");
     this.setTitle("恢复历史与撤销栈");
     const stack = this.plugin.restoreService.getUndoStack();
     const intro = this.contentEl.createDiv({ cls: "git-note-history-restore-history-intro" });

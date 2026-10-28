@@ -45,7 +45,6 @@ const settings: GitNoteHistorySettings = {
   historyGeneratedProperties: [],
   useBlameIgnoreRevs: true,
   showLabTools: false,
-  paperStyle: false,
   showStatusBar: false,
 };
 

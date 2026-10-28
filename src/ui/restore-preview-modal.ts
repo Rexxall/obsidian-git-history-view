@@ -42,7 +42,7 @@ export class RestorePreviewModal extends Modal {
 
   onOpen(): void {
     this.renderer.load();
-    this.modalEl.addClass("git-note-history-restore-preview-modal");
+    this.modalEl.addClass("ap", "ap-modal", "git-note-history-restore-preview-modal");
     this.setTitle(this.options.title);
     const intro = this.contentEl.createDiv({ cls: "git-note-history-restore-preflight" });
     const title = intro.createDiv({ cls: "git-note-history-restore-preflight-title" });

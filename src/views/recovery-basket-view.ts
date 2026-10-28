@@ -125,7 +125,7 @@ export class GitRecoveryBasketView extends ItemView {
   private render(): void {
     const container = this.contentEl;
     container.empty();
-    container.addClass("git-recovery-basket-view");
+    container.addClass("ap", "git-recovery-basket-view");
     this.renderHeader(container);
     if (this.loading) {
       const state = container.createDiv({
