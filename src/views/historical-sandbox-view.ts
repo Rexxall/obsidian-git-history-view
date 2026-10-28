@@ -342,7 +342,7 @@ export class GitHistoricalSandboxView extends ItemView {
       });
       setIcon(row.createSpan(), "file-plus-2");
       row.createSpan({ text: filePath, attr: { title: filePath } });
-      const copy = row.createEl("button", { text: "复制到当前 Vault" });
+      const copy = row.createEl("button", { text: "复制到当前仓库" });
       copy.addEventListener("click", () => {
         this.confirmCopyNewNote(inspection.record, filePath);
       });

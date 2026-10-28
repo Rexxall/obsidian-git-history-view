@@ -807,7 +807,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       status.setText(label);
       status.setAttribute(
         "title",
-        "这是隔离的历史 Vault，不是当前主工作区。"
+        "这是隔离的历史仓库，不是当前主工作区。"
       );
       new Notice(`${label}：这是隔离的历史 Vault。`, 8000);
     } catch {
@@ -1890,7 +1890,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     await navigator.clipboard.writeText(record.vaultPath);
     window.open("obsidian://choose-vault", "_blank");
     new Notice(
-      "沙盒路径已复制。请在 Vault 选择器中点“将文件夹作为 Vault 打开”，粘贴这个目录；这是 Obsidian 对首次注册文件夹的安全限制。",
+      "沙盒路径已复制。请在仓库选择器中点“打开本地仓库”，粘贴这个目录；这是 Obsidian 对首次注册文件夹的安全限制。",
       12000
     );
   }
