@@ -226,7 +226,7 @@ export class RestorePreviewModal extends Modal {
         confirmButton = button.buttonEl;
         button
           .setButtonText(this.options.confirmText)
-          .setWarning()
+          .setCta()
           .onClick(async () => {
             if (!beginAction()) return;
             try {

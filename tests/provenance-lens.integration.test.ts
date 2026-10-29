@@ -137,7 +137,7 @@ describe("GitClient provenance lens with a real Git repository", () => {
         : {}),
       blame: snapshot.blame,
       commits: snapshot.commits,
-      reviewState: { bookmarks: {}, milestones: {} }
+      reviewState: { milestones: {} }
     });
 
     expect(snapshot.blame.some((line) => line.hash === agentHash)).toBe(true);

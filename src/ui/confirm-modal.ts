@@ -6,7 +6,8 @@ export class ConfirmActionModal extends Modal {
     private readonly titleText: string,
     private readonly description: string,
     private readonly confirmText: string,
-    private readonly onConfirm: () => Promise<void>
+    private readonly onConfirm: () => Promise<void>,
+    private readonly destructive = false
   ) {
     super(app);
   }
@@ -23,9 +24,8 @@ export class ConfirmActionModal extends Modal {
         })
       )
       .addButton((button) =>
-        button
+        (this.destructive ? button.setDestructive() : button.setCta())
           .setButtonText(this.confirmText)
-          .setWarning()
           .onClick(async () => {
             button.setDisabled(true);
             this.close();

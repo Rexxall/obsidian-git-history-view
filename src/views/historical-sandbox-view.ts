@@ -403,7 +403,8 @@ export class GitHistoricalSandboxView extends ItemView {
         } catch (error) {
           new Notice(error instanceof Error ? error.message : String(error), 9000);
         }
-      }
+      },
+      !forgetOnly
     ).open();
   }
 

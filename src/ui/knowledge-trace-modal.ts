@@ -366,7 +366,7 @@ export class KnowledgeTraceSetupModal extends Modal {
     );
     new Setting(container)
       .setName("区分大小写")
-      .setDesc("关闭时，Healthy 与 healthy 视为相同。")
+      .setDesc("关闭时，只差大小写的词视为相同。")
       .addToggle((toggle) => {
         toggle
           .setValue(this.textCaseSensitive)
@@ -476,7 +476,7 @@ export class KnowledgeTraceSetupModal extends Modal {
       .setName("目标")
       .setDesc("填写链接目标、嵌入目标或标签；标签可省略开头的 #。")
       .addText((text) => text
-        .setPlaceholder("例如：MOC/Healthy aging")
+        .setPlaceholder("例如：项目/健康老龄化")
         .setValue(this.relationTarget)
         .onChange((value) => {
           this.relationTarget = value.trim();
@@ -489,7 +489,7 @@ export class KnowledgeTraceSetupModal extends Modal {
       .setName("Markdown 结构")
       .setDesc("标题仅检查 # ATX 形式；代码块仅检查 ``` / ~~~ 围栏形式，暂不包括 Setext 标题和缩进代码。")
       .addDropdown((dropdown) => dropdown
-        .addOption("heading", "ATX 标题（#）")
+        .addOption("heading", "井号标题（#）")
         .addOption("task", "任务")
         .addOption("code-block", "围栏代码块（``` / ~~~）")
         .addOption("callout", "Callout")
@@ -510,7 +510,7 @@ export class KnowledgeTraceSetupModal extends Modal {
         }));
     new Setting(container)
       .setName("限定内容")
-      .setDesc("可选；例如标题文字、代码语言、Callout 类型或任务正文。")
+      .setDesc("可选；例如标题文字、代码语言、标注块类型或任务正文。")
       .addText((text) => text
         .setPlaceholder("留空表示任意一个")
         .setValue(this.structureValue)

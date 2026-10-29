@@ -540,7 +540,7 @@ describe("named version milestones", () => {
   });
 
   it("does not re-import schema v2 bookmark projections as duplicate milestones", () => {
-    const state: FileReviewState = {
+    const state = {
       bookmarks: {
         aaaaaaaa: {
           label: "申请 PDF",
@@ -567,7 +567,6 @@ describe("named version milestones", () => {
 
   it("allows multiple real-world events on the same commit", () => {
     const state: FileReviewState = {
-      bookmarks: {},
       milestones: {
         sent: milestone("sent", "aaaaaaaa", "sent", "发给导师"),
         exported: milestone("exported", "aaaaaaaa", "exported", "申请 PDF")
@@ -586,7 +585,6 @@ describe("named version milestones", () => {
     const middle = commit("bbbbbbbb", "2026-07-28T12:00:00+09:00", "Middle");
     const oldest = commit("aaaaaaaa", "2026-07-27T12:00:00+09:00", "Oldest");
     const state: FileReviewState = {
-      bookmarks: {},
       milestones: {
         middle: milestone("middle", middle.hash, "sent", "后补记发送", "2026-07-01T00:00:00.000Z"),
         oldest: milestone("oldest", oldest.hash, "sent", "更早版本", "2026-07-30T00:00:00.000Z")
@@ -615,7 +613,6 @@ describe("named version milestones", () => {
     old.commitAuthoredAt = "2026-06-01T03:00:00.000Z";
     old.commitSubject = "Older delivery";
     const state: FileReviewState = {
-      bookmarks: {},
       milestones: { old }
     };
 
@@ -636,7 +633,6 @@ describe("named version milestones", () => {
     const newest = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Auto backup");
     const older = commit("aaaaaaaa", "2026-07-29T11:50:00+09:00", "Auto backup");
     const state: FileReviewState = {
-      bookmarks: {},
       milestones: {
         sent: milestone("sent", older.hash, "sent", "已发送")
       }
@@ -650,7 +646,7 @@ describe("named version milestones", () => {
   });
 
   it("moves the system review milestone instead of accumulating checkpoints", () => {
-    const state: FileReviewState = { bookmarks: {}, milestones: {} };
+    const state: FileReviewState = { milestones: {} };
     const first = commit("aaaaaaaa", "2026-07-28T12:00:00+09:00", "First");
     const second = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Second");
 
@@ -670,13 +666,11 @@ describe("named version milestones", () => {
 
   it("merges rename states without overwriting milestones at the destination path", () => {
     const source: FileReviewState = {
-      bookmarks: {},
       milestones: {
         sent: milestone("sent", "aaaaaaaa", "sent", "已发送")
       }
     };
     const target: FileReviewState = {
-      bookmarks: {},
       milestones: {
         confirmed: milestone("confirmed", "bbbbbbbb", "confirmed", "已确认")
       }
@@ -684,18 +678,16 @@ describe("named version milestones", () => {
 
     const merged = mergeFileReviewStates(source, target);
     expect(Object.keys(merged.milestones ?? {})).toEqual(["sent", "confirmed"]);
-    expect(Object.keys(merged.bookmarks)).toEqual(["aaaaaaaa", "bbbbbbbb"]);
+    expect(merged).not.toHaveProperty("bookmarks");
   });
 
   it("preserves both rename milestones when their stored IDs collide", () => {
     const source: FileReviewState = {
-      bookmarks: {},
       milestones: {
         shared: milestone("shared", "aaaaaaaa", "sent", "已发送")
       }
     };
     const target: FileReviewState = {
-      bookmarks: {},
       milestones: {
         shared: milestone("shared", "bbbbbbbb", "confirmed", "已确认")
       }
@@ -734,19 +726,16 @@ describe("named version milestones", () => {
     const unrelatedKey = reviewStateKey(context("Notes/Older/note.md"));
     const states: Record<string, FileReviewState> = {
       [sourceKey]: {
-        bookmarks: {},
         milestones: {
           shared: milestone("shared", "aaaaaaaa", "sent", "已发送")
         }
       },
       [destinationKey]: {
-        bookmarks: {},
         milestones: {
           shared: milestone("shared", "bbbbbbbb", "confirmed", "已确认")
         }
       },
       [unrelatedKey]: {
-        bookmarks: {},
         milestones: {
           stable: milestone("stable", "cccccccc", "custom", "不应移动")
         }
@@ -767,8 +756,8 @@ describe("named version milestones", () => {
   });
 
   it("keeps only the truly latest review checkpoint when rename states merge", () => {
-    const source: FileReviewState = { bookmarks: {}, milestones: {} };
-    const target: FileReviewState = { bookmarks: {}, milestones: {} };
+    const source: FileReviewState = { milestones: {} };
+    const target: FileReviewState = { milestones: {} };
     const sourceCommit = commit("aaaaaaaa", "2026-07-29T11:00:00+09:00", "Source");
     const targetCommit = commit("bbbbbbbb", "2026-07-29T12:00:00+09:00", "Target");
     setReviewCheckpointMilestone(
@@ -1009,7 +998,7 @@ describe("meaningful Git versions", () => {
       ["bbbbbbbb", "# Note\nSame content\n"],
       ["cccccccc", "# Note\nOld content\n"]
     ]);
-    const groups = groupEffectiveVersions(commits, { bookmarks: {} }, contents);
+    const groups = groupEffectiveVersions(commits, {}, contents);
 
     expect(groups).toHaveLength(2);
     expect(groups[0]?.commits).toHaveLength(2);
@@ -1024,7 +1013,6 @@ describe("meaningful Git versions", () => {
       commit("cccccccc", "2026-07-21T10:00:00+09:00", "Auto backup")
     ];
     const state = {
-      bookmarks: {},
       reviewCheckpoint: {
         commitHash: "bbbbbbbb",
         historicalPath: "Note.md",
@@ -1043,7 +1031,7 @@ describe("meaningful Git versions", () => {
       changeType: "C"
     };
     const earlier = commit("bbbbbbbb", "2026-07-21T10:10:00+09:00", "Auto backup");
-    const groups = groupEffectiveVersions([copied, earlier], { bookmarks: {} });
+    const groups = groupEffectiveVersions([copied, earlier], {});
 
     expect(groups).toHaveLength(2);
     expect(groups[0]).toMatchObject({
@@ -1288,7 +1276,7 @@ describe("full-vault review inbox", () => {
   it("keeps snooze and reviewed state stable across a plugin-data reload", () => {
     const item = mergeReviewInboxItems([committed], [working], (path) => path)[0]!;
     const workingFingerprint = contentFingerprint("working content");
-    const state = { bookmarks: {} };
+    const state = { milestones: {} };
 
     setReviewInboxItemSnoozed(state, "2026-07-25T12:00:00+09:00");
     const snoozedState = JSON.parse(JSON.stringify(state));

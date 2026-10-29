@@ -33,7 +33,6 @@ function commit(
 
 function state(commitHash?: string, workingFingerprint?: string): FileReviewState {
   return {
-    bookmarks: {},
     milestones: {},
     ...(commitHash
       ? {

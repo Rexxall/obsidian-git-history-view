@@ -125,15 +125,6 @@ export type VersionMilestoneKind =
   | "custom"
   | "review-checkpoint";
 
-/** @deprecated Kept as a v1 data projection for downgrade compatibility. */
-export interface VersionBookmark {
-  label: string;
-  createdAt: string;
-  kind?: VersionMilestoneKind;
-  note?: string;
-  historicalPath?: string;
-}
-
 export interface VersionMilestoneInput {
   label: string;
   kind: VersionMilestoneKind;
@@ -157,8 +148,6 @@ export interface FileReviewState {
   baselinePath?: string;
   milestones?: Record<string, VersionMilestone>;
   reviewCheckpointId?: string;
-  /** @deprecated v1 projection; milestones is the source of truth in schema v2. */
-  bookmarks: Record<string, VersionBookmark>;
   detailMode?: DetailMode;
   reviewCheckpoint?: ReviewCheckpoint;
   reviewedWorkingFingerprint?: string;
@@ -242,8 +231,6 @@ export interface RestoreOptions {
 export interface PersistedPluginData {
   schemaVersion?: number;
   settings?: Partial<GitNoteHistorySettings>;
-  /** @deprecated Migrated to undoStack on load. */
-  undoSnapshot?: UndoSnapshot | null;
   undoStack?: UndoSnapshot[];
   restoreReceipts?: RestoreReceipt[];
   recoveryBaskets?: Record<string, RecoveryBasketState>;

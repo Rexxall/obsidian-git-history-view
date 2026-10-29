@@ -67,9 +67,8 @@ export class ReviewAnnotationModal extends Modal {
           this.status = value as ReviewAnnotationStatus;
         }));
     new Setting(this.contentEl)
-      .addButton((button) => button
+      .addButton((button) => button.setDestructive()
         .setButtonText("删除")
-        .setWarning()
         .setDisabled(!this.current)
         .onClick(() => void this.submit(null)))
       .addButton((button) => {

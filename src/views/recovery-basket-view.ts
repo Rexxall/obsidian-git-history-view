@@ -428,7 +428,8 @@ export class GitRecoveryBasketView extends ItemView {
       async () => {
         await this.plugin.clearRecoveryBasket(this.filePath);
         await this.refresh();
-      }
+      },
+      true
     ).open();
   }
 

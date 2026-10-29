@@ -1,10 +1,18 @@
 import type {
   FileReviewState,
   GitCommitVersion,
-  VersionBookmark,
   VersionMilestone,
   VersionMilestoneKind
 } from "../models";
+
+/** A version bookmark as stored by schema v1; read once and turned into a milestone. */
+interface LegacyBookmark {
+  label?: string;
+  createdAt?: string;
+  kind?: VersionMilestoneKind;
+  note?: string;
+  historicalPath?: string;
+}
 
 export interface MilestonePreset {
   kind: VersionMilestoneKind;
@@ -106,7 +114,7 @@ function legacyBookmarkMilestone(
 ): VersionMilestone | null {
   const bookmark = typeof value === "string"
     ? { label: value, createdAt: "" }
-    : value as Partial<VersionBookmark> | null;
+    : value as LegacyBookmark | null;
   const label = typeof bookmark?.label === "string" ? bookmark.label.trim() : "";
   if (!label) return null;
   const createdAt = normalizedIso(bookmark?.createdAt, new Date(0).toISOString());
@@ -162,7 +170,7 @@ export function normalizeVersionMilestones(
 }
 
 export function milestonesForCommit(
-  state: Pick<FileReviewState, "milestones" | "bookmarks">,
+  state: Pick<FileReviewState, "milestones">,
   commitHash: string,
   options: { includeReviewCheckpoint?: boolean } = {}
 ): VersionMilestone[] {
@@ -177,15 +185,11 @@ export function milestonesForCommit(
       || right.createdAt.localeCompare(left.createdAt)
       || left.id.localeCompare(right.id)
     );
-  if (milestones.length > 0) return milestones;
-  const legacy = legacyBookmarkMilestone(commitHash, state.bookmarks[commitHash]);
-  return legacy && (includeReviewCheckpoint || legacy.kind !== "review-checkpoint")
-    ? [legacy]
-    : [];
+  return milestones;
 }
 
 export function hasNamedMilestone(
-  state: Pick<FileReviewState, "milestones" | "bookmarks">,
+  state: Pick<FileReviewState, "milestones">,
   commitHash: string
 ): boolean {
   return milestonesForCommit(state, commitHash, {
@@ -194,7 +198,7 @@ export function hasNamedMilestone(
 }
 
 export function milestoneSearchText(
-  state: Pick<FileReviewState, "milestones" | "bookmarks">,
+  state: Pick<FileReviewState, "milestones">,
   commitHash: string
 ): string {
   return milestonesForCommit(state, commitHash)
@@ -209,18 +213,15 @@ export function milestoneSearchText(
 
 export function namedMilestoneCommits(
   commitsNewestFirst: GitCommitVersion[],
-  state: Pick<FileReviewState, "milestones" | "bookmarks">
+  state: Pick<FileReviewState, "milestones">
 ): GitCommitVersion[] {
   return commitsNewestFirst.filter((commit) => hasNamedMilestone(state, commit.hash));
 }
 
 export function namedMilestoneEvents(
-  state: Pick<FileReviewState, "milestones" | "bookmarks">
+  state: Pick<FileReviewState, "milestones">
 ): VersionMilestone[] {
-  return Object.values(normalizeVersionMilestones(
-    state.milestones,
-    state.bookmarks
-  ))
+  return Object.values(state.milestones ?? {})
     .filter((milestone) => milestone.kind !== "review-checkpoint")
     .sort((left, right) =>
       right.commitAuthoredAt.localeCompare(left.commitAuthoredAt)
@@ -230,7 +231,7 @@ export function namedMilestoneEvents(
 }
 
 export function storedMilestoneCommitSnapshots(
-  state: Pick<FileReviewState, "milestones" | "bookmarks">,
+  state: Pick<FileReviewState, "milestones">,
   knownCommits: readonly GitCommitVersion[] = []
 ): GitCommitVersion[] {
   const knownHashes = new Set(knownCommits.map((commit) => commit.hash));
@@ -265,7 +266,7 @@ export function storedMilestoneCommitSnapshots(
 
 export function historyWithStoredMilestones(
   commitsNewestFirst: GitCommitVersion[],
-  state: Pick<FileReviewState, "milestones" | "bookmarks">
+  state: Pick<FileReviewState, "milestones">
 ): GitCommitVersion[] {
   return [
     ...commitsNewestFirst,
@@ -275,7 +276,7 @@ export function historyWithStoredMilestones(
 
 export function previousNamedMilestone(
   commitsNewestFirst: GitCommitVersion[],
-  state: Pick<FileReviewState, "milestones" | "bookmarks">,
+  state: Pick<FileReviewState, "milestones">,
   targetHash?: string,
   kind?: VersionMilestoneKind
 ): { commit: GitCommitVersion; milestone: VersionMilestone } | undefined {
@@ -293,28 +294,6 @@ export function previousNamedMilestone(
   return undefined;
 }
 
-export function projectMilestonesToBookmarks(
-  milestones: Record<string, VersionMilestone>
-): Record<string, VersionBookmark> {
-  const projection: Record<string, VersionBookmark> = {};
-  const ordered = Object.values(milestones)
-    .filter((milestone) => milestone.kind !== "review-checkpoint")
-    .sort((left, right) =>
-      left.occurredAt.localeCompare(right.occurredAt)
-      || left.createdAt.localeCompare(right.createdAt)
-    );
-  for (const milestone of ordered) {
-    projection[milestone.commitHash] = {
-      label: milestone.label,
-      createdAt: milestone.createdAt,
-      kind: milestone.kind,
-      historicalPath: milestone.historicalPath,
-      ...(milestone.note ? { note: milestone.note } : {})
-    };
-  }
-  return projection;
-}
-
 export function setReviewCheckpointMilestone(
   state: FileReviewState,
   commit: Pick<GitCommitVersion, "hash" | "historicalPath" | "authoredAt" | "subject">,
@@ -322,10 +301,7 @@ export function setReviewCheckpointMilestone(
   workingFingerprint?: string
 ): void {
   const id = state.reviewCheckpointId ?? "review-checkpoint";
-  const milestones = state.milestones ??= normalizeVersionMilestones(
-    undefined,
-    state.bookmarks
-  );
+  const milestones = state.milestones ??= {};
   milestones[id] = {
     id,
     kind: "review-checkpoint",
@@ -347,7 +323,6 @@ export function setReviewCheckpointMilestone(
     milestoneId: id,
     ...(workingFingerprint ? { workingFingerprint } : {})
   };
-  state.bookmarks = projectMilestonesToBookmarks(milestones);
 }
 
 export function clearReviewCheckpointMilestone(state: FileReviewState): void {
@@ -356,5 +331,4 @@ export function clearReviewCheckpointMilestone(state: FileReviewState): void {
   }
   delete state.reviewCheckpointId;
   delete state.reviewCheckpoint;
-  state.bookmarks = projectMilestonesToBookmarks(state.milestones ?? {});
 }

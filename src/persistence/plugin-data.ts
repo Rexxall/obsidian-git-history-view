@@ -4,13 +4,9 @@ import type {
   GitRepositoryContext,
   PersistedPluginData,
   ReviewCheckpoint,
-  VersionBookmark,
   VersionMilestone
 } from "../models";
-import {
-  normalizeVersionMilestones,
-  projectMilestonesToBookmarks
-} from "../history/milestones";
+import { normalizeVersionMilestones } from "../history/milestones";
 import type {
   RecoveryBasketItem,
   RecoveryBasketState,
@@ -349,7 +345,6 @@ export function normalizeFileReviewState(value: unknown): FileReviewState {
   }
 
   const state: FileReviewState = {
-    bookmarks: projectMilestonesToBookmarks(milestones),
     milestones
   };
   if (typeof candidate.baselineHash === "string") state.baselineHash = candidate.baselineHash;
@@ -498,11 +493,39 @@ export function mergeFileReviewStates(
   return {
     ...source,
     ...target,
-    bookmarks: projectMilestonesToBookmarks(milestones),
     milestones,
     ...(reviewCheckpoint ? { reviewCheckpoint } : {}),
     ...(reviewCheckpointId ? { reviewCheckpointId } : {})
   };
+}
+
+/**
+ * Review states are keyed by the repository's absolute path. When a vault is
+ * copied to another computer or user folder, the old keys no longer match;
+ * move every state whose old root has the same folder name and no longer
+ * exists onto the current root, merging with any state already there.
+ */
+export function rehomeMovedRepositoryStates(
+  states: Record<string, FileReviewState>,
+  currentRoot: string,
+  rootExists: (root: string) => boolean
+): boolean {
+  const currentName = path.basename(currentRoot);
+  const moves = Object.entries(states).flatMap(([key, state]) => {
+    const separatorIndex = key.indexOf(REVIEW_STATE_KEY_SEPARATOR);
+    if (separatorIndex < 0) return [];
+    const root = key.slice(0, separatorIndex);
+    if (root === currentRoot || path.basename(root) !== currentName || rootExists(root)) return [];
+    const relativePath = key.slice(separatorIndex + REVIEW_STATE_KEY_SEPARATOR.length);
+    return [{ sourceKey: key, targetKey: [currentRoot, relativePath].join(REVIEW_STATE_KEY_SEPARATOR), state }];
+  });
+  if (moves.length === 0) return false;
+  for (const move of moves) delete states[move.sourceKey];
+  for (const move of moves) {
+    const target = states[move.targetKey];
+    states[move.targetKey] = target ? mergeFileReviewStates(move.state, target) : move.state;
+  }
+  return true;
 }
 
 export function migrateReviewStatePath(
@@ -552,8 +575,3 @@ export function migrateReviewStatePath(
   return true;
 }
 
-export function bookmarkProjection(
-  state: FileReviewState
-): Record<string, VersionBookmark> {
-  return projectMilestonesToBookmarks(state.milestones ?? {});
-}

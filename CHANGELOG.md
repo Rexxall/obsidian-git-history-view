@@ -15,7 +15,9 @@
 - The optional *Paper and ink* look and its setting are removed; the plugin follows Obsidian's light and dark mode.
 - With *Increase contrast*, the faintest text (date groups, the search placeholder) is shown at secondary strength.
 - `main.js` is no longer committed; it is the output of `npm run build` and is attached to each release.
-- Minimum Obsidian version is now 1.8.7.
+- Settings use Obsidian's declarative settings (1.13), so every option shows up in settings search. Delete and clear buttons use `setDestructive`; other confirmations are plain primary buttons.
+- Upgrading keeps everything from 0.7.x: settings, local snapshots and review states load unchanged; review states saved under another computer's vault path move to this vault once; the old bookmark copy of milestones (kept only for downgrades) is dropped, and v1 bookmarks still become milestones.
+- Minimum Obsidian version is now 1.13.0.
 
 ## 0.9.0 — 2026-10-26
 

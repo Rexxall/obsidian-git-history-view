@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import {
   type Command,
@@ -59,13 +60,13 @@ import { RestoreHistoryModal } from "./ui/restore-history-modal";
 import { contentFingerprint } from "./history/version-groups";
 import {
   clearReviewCheckpointMilestone,
-  projectMilestonesToBookmarks,
   setReviewCheckpointMilestone
 } from "./history/milestones";
 import {
   CURRENT_DATA_SCHEMA_VERSION,
   migratePluginData,
-  migrateReviewStatePath
+  migrateReviewStatePath,
+  rehomeMovedRepositoryStates
 } from "./persistence/plugin-data";
 import { BlockAgeModal } from "./ui/block-age-modal";
 import {
@@ -2135,7 +2136,24 @@ export default class GitNoteHistoryPlugin extends Plugin {
     // Backups usually commit from outside Obsidian; re-check when the window comes back.
     this.registerDomEvent(window, "focus", () => this.refreshNoteStatus());
     this.registerInterval(window.setInterval(() => this.refreshNoteStatus(), 5 * 60_000));
-    this.app.workspace.onLayoutReady(() => this.refreshNoteStatus());
+    this.app.workspace.onLayoutReady(() => {
+      this.refreshNoteStatus();
+      void this.rehomeReviewStates();
+    });
+  }
+
+  /** Review states saved on another computer carry its vault path; move them onto this repository once. */
+  private async rehomeReviewStates(): Promise<void> {
+    let repositoryRoot: string;
+    try {
+      ({ repositoryRoot } = await this.gitClient.resolveRepositoryContext());
+    } catch {
+      return;
+    }
+    await this.mutateReviewData(
+      (states) => rehomeMovedRepositoryStates(states, repositoryRoot, (root) => existsSync(root)),
+      (changed) => changed
+    );
   }
 
   private scheduleNoteStatus(): void {
@@ -2313,7 +2331,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     const key = this.reviewStateKey(context);
     const existing = states[key];
     if (existing) return existing;
-    const state: FileReviewState = { bookmarks: {}, milestones: {} };
+    const state: FileReviewState = { milestones: {} };
     states[key] = state;
     return state;
   }
@@ -2704,11 +2722,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
           source: "local-user",
           ...(milestone.note?.trim() ? { note: milestone.note.trim() } : {})
         };
-        state.bookmarks = projectMilestonesToBookmarks(milestones);
         return id;
       }
       if (milestoneId) delete milestones[milestoneId];
-      state.bookmarks = projectMilestonesToBookmarks(milestones);
       return null;
     });
   }
@@ -2738,7 +2754,6 @@ export default class GitNoteHistoryPlugin extends Plugin {
           changed = true;
         }
       }
-      if (changed) state.bookmarks = projectMilestonesToBookmarks(milestones);
       return changed;
     }, (changed) => changed);
   }
@@ -3060,8 +3075,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
         ? loadedSettings.historyGeneratedProperties
         : DEFAULT_SETTINGS.historyGeneratedProperties
     };
-    const legacy = data?.undoSnapshot;
-    this.undoStack = (data?.undoStack ?? (legacy ? [legacy] : [])).map((snapshot, index) => ({
+    this.undoStack = (data?.undoStack ?? []).map((snapshot, index) => ({
       ...snapshot,
       id: snapshot.id || `legacy-${index}-${snapshot.createdAt}`,
       scope: snapshot.scope ?? "file"

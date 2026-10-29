@@ -291,7 +291,8 @@ export class GitHistorySourceView extends ItemView {
               version.sourceReference ?? version.id.replace(/^local-snapshot:/u, "")
             );
             await this.refresh();
-          }
+          },
+          true
         ).open();
       });
     }

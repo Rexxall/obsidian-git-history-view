@@ -51,7 +51,7 @@ Looks: a light, Apple-style "glass" interface. The timeline, cards and diffs are
 Language: commands, menus, settings and the status bar follow Obsidian's language (Chinese or English). The timeline, compare and restore views are currently in Simplified Chinese; an English version of those views is planned.
 
 
-Requirements: Obsidian 1.8 or later on macOS, Windows or Linux; `git` on your PATH (or set the path in settings).
+Requirements: Obsidian 1.13 or later on macOS, Windows or Linux; `git` on your PATH (or set the path in settings).
 
 ## Safety and privacy
 
