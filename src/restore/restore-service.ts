@@ -6,13 +6,14 @@ import type {
   RestoreReceipt,
   UndoSnapshot
 } from "../models";
+import { tr } from "../i18n";
 
 const MAX_UNDO_STEPS = 12;
 const MAX_RECEIPTS = 60;
 
 export class ConcurrentNoteChangeError extends Error {
   constructor() {
-    super("笔记在恢复期间发生了新修改，已停止恢复以避免覆盖内容。");
+    super(tr("笔记在恢复期间发生了新修改，已停止恢复以避免覆盖内容。", "The note changed during the restore, so it stopped to avoid overwriting."));
     this.name = "ConcurrentNoteChangeError";
   }
 }
@@ -106,7 +107,7 @@ export class RestoreService {
       throw new ConcurrentNoteChangeError();
     }
     if (before === targetContent) {
-      new Notice("当前笔记已经与目标版本相同。");
+      new Notice(tr("当前笔记已经与目标版本相同。", "The note already matches the target version."));
       return false;
     }
 
@@ -152,7 +153,7 @@ export class RestoreService {
         });
       } catch (cleanupError) {
         throw new Error(
-          `笔记恢复未完成，且待处理记录清理失败：${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`
+          tr(`笔记恢复未完成，且待处理记录清理失败：${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`, `The restore did not finish, and cleaning up the pending record failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
         );
       }
       throw error;
@@ -173,12 +174,12 @@ export class RestoreService {
       }, (changed) => changed);
     } catch (error) {
       new Notice(
-        `恢复已完成，但旧恢复记录未能整理：${error instanceof Error ? error.message : String(error)}`,
+        tr(`恢复已完成，但旧恢复记录未能整理：${error instanceof Error ? error.message : String(error)}`, `The restore finished, but old restore records could not be tidied: ${error instanceof Error ? error.message : String(error)}`),
         9000
       );
     }
 
-    new Notice(`已${normalized.label}；可撤销“${normalized.label}”。`, 7000);
+    new Notice(tr(`已${normalized.label}；可撤销“${normalized.label}”。`, `${normalized.label} done; you can undo "${normalized.label}".`), 7000);
     return true;
   }
 
@@ -189,15 +190,15 @@ export class RestoreService {
   private async performUndoLastRestore(): Promise<TFile> {
     const stack = [...this.persistence.getStack()];
     const snapshot = stack.at(-1);
-    if (!snapshot) throw new UndoUnavailableError("没有可以撤销的 Git 恢复操作。");
+    if (!snapshot) throw new UndoUnavailableError(tr("没有可以撤销的 Git 恢复操作。", "No Git restore to undo."));
 
     const file = this.app.vault.getFileByPath(snapshot.filePath);
-    if (!file) throw new UndoUnavailableError(`找不到原笔记：${snapshot.filePath}`);
+    if (!file) throw new UndoUnavailableError(tr(`找不到原笔记：${snapshot.filePath}`, `Original note not found: ${snapshot.filePath}`));
 
     const current = await this.app.vault.read(file);
     if (current !== snapshot.expectedCurrentContent) {
       throw new UndoUnavailableError(
-        `“${snapshot.label}”之后笔记又发生了修改。为避免覆盖新内容，自动撤销已停止；恢复记录仍然保留。`
+        tr(`“${snapshot.label}”之后笔记又发生了修改。为避免覆盖新内容，自动撤销已停止；恢复记录仍然保留。`, `The note changed after "${snapshot.label}". To avoid overwriting new content, automatic undo stopped; the restore record is kept.`)
       );
     }
 
@@ -221,14 +222,14 @@ export class RestoreService {
         });
       } catch (compensationError) {
         throw new Error(
-          `笔记内容已经撤销，但撤销记录保存失败，且因后续修改无法自动复原：${compensationError instanceof Error ? compensationError.message : String(compensationError)}`
+          tr(`笔记内容已经撤销，但撤销记录保存失败，且因后续修改无法自动复原：${compensationError instanceof Error ? compensationError.message : String(compensationError)}`, `The note was undone, but saving the undo record failed and later edits prevent restoring it automatically: ${compensationError instanceof Error ? compensationError.message : String(compensationError)}`)
         );
       }
       throw new Error(
-        `撤销记录保存失败，笔记已安全恢复到撤销前内容：${historyError instanceof Error ? historyError.message : String(historyError)}`
+        tr(`撤销记录保存失败，笔记已安全恢复到撤销前内容：${historyError instanceof Error ? historyError.message : String(historyError)}`, `Saving the undo record failed; the note was safely put back as it was before the undo: ${historyError instanceof Error ? historyError.message : String(historyError)}`)
       );
     }
-    new Notice(`已撤销：${snapshot.label}。`);
+    new Notice(tr(`已撤销：${snapshot.label}。`, `Undone: ${snapshot.label}.`));
     return file;
   }
 

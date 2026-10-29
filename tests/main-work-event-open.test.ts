@@ -124,8 +124,10 @@ vi.mock("../src/settings", () => ({
 }));
 vi.mock("../src/views/history-view", () => ({
   GIT_NOTE_HISTORY_VIEW_TYPE: "git-note-history",
+  GIT_START_GUIDE_URL: "https://example.test/guide",
   GitNoteHistoryView: class {}
 }));
+vi.mock("../src/ui/demo-modal", () => ({ HistoryDemoModal: class {} }));
 vi.mock("../src/views/knowledge-graph-view", () => ({
   GIT_KNOWLEDGE_GRAPH_VIEW_TYPE: "git-knowledge-graph-time-machine",
   GitKnowledgeGraphView: class {}

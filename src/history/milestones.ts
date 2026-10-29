@@ -4,6 +4,7 @@ import type {
   VersionMilestone,
   VersionMilestoneKind
 } from "../models";
+import { tr } from "../i18n";
 
 /** A version bookmark as stored by schema v1; read once and turned into a milestone. */
 interface LegacyBookmark {
@@ -22,13 +23,13 @@ export interface MilestonePreset {
 }
 
 export const MILESTONE_PRESETS: readonly MilestonePreset[] = [
-  { kind: "sent", label: "已发送", icon: "send", selectable: true },
-  { kind: "submitted", label: "材料已提交", icon: "badge-check", selectable: true },
-  { kind: "confirmed", label: "已确认", icon: "circle-check-big", selectable: true },
-  { kind: "exported", label: "已导出", icon: "file-down", selectable: true },
-  { kind: "important-draft", label: "重要草稿", icon: "file-pen-line", selectable: true },
-  { kind: "custom", label: "自定义", icon: "bookmark", selectable: true },
-  { kind: "review-checkpoint", label: "复查点", icon: "inbox", selectable: false }
+  { kind: "sent", label: tr("已发送", "Sent"), icon: "send", selectable: true },
+  { kind: "submitted", label: tr("材料已提交", "Submitted"), icon: "badge-check", selectable: true },
+  { kind: "confirmed", label: tr("已确认", "Confirmed"), icon: "circle-check-big", selectable: true },
+  { kind: "exported", label: tr("已导出", "Exported"), icon: "file-down", selectable: true },
+  { kind: "important-draft", label: tr("重要草稿", "Important draft"), icon: "file-pen-line", selectable: true },
+  { kind: "custom", label: tr("自定义", "Custom"), icon: "bookmark", selectable: true },
+  { kind: "review-checkpoint", label: tr("复查点", "Review point"), icon: "inbox", selectable: false }
 ] as const;
 
 export const USER_MILESTONE_PRESETS = MILESTONE_PRESETS.filter(
@@ -44,7 +45,7 @@ const VALID_KINDS = new Set<VersionMilestoneKind>(
 );
 
 export function milestoneKindLabel(kind: VersionMilestoneKind): string {
-  return PRESET_BY_KIND.get(kind)?.label ?? "自定义";
+  return PRESET_BY_KIND.get(kind)?.label ?? tr("自定义", "Custom");
 }
 
 export function milestoneKindIcon(kind: VersionMilestoneKind): string {

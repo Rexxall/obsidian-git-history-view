@@ -1,5 +1,6 @@
 import { applyPatch, diffArrays, diffLines, diffWordsWithSpace, structuredPatch } from "diff";
 import type { RecoveryPatchHunk } from "../recovery-basket/types";
+import { tr } from "../i18n";
 
 const CONTEXT_LINE_COUNT = 3;
 const COLLAPSE_THRESHOLD = 14;
@@ -100,15 +101,15 @@ function compactPropertyBlock(
   const stateLabel = state === "same"
     ? ""
     : state === "before"
-      ? " · 修改前"
+      ? tr(" · 修改前", " · before")
       : state === "after"
-        ? " · 修改后"
+        ? tr(" · 修改后", " · after")
         : state === "removed"
-          ? " · 删除前"
-          : " · 新增";
+          ? tr(" · 删除前", " · before removal")
+          : tr(" · 新增", " · added");
   const lineCount = block.end - block.start;
-  const size = `${block.value.length} 字符${lineCount > 1 ? ` · ${lineCount} 行` : ""}`;
-  lines[block.start] = `${block.name}: 〈长属性已折叠${stateLabel} · ${size}〉`;
+  const size = tr(`${block.value.length} 字符${lineCount > 1 ? ` · ${lineCount} 行` : ""}`, `${block.value.length} characters${lineCount > 1 ? ` · ${lineCount} lines` : ""}`);
+  lines[block.start] = tr(`${block.name}: 〈长属性已折叠${stateLabel} · ${size}〉`, `${block.name}: 〈long property folded${stateLabel} · ${size}〉`);
   for (let index = block.start + 1; index < block.end; index += 1) lines[index] = "";
 }
 
@@ -224,15 +225,15 @@ function renderNoChanges(
 ): void {
   const empty = container.createDiv({ cls: "git-note-history-no-changes" });
   empty.createDiv({ cls: "git-note-history-no-changes-icon", text: "✓" });
-  empty.createEl("h4", { text: "两个版本内容一致" });
+  empty.createEl("h4", { text: tr("两个版本内容一致", "Both versions are identical") });
   const ignored = [
-    options.ignoreWhitespace ? "空格" : "",
-    options.ignoreBlankLines ? "空行" : ""
-  ].filter(Boolean).join("和");
+    options.ignoreWhitespace ? tr("空格", "whitespace") : "",
+    options.ignoreBlankLines ? tr("空行", "blank lines") : ""
+  ].filter(Boolean).join(tr("和", " and "));
   empty.createEl("p", {
     text: ignored
-      ? `忽略${ignored}后没有检测到文本变化。可以切换到“双预览”查看完整内容。`
-      : "没有需要审阅的文本变化。可以切换到“双预览”查看完整内容。"
+      ? tr(`忽略${ignored}后没有检测到文本变化。可以切换到“双预览”查看完整内容。`, `No text changes after ignoring ${ignored}. Switch to "Two previews" to see everything.`)
+      : tr("没有需要审阅的文本变化。可以切换到“双预览”查看完整内容。", "No text changes to review. Switch to \"Two previews\" to see everything.")
   });
 }
 
@@ -263,7 +264,7 @@ function renderUnchangedBlock(container: HTMLElement, value: string): void {
   appendTextBlock(container, leading, "is-unchanged");
   const reveal = container.createEl("button", {
     cls: "git-note-history-diff-reveal",
-    text: `展开 ${lines.length - CONTEXT_LINE_COUNT * 2} 行未修改内容`
+    text: tr(`展开 ${lines.length - CONTEXT_LINE_COUNT * 2} 行未修改内容`, `Show ${lines.length - CONTEXT_LINE_COUNT * 2} unchanged lines`)
   });
   appendTextBlock(container, trailing, "is-unchanged");
 
@@ -289,36 +290,36 @@ function renderHunkActions(
   if (targets.length === 0) return;
 
   const section = container.createDiv({ cls: "git-note-history-hunks" });
-  section.createEl("h6", { text: "局部恢复" });
+  section.createEl("h6", { text: tr("局部恢复", "Partial restore") });
 
   targets.forEach((target) => {
     const card = section.createDiv({ cls: "git-note-history-hunk" });
     const header = card.createDiv({ cls: "git-note-history-hunk-header" });
-    header.createSpan({ text: `变更块 ${target.hunkNumber} · 当前第 ${target.currentStart} 行附近` });
+    header.createSpan({ text: tr(`变更块 ${target.hunkNumber} · 当前第 ${target.currentStart} 行附近`, `Change ${target.hunkNumber} · near line ${target.currentStart}`) });
 
     const actions = header.createDiv({ cls: "git-note-history-hunk-actions" });
     if (options.onLocateLine) {
-      const locate = actions.createEl("button", { text: "定位" });
+      const locate = actions.createEl("button", { text: tr("定位", "Locate") });
       locate.addEventListener("click", () => void options.onLocateLine?.(target.currentStart));
     }
 
     if (options.onRestoreHunk) {
-      const restore = actions.createEl("button", { cls: "mod-warning", text: "恢复此块" });
+      const restore = actions.createEl("button", { cls: "mod-warning", text: tr("恢复此块", "Restore this change") });
       restore.addEventListener("click", () => void options.onRestoreHunk?.(target.targetContent, target.hunkNumber));
     }
     if (options.onAddHunkToBasket) {
       const collect = actions.createEl("button", {
         cls: "git-note-history-add-to-basket",
-        text: "加入恢复篮子"
+        text: tr("加入恢复篮子", "Add to recovery basket")
       });
       collect.addEventListener("click", () =>
         void options.onAddHunkToBasket?.(target)
       );
     }
 
-    const copyCurrent = actions.createEl("button", { text: "复制当前块" });
+    const copyCurrent = actions.createEl("button", { text: tr("复制当前块", "Copy current") });
     copyCurrent.addEventListener("click", () => void navigator.clipboard.writeText(target.currentBlock));
-    const copyHistorical = actions.createEl("button", { text: "复制历史块" });
+    const copyHistorical = actions.createEl("button", { text: tr("复制历史块", "Copy past") });
     copyHistorical.addEventListener("click", () => void navigator.clipboard.writeText(target.historicalBlock));
 
     const preview = card.createEl("pre", { cls: "git-note-history-hunk-preview" });
@@ -341,7 +342,7 @@ export function renderUnifiedDiff(
   }
   container.createDiv({
     cls: "git-note-history-diff-legend",
-    text: "− 左侧版本　＋右侧版本；颜色之外同时保留符号提示"
+    text: tr("− 左侧版本　＋右侧版本；颜色之外同时保留符号提示", "− left version   + right version; symbols are shown as well as colour")
   });
 
   let changeIndex = 0;
@@ -569,7 +570,7 @@ export function renderSideBySideDiff(
   const renderOmitted = (count: number): void => {
     grid.createDiv({
       cls: "git-note-history-side-omitted",
-      text: `⋯ ${count} 行未变`
+      text: tr(`⋯ ${count} 行未变`, `⋯ ${count} unchanged ${count === 1 ? "line" : "lines"}`)
     });
   };
 
@@ -598,9 +599,9 @@ export function renderSideBySideDiff(
         for (let cursor = index; cursor < index + CONTEXT_LINE_COUNT; cursor += 1) renderRow(rows[cursor]!);
         const reveal = grid.createEl("button", {
           cls: "git-note-history-side-reveal",
-          text: `⋯ ${runLength - CONTEXT_LINE_COUNT * 2} 行未变`,
+          text: tr(`⋯ ${runLength - CONTEXT_LINE_COUNT * 2} 行未变`, `⋯ ${runLength - CONTEXT_LINE_COUNT * 2} unchanged lines`),
           attr: {
-            "aria-label": `展开 ${runLength - CONTEXT_LINE_COUNT * 2} 行未修改内容`
+            "aria-label": tr(`展开 ${runLength - CONTEXT_LINE_COUNT * 2} 行未修改内容`, `Show ${runLength - CONTEXT_LINE_COUNT * 2} unchanged lines`)
           }
         });
         reveal.addEventListener("click", () => renderRows(false));

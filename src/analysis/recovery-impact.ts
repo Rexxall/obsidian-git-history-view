@@ -4,6 +4,7 @@ import {
   isVaultTargetRelation,
   type NoteRelation
 } from "./link-impact";
+import { tr } from "../i18n";
 
 export interface IncomingKnowledgeReference {
   sourcePath: string;
@@ -158,7 +159,7 @@ export function buildRecoveryImpactWave(
       id: `missing:${relation.key}`,
       severity: attachment ? "danger" : "warning",
       kind: attachment ? "missing-attachment" : "missing-target",
-      title: attachment ? "附件已不存在" : "恢复后仍是断链",
+      title: attachment ? tr("附件已不存在", "Attachment no longer exists") : tr("恢复后仍是断链", "Still a broken link after restoring"),
       detail: `${relation.label}${relation.subpath ?? ""}`,
       relation
     });
@@ -169,8 +170,8 @@ export function buildRecoveryImpactWave(
       id: `incoming:${reference.sourcePath}:${reference.kind}:${reference.subpath ?? reference.viaAlias ?? ""}`,
       severity: "danger",
       kind: alias ? "broken-alias" : "broken-inbound-anchor",
-      title: alias ? "恢复会移除被引用的别名" : "恢复会移除被引用的锚点",
-      detail: `${reference.sourceLabel} · ${reference.kind === "embed" ? "嵌入" : "链接"}${reference.subpath ? ` ${reference.subpath}` : ""}${reference.viaAlias ? ` ${reference.viaAlias}` : ""}`,
+      title: alias ? tr("恢复会移除被引用的别名", "Restoring removes an alias other notes use") : tr("恢复会移除被引用的锚点", "Restoring removes an anchor other notes use"),
+      detail: `${reference.sourceLabel} · ${reference.kind === "embed" ? tr("嵌入", "embed") : tr("链接", "link")}${reference.subpath ? ` ${reference.subpath}` : ""}${reference.viaAlias ? ` ${reference.viaAlias}` : ""}`,
       sourcePath: reference.sourcePath
     });
   }
@@ -179,7 +180,7 @@ export function buildRecoveryImpactWave(
       id: `removed:${relation.key}`,
       severity: "info",
       kind: "removed-relation",
-      title: "当前关系会消失",
+      title: tr("当前关系会消失", "A current link will disappear"),
       detail: `${relation.label}${relation.subpath ?? ""}`,
       relation
     });
@@ -192,10 +193,10 @@ export function buildRecoveryImpactWave(
       ? "review"
       : "safe";
   const summary = severity === "danger"
-    ? `${brokenIncomingReferences.length} 条入站引用可能断裂，${missingAttachments.length} 个附件不存在`
+    ? tr(`${brokenIncomingReferences.length} 条入站引用可能断裂，${missingAttachments.length} 个附件不存在`, `${brokenIncomingReferences.length} incoming links may break, ${missingAttachments.length} attachments are missing`)
     : severity === "review"
-      ? `${restoredRelations.length} 个旧关系将恢复，${missingTargets.length} 个目标无法解析`
-      : `恢复 ${restoredRelations.length} 个旧关系，未发现新的知识网络风险`;
+      ? tr(`${restoredRelations.length} 个旧关系将恢复，${missingTargets.length} 个目标无法解析`, `${restoredRelations.length} old links come back, ${missingTargets.length} targets cannot be resolved`)
+      : tr(`恢复 ${restoredRelations.length} 个旧关系，未发现新的知识网络风险`, `${restoredRelations.length} old links come back; no new link risks found`);
 
   return {
     severity,

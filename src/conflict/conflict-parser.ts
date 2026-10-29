@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 export type ConflictChoice = "ancestor" | "ours" | "theirs" | "both";
 
 export interface ConflictHunk {
@@ -44,7 +45,7 @@ export function parseConflictDocument(content: string): ParsedConflictDocument {
     }
 
     const start = index;
-    const label = line.replace(/^<<<<<<<\s*/, "").trim() || "本地";
+    const label = line.replace(/^<<<<<<<\s*/, "").trim() || tr("本地", "Local");
     index += 1;
     const ours: string[] = [];
     const ancestor: string[] = [];

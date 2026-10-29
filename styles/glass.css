@@ -259,7 +259,7 @@
 .ap .git-note-history-date-group > :first-child:not(.git-note-history-commit) {
   padding: var(--ap-s3) var(--ap-s3) var(--ap-s1);
   font: var(--ap-caption);
-  color: var(--ap-label-3);
+  color: var(--ap-label-2);
 }
 
 .ap .git-note-history-commit {
@@ -341,7 +341,14 @@
   box-shadow: 0 0 0 2px var(--ap-page);
 }
 
+.ap .git-note-history-action-bar {
+  flex-wrap: wrap;
+}
+
+/* Longer labels (English) wrap onto two rows instead of being cut off at the left edge. */
 .ap .git-note-history-action-bar button {
+  flex: 1 1 auto;
+  min-width: 0;
   padding-block: 6px;
 }
 

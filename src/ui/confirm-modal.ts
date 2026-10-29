@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from "obsidian";
+import { tr } from "../i18n";
 
 export class ConfirmActionModal extends Modal {
   constructor(
@@ -19,7 +20,7 @@ export class ConfirmActionModal extends Modal {
 
     new Setting(this.contentEl)
       .addButton((button) =>
-        button.setButtonText("取消").onClick(() => {
+        button.setButtonText(tr("取消", "Cancel")).onClick(() => {
           this.close();
         })
       )

@@ -1,4 +1,5 @@
 import type { GitCommitVersion, VersionReference } from "../models";
+import { tr } from "../i18n";
 
 export type VersionDirection = -1 | 1;
 export type HistoryActivationMode = "detail" | "preview";
@@ -38,7 +39,7 @@ export function buildVersionSequence(
   });
   return [
     ...chronological.map((commit): VersionReference => ({ kind: "commit", commit })),
-    { kind: "working", label: "当前工作区" }
+    { kind: "working", label: tr("当前工作区", "Working copy") }
   ];
 }
 

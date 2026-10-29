@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0 — 2026-10-30
+
+- **Why there is no history:** the sidebar tells apart a vault outside any Git repository, a repository without commits, a note Git does not track, a note excluded by an ignore rule (naming the rule), a staged but uncommitted note, a missing Git program and a note outside the detected repository. Each case offers one read-only next step; the plugin still never initialises a repository or commits.
+- **Example:** new command *See an example (no repository needed)*, also in the sidebar menu and offered when there is no Git history: three pre-written versions of a note, compared side by side or unified and restored in memory, marked as a demo.
+- **Stop and retry:** reading history and searching past content can be stopped; a stopped read offers *Read again*.
+- **English interface:** the timeline, compare and restore views, conflict resolver, paragraph history, milestones, errors and empty states follow Obsidian's language. Lab views stay in Chinese for now.
+- **Themes:** checked with Default, Minimal, Blue Topaz and AnuPpuccin in light and dark. Added and removed counts, status labels and date groups are now readable on light themes; the view title no longer takes the theme's heading colour and is hidden in a narrow sidebar instead of wrapping; the buttons at the bottom of the sidebar wrap instead of being cut off; the selected version in the example is highlighted inside dialogs.
+- **README:** English and Chinese versions with new screenshots, a "Starting with Git" section, and what the plugin needs and costs up front.
+
 ## 0.10.0 — 2026-10-29
 
 - **Status bar:** shows how long ago the active note was last committed, with a dot when it has uncommitted edits and a warning when it has a merge conflict. Click it to open the timeline. Can be turned off in settings.

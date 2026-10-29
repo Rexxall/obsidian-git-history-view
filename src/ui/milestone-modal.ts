@@ -14,6 +14,7 @@ import {
   inferMilestoneKind,
   milestoneKindLabel
 } from "../history/milestones";
+import { tr } from "../i18n";
 
 function localDateTimeValue(iso: string): string {
   const date = new Date(iso);
@@ -48,10 +49,10 @@ export class VersionMilestoneModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ap", "ap-modal");
-    this.setTitle(this.current ? "编辑里程碑" : "命名这个版本");
+    this.setTitle(this.current ? tr("编辑里程碑", "Edit milestone") : tr("命名这个版本", "Name this version"));
     this.contentEl.createDiv({
       cls: "git-note-history-milestone-intro",
-      text: "用现实中的事件记住重要版本。里程碑只保存在插件本地，不修改笔记或 Git commit。"
+      text: tr("用现实中的事件记住重要版本。里程碑只保存在插件本地，不修改笔记或 Git commit。", "Remember important versions by real events. Milestones are kept only in the plugin and never change the note or Git commits.")
     });
 
     const presets = this.contentEl.createDiv({ cls: "git-note-history-milestone-presets" });
@@ -78,12 +79,12 @@ export class VersionMilestoneModal extends Modal {
     }
 
     new Setting(this.contentEl)
-      .setName("名称")
-      .setDesc("时间线会优先显示这个名称。")
+      .setName(tr("名称", "Name"))
+      .setDesc(tr("时间线会优先显示这个名称。", "The timeline shows this name first."))
       .addText((text) => {
         this.labelInput = text;
         text
-          .setPlaceholder("例如：发给导师的版本")
+          .setPlaceholder(tr("例如：发给导师的版本", "For example: version sent to my supervisor"))
           .setValue(this.label)
           .onChange((value) => {
             this.label = value.trim();
@@ -93,11 +94,11 @@ export class VersionMilestoneModal extends Modal {
       });
 
     new Setting(this.contentEl)
-      .setName("备注")
-      .setDesc("可选，例如接收人、申请项目或导出用途。")
+      .setName(tr("备注", "Note"))
+      .setDesc(tr("可选，例如接收人、申请项目或导出用途。", "Optional, for example recipient, application or export purpose."))
       .addText((text) => {
         text
-          .setPlaceholder("仅在展开详情和搜索中使用")
+          .setPlaceholder(tr("仅在展开详情和搜索中使用", "Used only in details and search"))
           .setValue(this.note)
           .onChange((value) => {
             this.note = value.trim();
@@ -105,8 +106,8 @@ export class VersionMilestoneModal extends Modal {
       });
 
     new Setting(this.contentEl)
-      .setName("事件时间")
-      .setDesc("例如实际发送、提交或确认的时间，可以补记过去发生的事件。")
+      .setName(tr("事件时间", "Event time"))
+      .setDesc(tr("例如实际发送、提交或确认的时间，可以补记过去发生的事件。", "When it was actually sent, submitted or confirmed; past events can be added later."))
       .addText((text) => {
         text.inputEl.type = "datetime-local";
         text.inputEl.required = true;
@@ -120,7 +121,7 @@ export class VersionMilestoneModal extends Modal {
               this.occurredAt = new Date(timestamp).toISOString();
             }
             this.errorEl?.setText(
-              this.occurredAtValid ? "" : "请填写有效的事件时间。"
+              this.occurredAtValid ? "" : tr("请填写有效的事件时间。", "Enter a valid event time.")
             );
             this.updateSaveState();
           });
@@ -133,13 +134,13 @@ export class VersionMilestoneModal extends Modal {
     new Setting(this.contentEl)
       .addButton((button) => {
         button
-          .setButtonText("移除里程碑")
+          .setButtonText(tr("移除里程碑", "Remove milestone"))
           .setDisabled(!this.current)
           .onClick(() => void this.submit(null));
       })
       .addButton((button) => {
         button
-          .setButtonText("保存里程碑")
+          .setButtonText(tr("保存里程碑", "Save milestone"))
           .setCta()
           .onClick(() => {
             void this.submit({
@@ -174,7 +175,7 @@ export class VersionMilestoneModal extends Modal {
   private async submit(value: VersionMilestoneInput | null): Promise<void> {
     if (this.saving) return;
     if (value && !this.occurredAtValid) {
-      this.errorEl?.setText("请填写有效的事件时间。");
+      this.errorEl?.setText(tr("请填写有效的事件时间。", "Enter a valid event time."));
       return;
     }
     this.saving = true;

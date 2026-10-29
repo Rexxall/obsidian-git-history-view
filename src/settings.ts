@@ -148,7 +148,7 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
             name: tr("复查收件箱排除目录", "Folders excluded from the review inbox"),
             desc: tr("每行一个仓库内的相对目录；backup、插件配置和回收站等内容不会进入收件箱。", "One vault-relative folder per line. Backups, the config folder and the trash never enter the inbox."),
             render: (setting) => void setting.addTextArea((text) => text
-              .setPlaceholder("每行一个，例如 backup")
+              .setPlaceholder(tr("每行一个，例如 backup", "One per line, for example backup"))
               .setValue(settings.reviewExcludedPaths.join("\n"))
               .onChange(async (value) => {
                 settings.reviewExcludedPaths = normalizeReviewExcludedPaths([value]);
@@ -174,8 +174,8 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
                 await this.save(true);
               }))
           },
-          this.list("historyIgnoredProperties", tr("忽略的时间与维护属性", "Ignored maintenance properties"), tr("每行一个 Frontmatter 顶层属性。只有正文及其他属性完全一致时，相关版本才会归为噪音。", "One top-level property per line. A revision counts as noise only if the body and all other properties are identical."), "每行一个，例如 updated"),
-          this.list("historyGeneratedProperties", tr("自动生成属性", "Generated properties"), tr("每行一个生成字段。健康中心会与普通维护属性分开解释。", "One generated field per line. History health explains them separately from maintenance properties."), "每行一个，例如 checksum"),
+          this.list("historyIgnoredProperties", tr("忽略的时间与维护属性", "Ignored maintenance properties"), tr("每行一个 Frontmatter 顶层属性。只有正文及其他属性完全一致时，相关版本才会归为噪音。", "One top-level property per line. A revision counts as noise only if the body and all other properties are identical."), tr("每行一个，例如 updated", "One per line, for example updated")),
+          this.list("historyGeneratedProperties", tr("自动生成属性", "Generated properties"), tr("每行一个生成字段。健康中心会与普通维护属性分开解释。", "One generated field per line. History health explains them separately from maintenance properties."), tr("每行一个，例如 checksum", "One per line, for example checksum")),
           this.toggle("useBlameIgnoreRevs", tr("参考 .git-blame-ignore-revs", "Use .git-blame-ignore-revs"), tr("把仓库明确列出的版本作为可解释噪音参考；原始 Git 模式仍会显示它们。", "Treat revisions listed by the repository as explained noise. Raw Git still shows them."))
         ]
       }

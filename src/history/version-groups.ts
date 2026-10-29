@@ -6,6 +6,7 @@ import type {
 import {
   milestonesForCommit
 } from "./milestones";
+import { tr } from "../i18n";
 
 const SESSION_WINDOW_MS = 45 * 60 * 1000;
 const MAX_GROUP_CHANGE_SIZE = 160;
@@ -82,16 +83,16 @@ function summarize(
     includeReviewCheckpoint: false
   })[0];
   if (milestone) return milestone.label;
-  if (representative.changeType === "R") return "重命名笔记";
-  if (representative.changeType === "C") return "从其他笔记复制";
+  if (representative.changeType === "R") return tr("重命名笔记", "Renamed note");
+  if (representative.changeType === "C") return tr("从其他笔记复制", "Copied from another note");
   if (commits.length > 1) {
     const noise = duplicateCount + whitespaceOnlyCount;
     return noise === commits.length - 1
-      ? `保留 1 个有效内容 · 折叠 ${noise} 个重复版本`
-      : `合并 ${commits.length} 次连续编辑`;
+      ? tr(`保留 1 个有效内容 · 折叠 ${noise} 个重复版本`, `1 effective version kept · ${noise} duplicates folded`)
+      : tr(`合并 ${commits.length} 次连续编辑`, `${commits.length} consecutive edits merged`);
   }
-  if (whitespaceOnlyCount > 0) return "仅格式或空格变化";
-  return representative.subject || "无提交说明";
+  if (whitespaceOnlyCount > 0) return tr("仅格式或空格变化", "Formatting or whitespace only");
+  return representative.subject || tr("无提交说明", "No commit message");
 }
 
 export function groupEffectiveVersions(

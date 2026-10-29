@@ -1,4 +1,5 @@
 import { structuredPatch } from "diff";
+import { tr } from "../i18n";
 
 export interface ChangeMapItem {
   id: number;
@@ -50,7 +51,7 @@ export function buildChangeMap(before: string, after: string): ChangeMapItem[] {
       ?? headingAt(beforeHeadings, Math.max(1, hunk.oldStart));
     return {
       id: index + 1,
-      title: heading?.title ?? (hunk.newStart <= 1 || hunk.oldStart <= 1 ? "属性与文首" : "正文"),
+      title: heading?.title ?? (hunk.newStart <= 1 || hunk.oldStart <= 1 ? tr("属性与文首", "Properties and top") : tr("正文", "Text")),
       level: heading?.level ?? 1,
       oldStart: hunk.oldStart,
       oldLines: hunk.oldLines,

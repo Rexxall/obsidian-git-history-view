@@ -32,6 +32,9 @@ export interface GitRepositoryContext {
   repositoryRelativePath: string;
 }
 
+/** Why a note shows no versions; set only when the history is empty. */
+export type GitEmptyHistoryReason = "no-commits" | "untracked" | "ignored" | "staged" | "no-history";
+
 export interface GitFileHistory {
   context: GitRepositoryContext;
   branch: string;
@@ -39,6 +42,9 @@ export interface GitFileHistory {
   commits: GitCommitVersion[];
   hasMoreHistory: boolean;
   workingTreeStats: GitLineStats;
+  emptyReason?: GitEmptyHistoryReason;
+  /** `.gitignore:3:*.md` style location of the rule that excludes the note. */
+  ignoreRule?: string;
 }
 
 export interface GitNoteStatus {

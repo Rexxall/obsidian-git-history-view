@@ -1,5 +1,6 @@
 import { App, Modal, setIcon } from "obsidian";
 import type GitNoteHistoryPlugin from "../main";
+import { tr } from "../i18n";
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -20,15 +21,15 @@ export class RestoreHistoryModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ap", "ap-modal", "git-note-history-restore-history-modal");
-    this.setTitle("恢复历史与撤销栈");
+    this.setTitle(tr("恢复历史与撤销栈", "Restore history and undo stack"));
     const stack = this.plugin.restoreService.getUndoStack();
     const intro = this.contentEl.createDiv({ cls: "git-note-history-restore-history-intro" });
-    intro.createEl("strong", { text: `${stack.length} 步可以安全撤销` });
-    intro.createSpan({ text: " · 只有内容仍与恢复结果一致时才会自动撤销。" });
+    intro.createEl("strong", { text: tr(`${stack.length} 步可以安全撤销`, `${stack.length} steps can be undone safely`) });
+    intro.createSpan({ text: tr(" · 只有内容仍与恢复结果一致时才会自动撤销。", " · Undo runs automatically only while the content still matches the restore result.") });
 
     const receipts = this.plugin.restoreService.getReceipts();
     if (receipts.length === 0) {
-      this.contentEl.createDiv({ cls: "git-note-history-empty", text: "还没有恢复记录。" });
+      this.contentEl.createDiv({ cls: "git-note-history-empty", text: tr("还没有恢复记录。", "No restore records yet.") });
       return;
     }
     const list = this.contentEl.createDiv({ cls: "git-note-history-receipt-list" });
@@ -43,7 +44,7 @@ export class RestoreHistoryModal extends Modal {
       meta.createSpan({ text: formatDate(receipt.createdAt) });
       meta.createSpan({ text: receipt.scope });
       if (receipt.sourceLabel) meta.createSpan({ text: receipt.sourceLabel });
-      meta.createSpan({ text: receipt.status === "undone" ? "已撤销" : "已应用" });
+      meta.createSpan({ text: receipt.status === "undone" ? tr("已撤销", "Undone") : tr("已应用", "Applied") });
       body.createEl("code", {
         text: `${receipt.beforeFingerprint} → ${receipt.afterFingerprint}`
       });

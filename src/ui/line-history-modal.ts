@@ -10,6 +10,7 @@ import {
   type MarkdownBlockMatch
 } from "../history/markdown-blocks";
 import { RestorePreviewModal } from "./restore-preview-modal";
+import { tr } from "../i18n";
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -45,14 +46,14 @@ export class LineHistoryModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ap", "ap-modal", "git-note-history-paragraph-modal");
-    this.setTitle(`段落历史 · 第 ${this.startLine}–${this.endLine} 行`);
+    this.setTitle(tr(`段落历史 · 第 ${this.startLine}–${this.endLine} 行`, `Paragraph history · lines ${this.startLine}–${this.endLine}`));
     if (this.selectedText) {
       const quote = this.contentEl.createEl("pre", { cls: "git-note-history-line-selection" });
       quote.setText(this.selectedText.length > 800 ? `${this.selectedText.slice(0, 800)}…` : this.selectedText);
     }
     const loading = this.contentEl.createDiv({
       cls: "git-note-history-loading",
-      text: "正在追踪这个 Markdown 区块的历史内容…"
+      text: tr("正在追踪这个 Markdown 区块的历史内容…", "Tracing the history of this Markdown block…")
     });
     void this.load(loading);
   }
@@ -97,11 +98,11 @@ export class LineHistoryModal extends Modal {
 
       loading.remove();
       if (versions.length === 0) {
-        this.contentEl.createDiv({ cls: "git-note-history-empty", text: "没有找到这段内容的 Git 历史。" });
+        this.contentEl.createDiv({ cls: "git-note-history-empty", text: tr("没有找到这段内容的 Git 历史。", "No Git history found for this content.") });
         return;
       }
       const intro = this.contentEl.createDiv({ cls: "git-note-history-paragraph-intro" });
-      intro.createSpan({ text: "插件会结合内容相似度与标题路径追踪移动过的段落。恢复只修改当前区块，并保留一次撤销。" });
+      intro.createSpan({ text: tr("插件会结合内容相似度与标题路径追踪移动过的段落。恢复只修改当前区块，并保留一次撤销。", "Moved paragraphs are traced by content similarity and heading path. Restore changes only this block and keeps one undo.") });
       const list = this.contentEl.createDiv({ cls: "git-note-history-line-commits" });
       for (const version of versions) this.renderCommit(list, version, history.context.repositoryRoot);
     } catch (error) {
@@ -131,9 +132,9 @@ export class LineHistoryModal extends Modal {
     });
     const confidence = header.createSpan({
       cls: `git-note-history-match-score ${match && match.score >= 0.75 ? "is-strong" : ""}`,
-      text: match ? `${Math.round(match.score * 100)}% 匹配` : "未匹配"
+      text: match ? tr(`${Math.round(match.score * 100)}% 匹配`, `${Math.round(match.score * 100)}% match`) : tr("未匹配", "No match")
     });
-    confidence.setAttribute("aria-label", "历史段落匹配置信度");
+    confidence.setAttribute("aria-label", tr("历史段落匹配置信度", "Paragraph match confidence"));
 
     if (match) {
       const path = match.block.headingPath.join(" › ");
@@ -145,32 +146,32 @@ export class LineHistoryModal extends Modal {
     } else {
       row.createDiv({
         cls: "git-note-history-paragraph-missing",
-        text: "这个版本中没有可靠匹配到该段落；仍可打开完整版本检查。"
+        text: tr("这个版本中没有可靠匹配到该段落；仍可打开完整版本检查。", "No reliable match for this paragraph in this version; you can still open the whole version.")
       });
     }
 
     const actions = row.createDiv({ cls: "git-note-history-paragraph-actions" });
-    const detail = actions.createEl("button", { text: "查看整版" });
+    const detail = actions.createEl("button", { text: tr("查看整版", "View whole version") });
     detail.addEventListener("click", () => {
       this.close();
       void this.plugin.openDetail({
         filePath: this.file.path,
         repositoryRoot,
         base: { kind: "commit", commit },
-        target: { kind: "working", label: "当前工作区" },
+        target: { kind: "working", label: tr("当前工作区", "Working copy") },
         initialMode: "side-by-side"
       });
     });
 
     if (!match || !this.currentBlock) return;
-    const copy = actions.createEl("button", { text: "复制段落" });
+    const copy = actions.createEl("button", { text: tr("复制段落", "Copy paragraph") });
     copy.addEventListener("click", () => void (async () => {
       await navigator.clipboard.writeText(match.block.content);
-      new Notice("已复制历史段落。");
+      new Notice(tr("已复制历史段落。", "Paragraph copied."));
     })());
-    const insert = actions.createEl("button", { text: "插入到后面" });
+    const insert = actions.createEl("button", { text: tr("插入到后面", "Insert after") });
     insert.addEventListener("click", () => void this.confirmParagraphChange(commit, match.block.content, "insert"));
-    const replace = actions.createEl("button", { cls: "mod-warning", text: "替换当前段落" });
+    const replace = actions.createEl("button", { cls: "mod-warning", text: tr("替换当前段落", "Replace current paragraph") });
     replace.addEventListener("click", () => void this.confirmParagraphChange(commit, match.block.content, "replace"));
   }
 
@@ -183,24 +184,24 @@ export class LineHistoryModal extends Modal {
     const targetContent = action === "replace"
       ? replaceMarkdownBlock(this.currentContent, this.currentBlock, historicalBlock)
       : insertAfterMarkdownBlock(this.currentContent, this.currentBlock, historicalBlock);
-    const verb = action === "replace" ? "替换" : "插入";
+    const verb = action === "replace" ? tr("替换", "Replace") : tr("插入", "Insert");
     new RestorePreviewModal(this.app, {
       file: this.file,
-      title: `安全${verb}历史段落`,
+      title: tr(`安全${verb}历史段落`, `Safely ${verb.toLowerCase()} past paragraph`),
       currentContent: this.currentContent,
       targetContent,
-      label: `${verb}历史段落`,
-      sourceLabel: `${commit.shortHash} · ${commit.subject || "无提交说明"}`,
+      label: tr(`${verb}历史段落`, `${verb} past paragraph`),
+      sourceLabel: tr(`${commit.shortHash} · ${commit.subject || "无提交说明"}`, `${commit.shortHash} · ${commit.subject || "No commit message"}`),
       scope: "paragraph",
-      confirmText: `确认${verb}段落`,
+      confirmText: tr(`确认${verb}段落`, `Confirm ${verb.toLowerCase()}`),
       onConfirm: async () => {
         try {
           const changed = await this.plugin.restoreService.restore(
             this.file,
             targetContent,
             {
-              label: `${verb}历史段落`,
-              sourceLabel: `${commit.shortHash} · ${commit.subject || "无提交说明"}`,
+              label: tr(`${verb}历史段落`, `${verb} past paragraph`),
+              sourceLabel: tr(`${commit.shortHash} · ${commit.subject || "无提交说明"}`, `${commit.shortHash} · ${commit.subject || "No commit message"}`),
               scope: "paragraph",
               expectedCurrentContent: this.currentContent
             }

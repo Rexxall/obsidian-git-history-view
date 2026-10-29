@@ -1,4 +1,5 @@
 import { diffArrays } from "diff";
+import { tr } from "../i18n";
 
 export type SemanticGroup =
   | "属性"
@@ -84,11 +85,11 @@ function preview(value: string, limit = 120): string {
 function propertyPreview(value: string): string {
   if (value.length <= 320) return value;
   const normalized = value.replace(/\s+/g, " ").trim();
-  return `${normalized.slice(0, 220)}…（共 ${value.length} 字符）`;
+  return tr(`${normalized.slice(0, 220)}…（共 ${value.length} 字符）`, `${normalized.slice(0, 220)}… (${value.length} characters)`);
 }
 
 function contextLabel(headings: string[]): string {
-  return headings.length > 0 ? headings.join(" / ") : "文档开头";
+  return headings.length > 0 ? headings.join(" / ") : tr("文档开头", "Top of document");
 }
 
 function parseFrontmatterProperties(lines: string[]): Map<string, string> {
@@ -232,10 +233,10 @@ function extractEntities(text: string): SemanticEntity[] {
       const mermaid = language === "mermaid";
       entities.push({
         group: "代码",
-        label: mermaid ? "Mermaid 图" : language ? `代码块 · ${language}` : "代码块",
+        label: mermaid ? tr("Mermaid 图", "Mermaid diagram") : language ? tr(`代码块 · ${language}`, `Code block · ${language}`) : tr("代码块", "Code block"),
         identity: mermaid ? "mermaid" : `code:${language || "plain"}`,
         value: body,
-        display: body ? preview(body) : "空代码块",
+        display: body ? preview(body) : tr("空代码块", "Empty code block"),
         line: start + 1,
         context: contextLabel(headings.filter(Boolean))
       });
@@ -258,10 +259,10 @@ function extractEntities(text: string): SemanticEntity[] {
         .trim();
       entities.push({
         group: "公式",
-        label: "块级公式",
+        label: tr("块级公式", "Math block"),
         identity: "math",
         value: content,
-        display: content ? preview(content) : "空公式",
+        display: content ? preview(content) : tr("空公式", "Empty math"),
         line: start + 1,
         context: contextLabel(headings.filter(Boolean))
       });
@@ -304,10 +305,10 @@ function extractEntities(text: string): SemanticEntity[] {
       const heading = headings.filter(Boolean).at(-1);
       entities.push({
         group: "表格",
-        label: heading ? `表格 · ${heading}` : `表格 · ${headers.join(" / ")}`,
+        label: heading ? tr(`表格 · ${heading}`, `Table · ${heading}`) : tr(`表格 · ${headers.join(" / ")}`, `Table · ${headers.join(" / ")}`),
         identity: `table:${normalizeText(headers.join("|"))}`,
         value: JSON.stringify(table),
-        display: `${headers.length} 列 · ${rows.length} 行`,
+        display: tr(`${headers.length} 列 · ${rows.length} 行`, `${headers.length} columns · ${rows.length} rows`),
         line: start + 1,
         context: contextLabel(headings.filter(Boolean)),
         table
@@ -322,8 +323,8 @@ function extractEntities(text: string): SemanticEntity[] {
       const taskState = list[3];
       const group = taskState === undefined ? "列表" : "任务";
       const status = taskState === undefined
-        ? (/^\d/.test(list[2]) ? "有序列表" : "无序列表")
-        : /[xX]/.test(taskState) ? "已完成" : taskState === "-" ? "进行中" : "待办";
+        ? (/^\d/.test(list[2]) ? tr("有序列表", "Numbered list") : tr("无序列表", "Bulleted list"))
+        : /[xX]/.test(taskState) ? tr("已完成", "Done") : taskState === "-" ? tr("进行中", "In progress") : tr("待办", "To do");
       entities.push({
         group,
         label: text,
@@ -373,8 +374,8 @@ function tableDetails(before: TableData | undefined, after: TableData | undefine
       const beforeValue = before.rows[row]?.[column];
       const afterValue = after.rows[row]?.[column];
       if (beforeValue === afterValue) continue;
-      const header = after.headers[column] ?? before.headers[column] ?? `第 ${column + 1} 列`;
-      const detail: SemanticChangeDetail = { label: `第 ${row + 1} 行 · ${header}` };
+      const header = after.headers[column] ?? before.headers[column] ?? tr(`第 ${column + 1} 列`, `Column ${column + 1}`);
+      const detail: SemanticChangeDetail = { label: tr(`第 ${row + 1} 行 · ${header}`, `Row ${row + 1} · ${header}`) };
       if (beforeValue !== undefined) detail.before = beforeValue;
       if (afterValue !== undefined) detail.after = afterValue;
       details.push(detail);
@@ -536,8 +537,8 @@ function propertyChanges(beforeText: string, afterText: string): SemanticChange[
       kind: beforeValue === undefined ? "added" : afterValue === undefined ? "removed" : "changed",
       label: name
     };
-    if (beforeValue !== undefined) change.before = beforeValue ? propertyPreview(beforeValue) : "空值";
-    if (afterValue !== undefined) change.after = afterValue ? propertyPreview(afterValue) : "空值";
+    if (beforeValue !== undefined) change.before = beforeValue ? propertyPreview(beforeValue) : tr("空值", "empty");
+    if (afterValue !== undefined) change.after = afterValue ? propertyPreview(afterValue) : tr("空值", "empty");
     changes.push(change);
   }
   return changes;

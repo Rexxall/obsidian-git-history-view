@@ -69,17 +69,18 @@ import {
 } from "../history/milestones";
 import { VersionMilestoneModal } from "../ui/milestone-modal";
 import { remapVaultPath } from "../persistence/plugin-data";
+import { tr } from "../i18n";
 
 export const GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE = "git-note-history-detail-view";
 
 function versionTitle(reference: VersionReference): string {
   return reference.kind === "working"
     ? reference.label
-    : reference.commit.subject || "无提交说明";
+    : reference.commit.subject || tr("无提交说明", "No commit message");
 }
 
 function versionMeta(reference: VersionReference): string {
-  if (reference.kind === "working") return "尚未提交的最新内容";
+  if (reference.kind === "working") return tr("尚未提交的最新内容", "Latest uncommitted content");
   const date = new Date(reference.commit.authoredAt);
   const timestamp = Number.isNaN(date.getTime())
     ? reference.commit.authoredAt
@@ -108,7 +109,7 @@ function errorMessage(error: unknown): string {
 
 function basenameFromVaultPath(path: string): string {
   const name = path.split("/").filter(Boolean).at(-1) ?? path;
-  return name.replace(/\.md$/iu, "") || "Git 版本对比";
+  return name.replace(/\.md$/iu, "") || tr("Git 版本对比", "Git version compare");
 }
 
 class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
@@ -123,7 +124,7 @@ class VersionPickerModal extends FuzzySuggestModal<VersionReference> {
   ) {
     super(app);
     this.modalEl.addClass("ap", "ap-modal");
-    this.setPlaceholder(`搜索并选择${sideLabel}…`);
+    this.setPlaceholder(tr(`搜索并选择${sideLabel}…`, `Search and choose the ${sideLabel}…`));
   }
 
   getItems(): VersionReference[] {
@@ -196,7 +197,7 @@ export class GitHistoryDetailView extends ItemView {
 
   getDisplayText(): string {
     const path = this.file?.path ?? this.request?.filePath;
-    return path ? `${basenameFromVaultPath(path)} · Git 对比` : "Git 版本对比";
+    return path ? tr(`${basenameFromVaultPath(path)} · Git 对比`, `${basenameFromVaultPath(path)} · Git compare`) : tr("Git 版本对比", "Git version compare");
   }
 
   getIcon(): string {
@@ -287,7 +288,7 @@ export class GitHistoryDetailView extends ItemView {
     if (!file && !hasFrozenPair) {
       this.file = null;
       this.loading = false;
-      this.error = `找不到笔记：${request.filePath}`;
+      this.error = tr(`找不到笔记：${request.filePath}`, `Note not found: ${request.filePath}`);
       this.render();
       return;
     }
@@ -311,7 +312,7 @@ export class GitHistoryDetailView extends ItemView {
                 request.repositoryRoot,
                 request.base
               )
-            : Promise.reject(new Error("冻结对比缺少左侧内容。")),
+            : Promise.reject(new Error(tr("冻结对比缺少左侧内容。", "The frozen compare is missing its left side."))),
         request.targetContentOverride !== undefined
           ? Promise.resolve(request.targetContentOverride)
           : file
@@ -320,7 +321,7 @@ export class GitHistoryDetailView extends ItemView {
                 request.repositoryRoot,
                 request.target
               )
-            : Promise.reject(new Error("冻结对比缺少右侧内容。")),
+            : Promise.reject(new Error(tr("冻结对比缺少右侧内容。", "The frozen compare is missing its right side."))),
         historyPromise
       ]);
       if (generation !== this.generation) return;
@@ -358,7 +359,7 @@ export class GitHistoryDetailView extends ItemView {
     container.toggleClass("is-focus", this.focusMode);
 
     if (!this.request) {
-      container.createDiv({ cls: "git-note-history-empty", text: this.error || "请从 Git 时间线选择一个版本。" });
+      container.createDiv({ cls: "git-note-history-empty", text: this.error || tr("请从 Git 时间线选择一个版本。", "Choose a version from the Git timeline.") });
       return;
     }
 
@@ -375,10 +376,10 @@ export class GitHistoryDetailView extends ItemView {
     const viewControls = controls.createDiv({ cls: "git-note-history-detail-view-controls" });
     const layout = viewControls.createDiv({
       cls: "git-note-history-detail-context-group",
-      attr: { "aria-label": "查看方式" }
+      attr: { "aria-label": tr("查看方式", "Layout") }
     });
-    this.addModeButton(layout, "side-by-side", "双栏", "columns-2");
-    this.addModeButton(layout, "unified", "单栏", "rows-3");
+    this.addModeButton(layout, "side-by-side", tr("双栏", "Side by side"), "columns-2");
+    this.addModeButton(layout, "unified", tr("单栏", "Unified"), "rows-3");
     const isRawDiffMode = this.mode === "side-by-side" || this.mode === "unified";
     if (
       !this.loading
@@ -392,23 +393,23 @@ export class GitHistoryDetailView extends ItemView {
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
 
     const moreActions = actions.createEl("button", {
-      attr: { "aria-label": "更多查看方式与操作", "aria-haspopup": "menu" }
+      attr: { "aria-label": tr("更多查看方式与操作", "More views and actions"), "aria-haspopup": "menu" }
     });
     setIcon(moreActions.createSpan(), "ellipsis");
-    moreActions.createSpan({ text: "更多" });
+    moreActions.createSpan({ text: tr("更多", "More") });
     moreActions.addEventListener("click", (event) => this.openActionOptions(event));
 
     if (this.request.base.kind === "commit" && !this.request.readOnly) {
       const restore = actions.createEl("button", { cls: "mod-cta git-note-history-restore-primary" });
       setIcon(restore.createSpan(), "history");
-      restore.createSpan({ text: "恢复" });
+      restore.createSpan({ text: tr("恢复", "Restore") });
       restore.disabled = !this.hasCurrentContent();
       restore.addEventListener("click", () => void this.confirmFullRestore());
     }
     if (this.request.readOnly) {
       const snapshotTitle = this.request.allowRecoveryCollection
-        ? "内容固定为沙盒核对时的快照；只能把选中的修改加入恢复篮子"
-        : "内容固定为发起对比时的快照，不提供恢复、另存或里程碑编辑";
+        ? tr("内容固定为沙盒核对时的快照；只能把选中的修改加入恢复篮子", "Content is frozen at the sandbox check; selected changes can only go to the recovery basket")
+        : tr("内容固定为发起对比时的快照，不提供恢复、另存或里程碑编辑", "Content is frozen at the time of the compare; restore, save as copy and milestone editing are off");
       const badge = actions.createSpan({
         cls: "git-note-history-read-only-badge",
         attr: { title: snapshotTitle }
@@ -416,13 +417,13 @@ export class GitHistoryDetailView extends ItemView {
       setIcon(badge.createSpan(), "lock-keyhole");
       badge.createSpan({
         text: this.request.allowRecoveryCollection
-          ? "冻结沙盒实验 · 仅收集"
-          : "冻结快照 · 只读"
+          ? tr("冻结沙盒实验 · 仅收集", "Frozen sandbox experiment · collect only")
+          : tr("冻结快照 · 只读", "Frozen snapshot · read only")
       });
     }
 
     if (this.loading) {
-      container.createDiv({ cls: "git-note-history-loading", text: "正在准备版本对比…" });
+      container.createDiv({ cls: "git-note-history-loading", text: tr("正在准备版本对比…", "Preparing the compare…") });
       return;
     }
     if (this.error) {
@@ -449,7 +450,7 @@ export class GitHistoryDetailView extends ItemView {
     if (this.mode === "side-by-side" && this.narrowLayout) {
       container.createDiv({
         cls: "git-note-history-responsive-note",
-        text: "当前宽度较窄，已自动使用统一 Diff；放宽页面后会恢复并排视图。"
+        text: tr("当前宽度较窄，已自动使用统一 Diff；放宽页面后会恢复并排视图。", "The view is narrow, so a unified diff is used; widen it to get side by side back.")
       });
     }
     const showChangeMap = isTextDiff
@@ -472,9 +473,9 @@ export class GitHistoryDetailView extends ItemView {
       setIcon(notice.createSpan(), "fold-horizontal");
       const names = compactedComparison.collapsedProperties;
       notice.createSpan({
-        text: `已折叠 ${names.length} 个长属性：${names.slice(0, 3).join("、")}${names.length > 3 ? "…" : ""}`
+        text: tr(`已折叠 ${names.length} 个长属性：${names.slice(0, 3).join("、")}${names.length > 3 ? "…" : ""}`, `Folded ${names.length} long properties: ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""}`)
       });
-      notice.createSpan({ text: "可在“过滤”中展开" });
+      notice.createSpan({ text: tr("可在“过滤”中展开", "Expand them under Filters") });
       body.prepend(notice);
     }
     if (effectiveMode === "unified") this.renderUnified(renderTarget, comparison.base, comparison.target);
@@ -510,13 +511,13 @@ export class GitHistoryDetailView extends ItemView {
   private renderVersionWorkbench(container: HTMLElement): void {
     if (!this.request) return;
     const workbench = container.createDiv({ cls: "git-note-history-version-workbench" });
-    this.renderVersionCard(workbench, "base", "左侧版本", "基准");
+    this.renderVersionCard(workbench, "base", tr("左侧版本", "Left version"), tr("基准", "Base"));
     const bridge = workbench.createDiv({ cls: "git-note-history-version-bridge" });
     const direction = bridge.createSpan({ cls: "git-note-history-version-direction" });
     setIcon(direction, "arrow-right");
     const swap = bridge.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "交换左右版本（X）" }
+      attr: { "aria-label": tr("交换左右版本（X）", "Swap left and right (X)") }
     });
     swap.disabled = this.loading
       || this.request.readOnly === true
@@ -528,15 +529,15 @@ export class GitHistoryDetailView extends ItemView {
       && versionReferenceKey(previous) === versionReferenceKey(this.request.base);
     const adjacent = bridge.createEl("button", {
       cls: "git-note-history-adjacent-button",
-      attr: { "aria-label": "自动选择右侧版本的前一个版本" },
-      text: alreadyAdjacent ? "已相邻" : "相邻"
+      attr: { "aria-label": tr("自动选择右侧版本的前一个版本", "Pick the version just before the right side") },
+      text: alreadyAdjacent ? tr("已相邻", "Adjacent") : tr("相邻", "Adjacent")
     });
     adjacent.disabled = this.loading
       || this.request.readOnly === true
       || previous === null
       || alreadyAdjacent;
     adjacent.addEventListener("click", () => this.compareAdjacentVersions());
-    this.renderVersionCard(workbench, "target", "右侧版本", "对比");
+    this.renderVersionCard(workbench, "target", tr("右侧版本", "Right version"), tr("对比", "Compare"));
   }
 
   private renderVersionCard(
@@ -597,11 +598,11 @@ export class GitHistoryDetailView extends ItemView {
           cls: "clickable-icon",
           attr: {
             "aria-label": milestones.length > 0
-              ? `管理${label}的 ${milestones.length} 个里程碑`
-              : `为${label}添加里程碑`,
+              ? tr(`管理${label}的 ${milestones.length} 个里程碑`, `Manage ${milestones.length} milestones of the ${label}`)
+              : tr(`为${label}添加里程碑`, `Add a milestone to the ${label}`),
             title: this.historyContext
               ? ""
-              : "未能读取这篇笔记的 Git 上下文，暂时无法保存里程碑"
+              : tr("未能读取这篇笔记的 Git 上下文，暂时无法保存里程碑", "Could not read this note's Git context, so the milestone cannot be saved now")
           }
         });
         manageMilestones.disabled = !this.historyContext || !this.hasCurrentContent();
@@ -612,18 +613,18 @@ export class GitHistoryDetailView extends ItemView {
       }
       const working = cardActions.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": `${label}改为当前工作区` }
+        attr: { "aria-label": tr(`${label}改为当前工作区`, `Set the ${label} to the working copy`) }
       });
       working.disabled = this.loading || this.request.readOnly === true || other.kind === "working";
       setIcon(working, "file-pen-line");
       working.addEventListener("click", () => this.setVersionReference(side, {
         kind: "working",
-        label: "当前工作区"
+        label: tr("当前工作区", "Working copy")
       }));
     }
     const copy = cardActions.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": `复制${label}内容` }
+      attr: { "aria-label": tr(`复制${label}内容`, `Copy the ${label} content`) }
     });
     copy.disabled = !this.hasCurrentContent();
     setIcon(copy, "copy");
@@ -633,11 +634,11 @@ export class GitHistoryDetailView extends ItemView {
     const earlier = navigator.createEl("button", {
       cls: "clickable-icon",
       attr: {
-        "aria-label": `${label}切换到更早版本`,
+        "aria-label": tr(`${label}切换到更早版本`, `Move the ${label} to an older version`),
         title: isStoredSnapshot
-          ? "这个里程碑位于当前历史列表外，无法验证相邻版本"
+          ? tr("这个里程碑位于当前历史列表外，无法验证相邻版本", "This milestone is outside the current list; neighbours cannot be verified")
           : older === null
-            ? "没有可用的更早版本"
+            ? tr("没有可用的更早版本", "No older version")
             : ""
       }
     });
@@ -648,7 +649,7 @@ export class GitHistoryDetailView extends ItemView {
     const chooser = navigator.createEl("button", {
       cls: "git-note-history-version-chooser",
       attr: {
-        "aria-label": `选择${label}，当前为 ${this.versionDisplayTitle(reference)}`,
+        "aria-label": tr(`选择${label}，当前为 ${this.versionDisplayTitle(reference)}`, `Choose the ${label}; now ${this.versionDisplayTitle(reference)}`),
         "aria-pressed": String(this.activeVersionSide === side)
       }
     });
@@ -666,11 +667,11 @@ export class GitHistoryDetailView extends ItemView {
     const newerButton = navigator.createEl("button", {
       cls: "clickable-icon",
       attr: {
-        "aria-label": `${label}切换到更新版本`,
+        "aria-label": tr(`${label}切换到更新版本`, `Move the ${label} to a newer version`),
         title: isStoredSnapshot
-          ? "这个里程碑位于当前历史列表外，无法验证相邻版本"
+          ? tr("这个里程碑位于当前历史列表外，无法验证相邻版本", "This milestone is outside the current list; neighbours cannot be verified")
           : newer === null
-            ? "没有可用的更新版本"
+            ? tr("没有可用的更新版本", "No newer version")
             : ""
       }
     });
@@ -696,7 +697,7 @@ export class GitHistoryDetailView extends ItemView {
           cls: `git-note-history-version-milestone is-${milestone.kind}`,
           attr: {
             title: [
-              `事件时间 ${formattedEventTime}`,
+              tr(`事件时间 ${formattedEventTime}`, `Event time ${formattedEventTime}`),
               milestone.note ?? ""
             ].filter(Boolean).join(" · ")
           }
@@ -747,13 +748,13 @@ export class GitHistoryDetailView extends ItemView {
     new VersionPickerModal(
       this.app,
       choices,
-      side === "base" ? "左侧版本" : "右侧版本",
+      side === "base" ? tr("左侧版本", "left version") : tr("右侧版本", "right version"),
       versionReferenceKey(current),
       (reference) => this.versionDisplayTitle(reference),
       (reference) => this.versionSearchText(reference),
       (reference) => {
         if (!this.isContentContextCurrent(request, file, generation)) {
-          new Notice("对比已经切换，请从当前页面重新选择版本。");
+          new Notice(tr("对比已经切换，请从当前页面重新选择版本。", "The compare has changed; choose the version again on this page."));
           return;
         }
         this.setVersionReference(side, reference);
@@ -790,7 +791,7 @@ export class GitHistoryDetailView extends ItemView {
       reference.commit.historicalPath,
       this.historyCommits.some((commit) => commit.hash === reference.commit.hash)
         ? ""
-        : "历史列表外",
+        : tr("历史列表外", "Outside the list"),
       ...milestones.flatMap((milestone) => [
         milestone.label,
         milestoneKindLabel(milestone.kind),
@@ -823,12 +824,12 @@ export class GitHistoryDetailView extends ItemView {
     const menu = new Menu();
     for (const milestone of milestones) {
       menu.addItem((item) => item
-        .setTitle(`编辑里程碑「${milestone.label}」`)
+        .setTitle(tr(`编辑里程碑「${milestone.label}」`, `Edit milestone "${milestone.label}"`))
         .setIcon(milestoneKindIcon(milestone.kind))
         .onClick(() => this.openMilestoneEditor(commit, milestone, generation)));
     }
     menu.addItem((item) => item
-      .setTitle(milestones.length > 0 ? "再添加一个里程碑" : "命名这个版本")
+      .setTitle(milestones.length > 0 ? tr("再添加一个里程碑", "Add another milestone") : tr("命名这个版本", "Name this version"))
       .setIcon("bookmark-plus")
       .onClick(() => this.openMilestoneEditor(commit, undefined, generation)));
     menu.showAtMouseEvent(event);
@@ -845,12 +846,12 @@ export class GitHistoryDetailView extends ItemView {
     if (!this.isContentContextCurrent(request, file, expectedGeneration)) return;
     new VersionMilestoneModal(this.app, current, async (milestone) => {
       if (!this.isContentContextCurrent(request, file, expectedGeneration)) {
-        new Notice("对比已经切换，请从当前页面重新编辑里程碑。");
+        new Notice(tr("对比已经切换，请从当前页面重新编辑里程碑。", "The compare has changed; edit the milestone again on this page."));
         return;
       }
       const context = await this.plugin.gitClient.resolveFileContext(file);
       if (!this.isContentContextCurrent(request, file, expectedGeneration)) {
-        new Notice("对比已经切换，未保存里程碑。");
+        new Notice(tr("对比已经切换，未保存里程碑。", "The compare has changed; the milestone was not saved."));
         return;
       }
       await this.plugin.setVersionMilestone(
@@ -860,7 +861,7 @@ export class GitHistoryDetailView extends ItemView {
         milestone
       );
       this.plugin.refreshOpenViews();
-      new Notice(milestone ? `已命名为「${milestone.label}」。` : "已移除里程碑。");
+      new Notice(milestone ? tr(`已命名为「${milestone.label}」。`, `Named "${milestone.label}".`) : tr("已移除里程碑。", "Milestone removed."));
       if (this.file !== file) return;
       this.historyContext = context;
       this.historyLoadedFor = file.path;
@@ -873,7 +874,7 @@ export class GitHistoryDetailView extends ItemView {
     if (!this.request || versionReferenceKey(this.request[side]) === versionReferenceKey(reference)) return;
     const other = this.request[side === "base" ? "target" : "base"];
     if (versionReferenceKey(other) === versionReferenceKey(reference)) {
-      new Notice("左右两侧需要选择不同版本。");
+      new Notice(tr("左右两侧需要选择不同版本。", "Choose different versions for the two sides."));
       return;
     }
     this.activeVersionSide = side;
@@ -938,11 +939,11 @@ export class GitHistoryDetailView extends ItemView {
 
   private async copyVersionContent(side: "base" | "target"): Promise<void> {
     if (!this.hasCurrentContent()) {
-      new Notice("版本内容仍在加载，请稍后重试。");
+      new Notice(tr("版本内容仍在加载，请稍后重试。", "Version content is still loading; try again shortly."));
       return;
     }
     await navigator.clipboard.writeText(side === "base" ? this.baseContent : this.targetContent);
-    new Notice(`已复制${side === "base" ? "左侧" : "右侧"}版本内容。`);
+    new Notice(tr(`已复制${side === "base" ? "左侧" : "右侧"}版本内容。`, `Copied the ${side === "base" ? "left" : "right"} version.`));
   }
 
   private addModeButton(container: HTMLElement, mode: DetailMode, label: string, icon: string): void {
@@ -967,10 +968,10 @@ export class GitHistoryDetailView extends ItemView {
 
   private addViewMenuItems(menu: Menu): void {
     const views: Array<[DetailMode, string, string]> = [
-      ["rendered", "阅读视图", "book-open"],
-      ["preview", "双预览", "columns-2"],
-      ["semantic", "结构变化", "list-tree"],
-      ["impact", "链接影响", "git-fork"]
+      ["rendered", tr("阅读视图", "Reading view"), "book-open"],
+      ["preview", tr("双预览", "Two previews"), "columns-2"],
+      ["semantic", tr("结构变化", "Structure changes"), "list-tree"],
+      ["impact", tr("链接影响", "Link impact"), "git-fork"]
     ];
     for (const [mode, title, icon] of views) {
       menu.addItem((item) => item
@@ -981,7 +982,7 @@ export class GitHistoryDetailView extends ItemView {
     }
     if (this.mode === "preview") {
       menu.addItem((item) => item
-        .setTitle("同步滚动")
+        .setTitle(tr("同步滚动", "Sync scrolling"))
         .setIcon("panel-top-open")
         .setChecked(this.syncPreviewScroll)
         .onClick(() => {
@@ -994,12 +995,12 @@ export class GitHistoryDetailView extends ItemView {
     if (this.canCollectToRecoveryBasket()) {
       const basketCount = this.plugin.getRecoveryBasketCount(this.file!.path);
       menu.addItem((item) => item
-        .setTitle(basketCount > 0 ? `恢复篮子（${basketCount}）` : "恢复篮子")
+        .setTitle(basketCount > 0 ? tr(`恢复篮子（${basketCount}）`, `Recovery basket (${basketCount})`) : tr("恢复篮子", "Recovery basket"))
         .setIcon("shopping-basket")
         .onClick(() => void this.plugin.openRecoveryBasket(this.file!)));
     }
     menu.addItem((item) => item
-      .setTitle(this.focusMode ? "退出专注审阅" : "专注审阅")
+      .setTitle(this.focusMode ? tr("退出专注审阅", "Leave focus review") : tr("专注审阅", "Focus review"))
       .setIcon(this.focusMode ? "minimize-2" : "maximize-2")
       .onClick(() => this.setFocusMode(!this.focusMode)));
     menu.addSeparator();
@@ -1007,7 +1008,7 @@ export class GitHistoryDetailView extends ItemView {
 
   private addDiffFilterItems(menu: Menu): void {
     menu.addItem((item) => item
-      .setTitle("忽略空行")
+      .setTitle(tr("忽略空行", "Ignore blank lines"))
       .setIcon("list-minus")
       .setChecked(this.ignoreBlankLines)
       .onClick(() => {
@@ -1015,7 +1016,7 @@ export class GitHistoryDetailView extends ItemView {
         this.render();
       }));
     menu.addItem((item) => item
-      .setTitle("忽略空格变化")
+      .setTitle(tr("忽略空格变化", "Ignore whitespace changes"))
       .setIcon("space")
       .setChecked(this.plugin.settings.ignoreWhitespace)
       .onClick(async () => {
@@ -1024,7 +1025,7 @@ export class GitHistoryDetailView extends ItemView {
         this.render();
       }));
     menu.addItem((item) => item
-      .setTitle("忽略笔记属性")
+      .setTitle(tr("忽略笔记属性", "Ignore note properties"))
       .setIcon("braces")
       .setChecked(this.ignoreFrontmatter)
       .onClick(() => {
@@ -1032,7 +1033,7 @@ export class GitHistoryDetailView extends ItemView {
         this.render();
       }));
     menu.addItem((item) => item
-      .setTitle("折叠长属性")
+      .setTitle(tr("折叠长属性", "Fold long properties"))
       .setIcon("fold-horizontal")
       .setChecked(this.collapseLongProperties)
       .onClick(() => {
@@ -1061,12 +1062,12 @@ export class GitHistoryDetailView extends ItemView {
       && this.file === file;
     const rejectStaleAction = (): boolean => {
       if (contextIsCurrent()) return false;
-      new Notice("版本对比已变化，请从当前页面重新打开操作菜单。");
+      new Notice(tr("版本对比已变化，请从当前页面重新打开操作菜单。", "The compare has changed; open the menu again from this page."));
       return true;
     };
     if (this.mode === "side-by-side") {
       menu.addItem((item) => item
-        .setTitle("显示未修改上下文")
+        .setTitle(tr("显示未修改上下文", "Show unchanged context"))
         .setIcon("text-select")
         .setChecked(!this.changesOnly)
         .onClick(() => {
@@ -1080,8 +1081,8 @@ export class GitHistoryDetailView extends ItemView {
     menu.addItem((item) => item
       .setTitle(
         reference.kind === "working"
-          ? "查看当前未提交工作"
-          : "查看此版本的工作事件"
+          ? tr("查看当前未提交工作", "View current uncommitted work")
+          : tr("查看此版本的工作事件", "View this version's work event")
       )
       .setIcon("git-pull-request-arrow")
       .onClick(() => {
@@ -1108,11 +1109,11 @@ export class GitHistoryDetailView extends ItemView {
         ? request.target.commit.hash
         : undefined;
       const titles = {
-        sent: "与上次发送版比较",
-        submitted: "与上次材料提交版比较",
-        confirmed: "与上次确认版比较",
-        exported: "与上次导出版比较",
-        "important-draft": "与上个重要草稿比较",
+        sent: tr("与上次发送版比较", "Compare with last sent version"),
+        submitted: tr("与上次材料提交版比较", "Compare with last submitted version"),
+        confirmed: tr("与上次确认版比较", "Compare with last confirmed version"),
+        exported: tr("与上次导出版比较", "Compare with last exported version"),
+        "important-draft": tr("与上个重要草稿比较", "Compare with last important draft"),
         custom: ""
       } as const;
       for (const kind of [
@@ -1134,7 +1135,7 @@ export class GitHistoryDetailView extends ItemView {
           || versionReferenceKey(request.base) === previous.commit.hash
         ) continue;
         menu.addItem((item) => item
-          .setTitle(titles[kind] || `与上个里程碑「${previous.milestone.label}」比较`)
+          .setTitle(titles[kind] || tr(`与上个里程碑「${previous.milestone.label}」比较`, `Compare with previous milestone "${previous.milestone.label}"`))
           .setIcon(milestoneKindIcon(kind))
           .onClick(() => {
             if (rejectStaleAction()) return;
@@ -1147,16 +1148,16 @@ export class GitHistoryDetailView extends ItemView {
     }
     if (request.base.kind === "commit") {
       menu.addItem((item) => item
-        .setTitle("复制基准版本内容")
+        .setTitle(tr("复制基准版本内容", "Copy base version content"))
         .setIcon("copy")
         .onClick(async () => {
           if (rejectStaleAction()) return;
           await navigator.clipboard.writeText(baseContent);
-          new Notice("已复制基准版本内容。");
+          new Notice(tr("已复制基准版本内容。", "Base version content copied."));
         }));
       if (!request.readOnly) {
         menu.addItem((item) => item
-          .setTitle("把基准版本另存为副本")
+          .setTitle(tr("把基准版本另存为副本", "Save base version as a copy"))
           .setIcon("file-plus-2")
           .onClick(() => {
             if (rejectStaleAction()) return;
@@ -1166,14 +1167,14 @@ export class GitHistoryDetailView extends ItemView {
     }
     menu.addSeparator();
     menu.addItem((item) => item
-      .setTitle("打开内容年龄镜头")
+      .setTitle(tr("打开内容年龄镜头", "Open content age lens"))
       .setIcon("scan-eye")
       .onClick(() => {
         if (rejectStaleAction()) return;
         new BlockAgeModal(this.app, this.plugin, file).open();
       }));
     menu.addItem((item) => item
-      .setTitle("查看恢复历史")
+      .setTitle(tr("查看恢复历史", "View restore history"))
       .setIcon("history")
       .onClick(() => new RestoreHistoryModal(this.app, this.plugin).open()));
     menu.showAtMouseEvent(event);
@@ -1185,7 +1186,7 @@ export class GitHistoryDetailView extends ItemView {
       const mapToggle = nav.createEl("button", {
         cls: this.changeMapExpanded ? "clickable-icon is-active" : "clickable-icon",
         attr: {
-          "aria-label": this.changeMapExpanded ? "隐藏变化地图" : "显示变化地图",
+          "aria-label": this.changeMapExpanded ? tr("隐藏变化地图", "Hide change map") : tr("显示变化地图", "Show change map"),
           "aria-pressed": String(this.changeMapExpanded)
         }
       });
@@ -1197,18 +1198,18 @@ export class GitHistoryDetailView extends ItemView {
     }
     const previous = nav.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "上一个变化（[）" }
+      attr: { "aria-label": tr("上一个变化（[）", "Previous change ([)") }
     });
     setIcon(previous, "arrow-up");
     previous.addEventListener("click", () => this.moveChange(-1));
     nav.createSpan({
       cls: "git-note-history-change-nav-label",
-      text: `变化 ${this.currentChangeIndex + 1} / ${this.changeMap.length}`,
+      text: tr(`变化 ${this.currentChangeIndex + 1} / ${this.changeMap.length}`, `Change ${this.currentChangeIndex + 1} / ${this.changeMap.length}`),
       attr: { "aria-live": "polite" }
     });
     const next = nav.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "下一个变化（]）" }
+      attr: { "aria-label": tr("下一个变化（]）", "Next change (])") }
     });
     setIcon(next, "arrow-down");
     next.addEventListener("click", () => this.moveChange(1));
@@ -1217,20 +1218,20 @@ export class GitHistoryDetailView extends ItemView {
   private renderChangeMap(container: HTMLElement): void {
     const map = container.createEl("aside", {
       cls: "git-note-history-change-map",
-      attr: { "aria-label": "Markdown 标题变化地图" }
+      attr: { "aria-label": tr("Markdown 标题变化地图", "Markdown heading change map") }
     });
     const heading = map.createDiv({ cls: "git-note-history-change-map-title" });
     setIcon(heading.createSpan(), "map");
-    heading.createSpan({ text: "变化地图" });
+    heading.createSpan({ text: tr("变化地图", "Change map") });
     if (this.changeMap.length === 0) {
-      map.createDiv({ cls: "git-note-history-change-map-empty", text: "内容一致" });
+      map.createDiv({ cls: "git-note-history-change-map-empty", text: tr("内容一致", "Identical") });
       return;
     }
     for (const item of this.changeMap) {
       const button = map.createEl("button", {
         cls: `git-note-history-change-map-item is-${item.kind} ${item.id - 1 === this.currentChangeIndex ? "is-active" : ""}`,
         attr: {
-          "aria-label": `${item.title}，新增 ${item.addedLines} 行，删除 ${item.deletedLines} 行`,
+          "aria-label": tr(`${item.title}，新增 ${item.addedLines} 行，删除 ${item.deletedLines} 行`, `${item.title}, ${item.addedLines} lines added, ${item.deletedLines} lines removed`),
           "aria-current": item.id - 1 === this.currentChangeIndex ? "true" : "false"
         }
       });
@@ -1257,7 +1258,7 @@ export class GitHistoryDetailView extends ItemView {
       item.setAttribute("aria-current", itemIndex === this.currentChangeIndex ? "true" : "false");
     });
     const label = this.contentEl.querySelector<HTMLElement>(".git-note-history-change-nav-label");
-    label?.setText(`变化 ${oneBased} / ${this.changeMap.length}`);
+    label?.setText(tr(`变化 ${oneBased} / ${this.changeMap.length}`, `Change ${oneBased} / ${this.changeMap.length}`));
     const anchor = this.contentEl.querySelector<HTMLElement>(`[data-change-index="${oneBased}"]`);
     if (!anchor) return;
     anchor.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1330,11 +1331,11 @@ export class GitHistoryDetailView extends ItemView {
     const reader = container.createDiv({ cls: "git-note-history-reader" });
     const intro = reader.createDiv({ cls: "git-note-history-reader-intro" });
     const legend = intro.createDiv({ cls: "git-note-history-reader-legend" });
-    legend.createSpan({ cls: "is-added", text: "新增" });
-    legend.createSpan({ cls: "is-removed", text: "删除" });
+    legend.createSpan({ cls: "is-added", text: tr("新增", "Added") });
+    legend.createSpan({ cls: "is-removed", text: tr("删除", "Removed") });
     intro.createSpan({
       cls: "git-note-history-reader-hint",
-      text: "按排版后的内容阅读改动；展开结构变化可检查属性、移动、任务和特殊区块。"
+      text: tr("按排版后的内容阅读改动；展开结构变化可检查属性、移动、任务和特殊区块。", "Read the changes as rendered content; expand structure changes to check properties, moves, tasks and special blocks.")
     });
 
     const semanticChanges = buildSemanticDiff(this.baseContent, this.targetContent, {
@@ -1349,7 +1350,7 @@ export class GitHistoryDetailView extends ItemView {
     if (sections.every((section) => section.kind === "unchanged")) {
       const empty = reader.createDiv({ cls: "git-note-history-reader-empty" });
       setIcon(empty.createSpan(), "circle-check-big");
-      empty.createSpan({ text: "两个版本的可读内容一致" });
+      empty.createSpan({ text: tr("两个版本的可读内容一致", "The readable content of both versions is identical") });
       return;
     }
 
@@ -1374,7 +1375,7 @@ export class GitHistoryDetailView extends ItemView {
       const before = change.createDiv({ cls: "git-note-history-reader-version is-before" });
       before.createDiv({
         cls: "git-note-history-reader-change-label",
-        text: section.kind === "changed" ? "修改前" : "已删除"
+        text: section.kind === "changed" ? tr("修改前", "Before") : tr("已删除", "Removed")
       });
       this.renderMarkdownBlocks(before, section.before);
     }
@@ -1382,7 +1383,7 @@ export class GitHistoryDetailView extends ItemView {
       const after = change.createDiv({ cls: "git-note-history-reader-version is-after" });
       after.createDiv({
         cls: "git-note-history-reader-change-label",
-        text: section.kind === "changed" ? "修改后" : "新增"
+        text: section.kind === "changed" ? tr("修改后", "After") : tr("新增", "Added")
       });
       this.renderMarkdownBlocks(after, section.after);
     }
@@ -1407,14 +1408,14 @@ export class GitHistoryDetailView extends ItemView {
     const leftBody = this.renderPreviewPane(
       preview,
       "base",
-      "基准版本",
+      tr("基准版本", "Base version"),
       this.request.base,
       this.baseContent
     );
     const rightBody = this.renderPreviewPane(
       preview,
       "target",
-      "对比版本",
+      tr("对比版本", "Compared version"),
       this.request.target,
       this.targetContent
     );
@@ -1483,31 +1484,31 @@ export class GitHistoryDetailView extends ItemView {
     const summary = container.createDiv({ cls: "git-note-history-impact-summary" });
     const summaryTitle = summary.createDiv({ cls: "git-note-history-impact-heading" });
     setIcon(summaryTitle.createSpan(), "git-fork");
-    summaryTitle.createSpan({ text: "知识关系影响" });
+    summaryTitle.createSpan({ text: tr("知识关系影响", "Link impact") });
     const stats = summary.createDiv({ cls: "git-note-history-impact-stats" });
-    stats.createDiv({ cls: "is-added", text: `+${impact.added.length} 新关系` });
-    stats.createDiv({ cls: "is-removed", text: `−${impact.removed.length} 移除` });
+    stats.createDiv({ cls: "is-added", text: tr(`+${impact.added.length} 新关系`, `+${impact.added.length} new links`) });
+    stats.createDiv({ cls: "is-removed", text: tr(`−${impact.removed.length} 移除`, `−${impact.removed.length} removed`) });
     const unresolvedCount = all.filter(
       (relation) => isVaultTargetRelation(relation) && !resolved.has(relation.key)
     ).length;
-    stats.createDiv({ cls: unresolvedCount > 0 ? "is-warning" : "", text: `${unresolvedCount} 个未解析目标` });
+    stats.createDiv({ cls: unresolvedCount > 0 ? "is-warning" : "", text: tr(`${unresolvedCount} 个未解析目标`, `${unresolvedCount} unresolved targets`) });
 
     if (impact.added.length === 0 && impact.removed.length === 0) {
       const stable = summary.createDiv({ cls: "git-note-history-impact-stable" });
       setIcon(stable.createSpan(), "circle-check-big");
       const message = stable.createDiv();
-      message.createEl("strong", { text: "知识关系没有变化" });
-      message.createDiv({ text: `两个版本包含相同的 ${impact.unchanged.length} 个链接、嵌入或标签。` });
+      message.createEl("strong", { text: tr("知识关系没有变化", "Links unchanged") });
+      message.createDiv({ text: tr(`两个版本包含相同的 ${impact.unchanged.length} 个链接、嵌入或标签。`, `Both versions contain the same ${impact.unchanged.length} links, embeds or tags.`) });
       const steadyGroups = container.createDiv({ cls: "git-note-history-impact-groups is-stable" });
-      this.renderRelationGroup(steadyGroups, "当前关系", "unchanged", impact.unchanged, resolved, backlinkCounts);
+      this.renderRelationGroup(steadyGroups, tr("当前关系", "Current links"), "unchanged", impact.unchanged, resolved, backlinkCounts);
       return;
     }
 
     this.renderRelationGraph(summary, impact);
     const groups = container.createDiv({ cls: "git-note-history-impact-groups" });
-    this.renderRelationGroup(groups, "新增关系", "added", impact.added, resolved, backlinkCounts);
-    this.renderRelationGroup(groups, "移除关系", "removed", impact.removed, resolved, backlinkCounts);
-    this.renderRelationGroup(groups, "保持不变", "unchanged", impact.unchanged, resolved, backlinkCounts);
+    this.renderRelationGroup(groups, tr("新增关系", "Added links"), "added", impact.added, resolved, backlinkCounts);
+    this.renderRelationGroup(groups, tr("移除关系", "Removed links"), "removed", impact.removed, resolved, backlinkCounts);
+    this.renderRelationGroup(groups, tr("保持不变", "Unchanged"), "unchanged", impact.unchanged, resolved, backlinkCounts);
   }
 
   private renderRelationGraph(container: HTMLElement, impact: LinkImpact): void {
@@ -1517,7 +1518,7 @@ export class GitHistoryDetailView extends ItemView {
       ...impact.unchanged.slice(0, 10).map((relation) => ({ relation, state: "unchanged" }))
     ].slice(0, 24);
     if (relations.length === 0) {
-      container.createDiv({ cls: "git-note-history-empty", text: "两个版本的链接与标签关系相同。" });
+      container.createDiv({ cls: "git-note-history-empty", text: tr("两个版本的链接与标签关系相同。", "Both versions have the same links and tags.") });
       return;
     }
     const width = 760;
@@ -1528,7 +1529,7 @@ export class GitHistoryDetailView extends ItemView {
     svg.setAttribute("class", "git-note-history-impact-graph");
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "当前笔记与新增、移除和未变化关系的局部图谱");
+    svg.setAttribute("aria-label", tr("当前笔记与新增、移除和未变化关系的局部图谱", "Local graph of the current note with added, removed and unchanged links"));
 
     relations.forEach(({ relation, state }, index) => {
       const angle = (Math.PI * 2 * index) / Math.max(1, relations.length) - Math.PI / 2;
@@ -1585,7 +1586,7 @@ export class GitHistoryDetailView extends ItemView {
     heading.createSpan({ text: title });
     heading.createSpan({ cls: "git-note-history-impact-count", text: String(relations.length) });
     if (relations.length === 0) {
-      group.createDiv({ cls: "git-note-history-impact-none", text: "无" });
+      group.createDiv({ cls: "git-note-history-impact-none", text: tr("无", "None") });
       return;
     }
     for (const relation of relations) {
@@ -1610,8 +1611,8 @@ export class GitHistoryDetailView extends ItemView {
         row.createSpan({
           cls: `git-note-history-impact-resolution ${destination ? "is-resolved" : "is-unresolved"}`,
           text: destination
-            ? `${backlinkCounts.get(destination.path) ?? 0} 篇反链`
-            : "目标未解析"
+            ? tr(`${backlinkCounts.get(destination.path) ?? 0} 篇反链`, `${backlinkCounts.get(destination.path) ?? 0} backlinks`)
+            : tr("目标未解析", "Unresolved target")
         });
       }
       if (destination) row.addEventListener("click", () => void this.app.workspace.getLeaf(true).openFile(destination));
@@ -1651,21 +1652,21 @@ export class GitHistoryDetailView extends ItemView {
     const sourceLabel = this.versionReceiptLabel(request.base);
     const currentContent = await this.app.vault.read(file);
     if (!this.isContentContextCurrent(request, file, generation)) {
-      new Notice("对比已经切换，请重新发起恢复。");
+      new Notice(tr("对比已经切换，请重新发起恢复。", "The compare has changed; start the restore again."));
       return;
     }
     new RestorePreviewModal(this.app, {
       file,
-      title: `安全恢复到 ${commit.shortHash}`,
+      title: tr(`安全恢复到 ${commit.shortHash}`, `Safely restore to ${commit.shortHash}`),
       currentContent,
       targetContent,
-      label: `恢复整篇到 ${commit.shortHash}`,
+      label: tr(`恢复整篇到 ${commit.shortHash}`, `Restore whole note to ${commit.shortHash}`),
       sourceLabel,
       scope: "file",
-      confirmText: "确认恢复整篇",
+      confirmText: tr("确认恢复整篇", "Confirm whole-note restore"),
       onSaveCopy: async () => {
         if (!this.isContentContextCurrent(request, file, generation)) {
-          new Notice("对比已经切换，请重新发起另存。");
+          new Notice(tr("对比已经切换，请重新发起另存。", "The compare has changed; start the save again."));
           return;
         }
         await this.saveBaseAsCopy({
@@ -1677,12 +1678,12 @@ export class GitHistoryDetailView extends ItemView {
       },
       onConfirm: async () => {
         if (!this.isContentContextCurrent(request, file, generation)) {
-          new Notice("对比已经切换，请重新发起恢复。");
+          new Notice(tr("对比已经切换，请重新发起恢复。", "The compare has changed; start the restore again."));
           return;
         }
         try {
           if (await this.plugin.restoreService.restore(file, targetContent, {
-            label: `恢复整篇到 ${commit.shortHash}`,
+            label: tr(`恢复整篇到 ${commit.shortHash}`, `Restore whole note to ${commit.shortHash}`),
             sourceLabel,
             scope: "file",
             expectedCurrentContent: currentContent
@@ -1724,12 +1725,12 @@ export class GitHistoryDetailView extends ItemView {
       suffix += 1;
     }
     if (!this.isContentContextCurrent(request, file, generation)) {
-      new Notice("对比已经切换，请重新发起另存。");
+      new Notice(tr("对比已经切换，请重新发起另存。", "The compare has changed; start the save again."));
       return;
     }
     const copy = await this.app.vault.create(candidate, content);
     await this.app.workspace.getLeaf(true).openFile(copy);
-    new Notice(`已创建历史副本：${candidate}`);
+    new Notice(tr(`已创建历史副本：${candidate}`, `Created a historical copy: ${candidate}`));
   }
 
   private async confirmHunkRestore(
@@ -1753,26 +1754,26 @@ export class GitHistoryDetailView extends ItemView {
     const sourceLabel = this.versionReceiptLabel(request.base);
     const currentContent = await this.app.vault.read(file);
     if (!this.isContentContextCurrent(request, file, generation)) {
-      new Notice("对比已经切换，请重新发起恢复。");
+      new Notice(tr("对比已经切换，请重新发起恢复。", "The compare has changed; start the restore again."));
       return;
     }
     new RestorePreviewModal(this.app, {
       file,
-      title: `安全恢复变更块 ${hunkNumber}`,
+      title: tr(`安全恢复变更块 ${hunkNumber}`, `Safely restore change ${hunkNumber}`),
       currentContent,
       targetContent,
-      label: `恢复变更块 ${hunkNumber}`,
+      label: tr(`恢复变更块 ${hunkNumber}`, `Restore change ${hunkNumber}`),
       sourceLabel,
       scope: "hunk",
-      confirmText: "确认恢复此块",
+      confirmText: tr("确认恢复此块", "Confirm restoring this change"),
       onConfirm: async () => {
         if (!this.isContentContextCurrent(request, file, generation)) {
-          new Notice("对比已经切换，请重新发起恢复。");
+          new Notice(tr("对比已经切换，请重新发起恢复。", "The compare has changed; start the restore again."));
           return;
         }
         try {
           if (await this.plugin.restoreService.restore(file, targetContent, {
-            label: `恢复变更块 ${hunkNumber}`,
+            label: tr(`恢复变更块 ${hunkNumber}`, `Restore change ${hunkNumber}`),
             sourceLabel,
             scope: "hunk",
             expectedCurrentContent: currentContent
@@ -1805,7 +1806,7 @@ export class GitHistoryDetailView extends ItemView {
       return { ...request.recoverySourceOverride };
     }
     if (request.base.kind !== "commit") {
-      throw new Error("恢复篮子只能从 Git 历史版本收集内容。");
+      throw new Error(tr("恢复篮子只能从 Git 历史版本收集内容。", "The recovery basket only collects from Git history versions."));
     }
     const commit = request.base.commit;
     return {
@@ -1837,7 +1838,7 @@ export class GitHistoryDetailView extends ItemView {
       !this.isContentContextCurrent(request, file, generation)
       || currentContent !== this.targetContent
     ) {
-      new Notice("当前笔记已经变化，请刷新对比后再加入恢复篮子。");
+      new Notice(tr("当前笔记已经变化，请刷新对比后再加入恢复篮子。", "The note has changed; refresh the compare before adding to the recovery basket."));
       return;
     }
     const mapItem = this.changeMap[target.hunkNumber - 1];
@@ -1845,8 +1846,8 @@ export class GitHistoryDetailView extends ItemView {
       filePath: file.path,
       kind: "hunk",
       label: mapItem?.title
-        ? `${mapItem.title} · 变更块 ${target.hunkNumber}`
-        : `变更块 ${target.hunkNumber}`,
+        ? tr(`${mapItem.title} · 变更块 ${target.hunkNumber}`, `${mapItem.title} · change ${target.hunkNumber}`)
+        : tr(`变更块 ${target.hunkNumber}`, `Change ${target.hunkNumber}`),
       source: this.recoveryBasketSource(request),
       patches: [target.patch],
       previewBefore: target.currentBlock,
@@ -1854,7 +1855,7 @@ export class GitHistoryDetailView extends ItemView {
     });
     try {
       const basket = await this.plugin.addRecoveryBasketItem(file, currentContent, item);
-      new Notice(`已加入恢复篮子（${basket.items.length} 项）`);
+      new Notice(tr(`已加入恢复篮子（${basket.items.length} 项）`, `Added to the recovery basket (${basket.items.length} items)`));
       this.render();
     } catch (error) {
       new Notice(errorMessage(error), 8000);
@@ -1879,7 +1880,7 @@ export class GitHistoryDetailView extends ItemView {
       !this.isContentContextCurrent(request, file, generation)
       || currentContent !== this.targetContent
     ) {
-      new Notice("当前笔记已经变化，请刷新对比后再加入恢复篮子。");
+      new Notice(tr("当前笔记已经变化，请刷新对比后再加入恢复篮子。", "The note has changed; refresh the compare before adding to the recovery basket."));
       return;
     }
     try {
@@ -1891,7 +1892,7 @@ export class GitHistoryDetailView extends ItemView {
         source: this.recoveryBasketSource(request)
       });
       const basket = await this.plugin.addRecoveryBasketItem(file, currentContent, item);
-      new Notice(`已加入恢复篮子（${basket.items.length} 项）`);
+      new Notice(tr(`已加入恢复篮子（${basket.items.length} 项）`, `Added to the recovery basket (${basket.items.length} items)`));
       this.render();
     } catch (error) {
       new Notice(errorMessage(error), 8000);

@@ -17,6 +17,7 @@
 .git-note-history-settings,
 .git-note-history-restore-preview-modal,
 .git-note-history-restore-history-modal,
+.git-note-history-demo,
 .git-note-history-paragraph-modal,
 .git-note-history-block-age-modal,
 .git-note-history-version-picker-item {
@@ -37,6 +38,10 @@
   --gnh-del-soft: rgba(var(--color-red-rgb), 0.1);
   --gnh-warn: var(--color-orange);
   --gnh-warn-soft: rgba(var(--color-orange-rgb), 0.12);
+  /* Text in these colours is mixed toward the body text so it stays readable on light themes. */
+  --gnh-add-text: color-mix(in srgb, var(--gnh-add) 68%, var(--gnh-ink));
+  --gnh-del-text: color-mix(in srgb, var(--gnh-del) 72%, var(--gnh-ink));
+  --gnh-warn-text: color-mix(in srgb, var(--gnh-warn) 65%, var(--gnh-ink));
   --gnh-radius: var(--radius-m);
   --gnh-radius-s: var(--radius-s);
   --gnh-gap: var(--size-4-2);
@@ -111,7 +116,7 @@
 .git-note-history-impact-stats .is-added,
 .git-note-history-restore-metrics .is-added,
 .git-note-history-review-inbox-metrics .is-added {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .is-removed,
@@ -120,7 +125,7 @@
 .git-note-history-impact-stats .is-removed,
 .git-note-history-restore-metrics .is-removed,
 .git-note-history-review-inbox-metrics .is-removed {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-commit-stats,
@@ -288,7 +293,7 @@ button.git-note-history-milestone-badge:hover {
   padding: var(--size-4-3);
   border-left: 2px solid var(--gnh-del);
   border-radius: 0 var(--gnh-radius-s) var(--gnh-radius-s) 0;
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
   background: var(--gnh-del-soft);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -323,6 +328,17 @@ button.git-note-history-milestone-badge:hover {
   background: var(--gnh-surface);
 }
 
+.git-note-history-view {
+  container-type: inline-size;
+}
+
+/* In a narrow sidebar the tab already names the view; keep the switch and menu, drop the title. */
+@container (max-width: 360px) {
+  .git-note-history-title-row .git-note-history-brand {
+    display: none;
+  }
+}
+
 .git-note-history-title-row {
   display: flex;
   align-items: center;
@@ -346,7 +362,12 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-brand h4 {
+  overflow: hidden;
   margin: 0;
+  /* Themes such as AnuPpuccin colour every h4; the view title stays plain and on one line. */
+  color: var(--gnh-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: var(--gnh-heading-font);
   font-size: var(--font-ui-medium);
   font-weight: var(--gnh-heading-weight);
@@ -591,13 +612,13 @@ button.git-note-history-milestone-badge:hover {
 .git-note-history-working-status {
   padding: 1px 7px;
   border-radius: 999px;
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
   background: var(--gnh-add-soft);
   font-size: var(--font-ui-smaller);
 }
 
 .git-note-history-working-status.is-conflicted {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
   background: var(--gnh-del-soft);
 }
 
@@ -755,12 +776,12 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-content-lifecycle-state.is-present {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
   background: var(--gnh-add-soft);
 }
 
 .git-note-history-content-lifecycle-state.is-removed {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
   background: var(--gnh-del-soft);
 }
 
@@ -844,7 +865,7 @@ button.git-note-history-milestone-badge:hover {
   z-index: 2;
   margin: var(--size-4-3) 0 var(--size-4-1);
   padding-left: calc(var(--gnh-rail-x) * 2 + var(--size-4-2));
-  color: var(--gnh-faint);
+  color: var(--gnh-muted);
   font-size: var(--font-ui-smaller);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1549,11 +1570,11 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-change-map-item.is-added .git-note-history-change-map-symbol {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-change-map-item.is-removed .git-note-history-change-map-symbol {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-change-map-label {
@@ -1605,7 +1626,7 @@ button.git-note-history-milestone-badge:hover {
 
 .git-note-history-diff-block.is-added::before {
   content: "+";
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-diff-block.is-removed {
@@ -1616,7 +1637,7 @@ button.git-note-history-milestone-badge:hover {
 
 .git-note-history-diff-block.is-removed::before {
   content: "−";
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-diff-block.is-unchanged {
@@ -1677,7 +1698,7 @@ button.git-note-history-milestone-badge:hover {
   height: 32px;
   border: 1px solid var(--gnh-add);
   border-radius: 50%;
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 /* Side-by-side diff. */
@@ -2015,11 +2036,11 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-semantic-row.is-added .git-note-history-semantic-symbol {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-semantic-row.is-removed .git-note-history-semantic-symbol {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-semantic-row.is-changed .git-note-history-semantic-symbol {
@@ -2114,7 +2135,7 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-impact-stats .is-warning {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 .git-note-history-impact-stable {
@@ -2198,11 +2219,11 @@ button.git-note-history-milestone-badge:hover {
 }
 
 .git-note-history-impact-group.is-added .git-note-history-impact-group-title {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-impact-group.is-removed .git-note-history-impact-group-title {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-impact-count {
@@ -2256,7 +2277,7 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-impact-resolution.is-unresolved {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 /* Version picker (fuzzy modal rows). */
@@ -2342,15 +2363,15 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-restore-metrics .is-safe {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-restore-metrics .is-warning {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 .git-note-history-restore-metrics .is-danger {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-restore-checks {
@@ -2375,11 +2396,11 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-restore-check.is-added {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-restore-check.is-removed {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-restore-check.is-changed {
@@ -2387,7 +2408,7 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-restore-check.is-warning {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 .git-note-history-restore-wave,
@@ -2425,15 +2446,15 @@ button.git-note-history-impact-row:hover {
 
 .git-note-history-restore-wave > summary > span {
   display: inline-grid;
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-restore-wave.is-review > summary > span {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 .git-note-history-restore-wave.is-danger > summary > span {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-restore-wave > summary > div {
@@ -2480,7 +2501,7 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-restore-wave-safe {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-restore-wave-findings > div {
@@ -2494,11 +2515,11 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-restore-wave-findings > .is-warning > span {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 .git-note-history-restore-wave-findings > .is-danger > span {
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
 }
 
 .git-note-history-restore-wave-findings div > div {
@@ -2559,12 +2580,12 @@ button.git-note-history-impact-row:hover {
 }
 
 .git-note-history-receipt.is-confirmed .git-note-history-receipt-icon {
-  color: var(--gnh-add);
+  color: var(--gnh-add-text);
 }
 
 .git-note-history-receipt.is-undone .git-note-history-receipt-icon,
 .git-note-history-receipt.is-failed .git-note-history-receipt-icon {
-  color: var(--gnh-warn);
+  color: var(--gnh-warn-text);
 }
 
 .git-note-history-receipt-body {
@@ -2738,7 +2759,7 @@ button.git-note-history-impact-row:hover {
 
 .git-note-history-milestone-error {
   margin-top: var(--size-4-2);
-  color: var(--gnh-del);
+  color: var(--gnh-del-text);
   font-size: var(--font-ui-small);
 }
 
@@ -2811,4 +2832,67 @@ button.git-note-history-impact-row:hover {
     animation-duration: 0ms;
     animation-iteration-count: 1;
   }
+}
+
+
+/* Example modal: three pre-written versions, marked as a demo. */
+
+.git-note-history-demo {
+  width: min(760px, 92vw);
+}
+
+.git-note-history-demo-banner {
+  display: flex;
+  gap: var(--gnh-gap);
+  align-items: baseline;
+  margin-bottom: var(--size-4-3);
+  color: var(--gnh-muted);
+  font-size: var(--font-ui-small);
+}
+
+.git-note-history-demo-badge {
+  flex: none;
+  padding: 0 var(--size-4-2);
+  border-radius: var(--radius-l);
+  background: var(--gnh-warn-soft);
+  color: var(--gnh-warn-text);
+  font-weight: var(--font-semibold);
+}
+
+.git-note-history-demo-versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gnh-gap);
+  margin-bottom: var(--size-4-3);
+}
+
+.git-note-history-demo-version {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: baseline;
+}
+
+.modal.ap-modal .git-note-history-demo-version.is-selected {
+  background: var(--gnh-accent);
+  color: var(--gnh-on-accent);
+}
+
+.git-note-history-demo-when {
+  font-size: var(--font-ui-smaller);
+  opacity: 0.8;
+}
+
+.git-note-history-demo-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gnh-gap);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--size-4-2);
+  color: var(--gnh-muted);
+}
+
+.git-note-history-demo .git-note-history-review-body {
+  max-height: 50vh;
+  overflow: auto;
 }

@@ -41,8 +41,10 @@ import { RestoreService } from "./restore/restore-service";
 import { DEFAULT_SETTINGS, GitNoteHistorySettingTab } from "./settings";
 import {
   GIT_NOTE_HISTORY_VIEW_TYPE,
+  GIT_START_GUIDE_URL,
   GitNoteHistoryView
 } from "./views/history-view";
+import { HistoryDemoModal } from "./ui/demo-modal";
 import {
   GIT_NOTE_HISTORY_DETAIL_VIEW_TYPE,
   GitHistoryDetailView
@@ -176,7 +178,7 @@ function clonePlainData<T>(value: T): T {
 
 function workEventSnapshotLabel(capturedAt: string): string {
   const date = new Date(capturedAt);
-  if (Number.isNaN(date.getTime())) return "工作区快照";
+  if (Number.isNaN(date.getTime())) return tr("工作区快照", "Working copy snapshot");
   const time = new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
     day: "2-digit",
@@ -184,7 +186,7 @@ function workEventSnapshotLabel(capturedAt: string): string {
     minute: "2-digit",
     hour12: false
   }).format(date);
-  return `工作区快照 · ${time}`;
+  return tr(`工作区快照 · ${time}`, `Working copy snapshot · ${time}`);
 }
 
 const MAX_ACTIVE_HISTORICAL_SANDBOXES = 8;
@@ -352,6 +354,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
         if (available && !checking && file) void this.compareWithLastCommit(file);
         return available;
       }
+    });
+
+    this.addCommand({
+      id: "open-example",
+      name: tr("看示例（不读仓库）", "See an example (no repository needed)"),
+      callback: () => new HistoryDemoModal(this.app, GIT_START_GUIDE_URL).open()
     });
 
     this.registerObsidianProtocolHandler(VERSION_LINK_ACTION, (params) => {
@@ -615,11 +623,11 @@ export default class GitNoteHistoryPlugin extends Plugin {
               ]);
               const latest = history.commits[0];
               if (!latest) {
-                new Notice("这篇笔记还没有可作为复查点的 Git 提交。");
+                new Notice(tr("这篇笔记还没有可作为复查点的 Git 提交。", "This note has no Git commit to use as a review point yet."));
                 return;
               }
               await this.markReviewed(history.context, latest, contentFingerprint(content));
-              new Notice(`已复查到 ${latest.shortHash}。`);
+              new Notice(tr(`已复查到 ${latest.shortHash}。`, `Reviewed up to ${latest.shortHash}.`));
               this.refreshOpenViews();
             } catch (error) {
               new Notice(error instanceof Error ? error.message : String(error), 8000);
@@ -720,35 +728,35 @@ export default class GitNoteHistoryPlugin extends Plugin {
           if (reviewResult.status === "rejected") {
             const reason: unknown = reviewResult.reason;
             new Notice(
-              `重命名后未能迁移版本里程碑：${reason instanceof Error ? reason.message : String(reason)}`,
+              tr(`重命名后未能迁移版本里程碑：${reason instanceof Error ? reason.message : String(reason)}`, `Could not move version milestones after the rename: ${reason instanceof Error ? reason.message : String(reason)}`),
               9000
             );
           }
           if (restoreResult.status === "rejected") {
             const reason: unknown = restoreResult.reason;
             new Notice(
-              `重命名后未能迁移恢复记录：${reason instanceof Error ? reason.message : String(reason)}`,
+              tr(`重命名后未能迁移恢复记录：${reason instanceof Error ? reason.message : String(reason)}`, `Could not move restore records after the rename: ${reason instanceof Error ? reason.message : String(reason)}`),
               9000
             );
           }
           if (basketResult.status === "rejected") {
             const reason: unknown = basketResult.reason;
             new Notice(
-              `重命名后未能迁移恢复篮子：${reason instanceof Error ? reason.message : String(reason)}`,
+              tr(`重命名后未能迁移恢复篮子：${reason instanceof Error ? reason.message : String(reason)}`, `Could not move the recovery basket after the rename: ${reason instanceof Error ? reason.message : String(reason)}`),
               9000
             );
           }
           if (localSnapshotResult.status === "rejected") {
             const reason: unknown = localSnapshotResult.reason;
             new Notice(
-              `重命名后未能迁移本地快照：${reason instanceof Error ? reason.message : String(reason)}`,
+              tr(`重命名后未能迁移本地快照：${reason instanceof Error ? reason.message : String(reason)}`, `Could not move local snapshots after the rename: ${reason instanceof Error ? reason.message : String(reason)}`),
               9000
             );
           }
           if (annotationResult.status === "rejected") {
             const reason: unknown = annotationResult.reason;
             new Notice(
-              `重命名后未能迁移版本批注：${reason instanceof Error ? reason.message : String(reason)}`,
+              tr(`重命名后未能迁移版本批注：${reason instanceof Error ? reason.message : String(reason)}`, `Could not move version annotations after the rename: ${reason instanceof Error ? reason.message : String(reason)}`),
               9000
             );
           }
@@ -764,7 +772,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private createHistoricalSandboxManager(): HistoricalSandboxManager {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("历史沙盒只支持使用本地文件系统的桌面 Vault。");
+      throw new Error(tr("历史沙盒只支持使用本地文件系统的桌面 Vault。", "Historical sandboxes need a desktop vault on the local file system."));
     }
     const pluginDirectory = path.resolve(
       adapter.getBasePath(),
@@ -801,16 +809,16 @@ export default class GitNoteHistoryPlugin extends Plugin {
         || !record.source?.shortHash
       ) return;
       const label = record.mode === "capsule"
-        ? `只读时间胶囊 · ${record.source.shortHash}`
-        : `可编辑历史沙盒 · ${record.source.shortHash}`;
+        ? tr(`只读时间胶囊 · ${record.source.shortHash}`, `Read-only time capsule · ${record.source.shortHash}`)
+        : tr(`可编辑历史沙盒 · ${record.source.shortHash}`, `Editable historical sandbox · ${record.source.shortHash}`);
       const status = this.addStatusBarItem();
       status.addClass("git-note-history-sandbox-status");
       status.setText(label);
       status.setAttribute(
         "title",
-        "这是隔离的历史仓库，不是当前主工作区。"
+        tr("这是隔离的历史仓库，不是当前主工作区。", "This is an isolated historical repository, not your main workspace.")
       );
-      new Notice(`${label}：这是隔离的历史 Vault。`, 8000);
+      new Notice(tr(`${label}：这是隔离的历史 Vault。`, `${label}: this is an isolated historical vault.`), 8000);
     } catch {
       // A malformed marker must not prevent the plugin from loading.
     }
@@ -882,7 +890,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     index: number
   ): Promise<void> {
     const target = snapshot.history.commits[index];
-    if (!target) throw new Error("找不到这条 Git revision。");
+    if (!target) throw new Error(tr("找不到这条 Git revision。", "This Git revision was not found."));
     const older = snapshot.history.commits[index + 1];
     if (older) {
       await this.openDetail({
@@ -904,7 +912,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     await this.openDetail({
       filePath: file.path,
       repositoryRoot: snapshot.context.repositoryRoot,
-      base: { kind: "working", label: "文件尚不存在" },
+      base: { kind: "working", label: tr("文件尚不存在", "File does not exist yet") },
       target: { kind: "commit", commit: target },
       initialMode: "side-by-side",
       readOnly: true,
@@ -1047,7 +1055,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
               capturedAt: commit.authoredAt,
               reference: { kind: "commit" as const, commit },
               availability: "too-large" as const,
-              warning: "该版本超过 2 MB 关系分析上限。"
+              warning: tr("该版本超过 2 MB 关系分析上限。", "This version is over the 2 MB limit for link analysis.")
             };
           }
           return {
@@ -1077,9 +1085,9 @@ export default class GitNoteHistoryPlugin extends Plugin {
     const currentContent = await this.app.vault.read(file);
     versions.push({
       id: `working:${contentFingerprint(currentContent)}`,
-      label: "当前工作区",
+      label: tr("当前工作区", "Working copy"),
       capturedAt: new Date(file.stat.mtime).toISOString(),
-      reference: { kind: "working", label: "当前工作区" },
+      reference: { kind: "working", label: tr("当前工作区", "Working copy") },
       availability: "ready",
       content: currentContent
     });
@@ -1125,8 +1133,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
       {
         descriptor: {
           kind: "workspace",
-          label: "当前工作区",
-          description: "当前磁盘上的笔记内容，不是长期历史。",
+          label: tr("当前工作区", "Working copy"),
+          description: tr("当前磁盘上的笔记内容，不是长期历史。", "The note as it is on disk now, not long-term history."),
           access: "direct",
           confidence: "snapshot",
           capabilities: {
@@ -1137,18 +1145,18 @@ export default class GitNoteHistoryPlugin extends Plugin {
             capture: false,
             delete: false
           },
-          boundary: "每次刷新都会重新读取；不会把当前内容冒充为已提交版本。"
+          boundary: tr("每次刷新都会重新读取；不会把当前内容冒充为已提交版本。", "Read again on every refresh; current content is never passed off as a committed version.")
         },
         async probe(context) {
           return {
             descriptor: this.descriptor,
             available: true,
             status: "ready",
-            summary: "作为所有比较的当前端点。",
+            summary: tr("作为所有比较的当前端点。", "The current end point for every comparison."),
             versions: [{
               id: "current",
               source: "workspace",
-              label: "当前工作区",
+              label: tr("当前工作区", "Working copy"),
               capturedAt: context.currentModifiedAt ?? new Date().toISOString(),
               contentFingerprint: contentFingerprint(context.currentContent),
               contentAvailable: true,
@@ -1161,8 +1169,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
       {
         descriptor: {
           kind: "git",
-          label: "Git 历史",
-          description: "仓库中可复核的 commit 版本和路径历史。",
+          label: tr("Git 历史", "Git history"),
+          description: tr("仓库中可复核的 commit 版本和路径历史。", "Commit versions and path history in the repository."),
           access: "direct",
           confidence: "exact",
           capabilities: {
@@ -1173,8 +1181,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
             capture: false,
             delete: false
           },
-          retentionLabel: "由仓库对象和远端备份决定",
-          boundary: "只执行只读 Git 查询；不会 checkout、reset、stash 或写入索引。"
+          retentionLabel: tr("由仓库对象和远端备份决定", "Depends on repository objects and remote backups"),
+          boundary: tr("只执行只读 Git 查询；不会 checkout、reset、stash 或写入索引。", "Runs read-only Git queries only; never checks out, resets, stashes or writes the index.")
         },
         probe: async () => {
           const history = await this.gitClient.loadFileHistory(file);
@@ -1183,12 +1191,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
             available: true,
             status: history.commits.length ? "ready" : "empty",
             summary: history.commits.length
-              ? `${history.commits.length} 个已读取 commit${history.hasMoreHistory ? "，仍有更早历史" : ""}。`
-              : "这篇笔记还没有可读取的 Git commit。",
+              ? tr(`${history.commits.length} 个已读取 commit${history.hasMoreHistory ? "，仍有更早历史" : ""}。`, `${history.commits.length} commits read${history.hasMoreHistory ? ", older history remains" : ""}.`)
+              : tr("这篇笔记还没有可读取的 Git commit。", "This note has no readable Git commit yet."),
             versions: history.commits.map((commit) => ({
               id: commit.hash,
               source: "git" as const,
-              label: commit.subject || "无提交说明",
+              label: commit.subject || tr("无提交说明", "No commit message"),
               capturedAt: commit.authoredAt,
               detail: commit.shortHash,
               contentAvailable: true,
@@ -1202,8 +1210,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
       {
         descriptor: {
           kind: "local-snapshot",
-          label: "插件本地快照",
-          description: "手动保存的当前笔记副本，独立于 Git commit。",
+          label: tr("插件本地快照", "Plugin local snapshots"),
+          description: tr("手动保存的当前笔记副本，独立于 Git commit。", "Copies of the note you saved by hand, separate from Git commits."),
           access: "direct",
           confidence: "snapshot",
           capabilities: {
@@ -1214,8 +1222,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
             capture: true,
             delete: true
           },
-          retentionLabel: "每篇最多 12 个，总计最多 96 个 / 12 MB",
-          boundary: "仅保存在插件本地数据中；不会生成 backup 笔记或污染 Vault 最新版本判断。"
+          retentionLabel: tr("每篇最多 12 个，总计最多 96 个 / 12 MB", "Up to 12 per note, 96 in total / 12 MB"),
+          boundary: tr("仅保存在插件本地数据中；不会生成 backup 笔记或污染 Vault 最新版本判断。", "Kept only in plugin data; no backup notes are created and the vault's latest version is untouched.")
         },
         async probe() {
           const records = localStore.list(file.path);
@@ -1224,14 +1232,14 @@ export default class GitNoteHistoryPlugin extends Plugin {
             available: true,
             status: records.length ? "ready" : "empty",
             summary: records.length
-              ? `${records.length} 个手动快照。相同内容不会重复保存。`
-              : "还没有手动快照。",
+              ? tr(`${records.length} 个手动快照。相同内容不会重复保存。`, `${records.length} manual snapshots. Identical content is saved once.`)
+              : tr("还没有手动快照。", "No manual snapshots yet."),
             versions: records.map((record) => ({
               id: record.id,
               source: "local-snapshot" as const,
               label: record.label,
               capturedAt: record.capturedAt,
-              detail: "本地快照",
+              detail: tr("本地快照", "Local snapshots"),
               contentFingerprint: record.contentFingerprint,
               contentAvailable: true,
               comparisonAvailable: true,
@@ -1246,14 +1254,14 @@ export default class GitNoteHistoryPlugin extends Plugin {
       {
         kind: "file-recovery" as const,
         label: "File Recovery",
-        description: "Obsidian 核心插件维护的本地恢复快照。",
-        boundary: "插件不读取 File Recovery 的私有存储；请在 Obsidian 设置 → 文件恢复中查看和恢复。"
+        description: tr("Obsidian 核心插件维护的本地恢复快照。", "Local recovery snapshots kept by the Obsidian core plugin."),
+        boundary: tr("插件不读取 File Recovery 的私有存储；请在 Obsidian 设置 → 文件恢复中查看和恢复。", "The plugin does not read File Recovery's private storage; view and restore in Obsidian Settings → File recovery.")
       },
       {
         kind: "sync" as const,
         label: "Obsidian Sync",
-        description: "Obsidian Sync 保存的云端版本历史。",
-        boundary: "插件不读取账号或 Sync 私有数据；请在文件菜单的版本历史或 Sync 历史中查看。"
+        description: tr("Obsidian Sync 保存的云端版本历史。", "Cloud version history kept by Obsidian Sync."),
+        boundary: tr("插件不读取账号或 Sync 私有数据；请在文件菜单的版本历史或 Sync 历史中查看。", "The plugin does not read your account or Sync data; use version history in the file menu or Sync history.")
       }
     ]) {
       const sourceDescriptor: HistorySourceAdapter["descriptor"] = {
@@ -1269,8 +1277,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
           delete: false
         },
         retentionLabel: descriptor.kind === "sync"
-          ? "由当前 Sync 套餐决定"
-          : "由 File Recovery 设置决定"
+          ? tr("由当前 Sync 套餐决定", "Depends on your Sync plan")
+          : tr("由 File Recovery 设置决定", "Depends on File Recovery settings")
       };
       adapters.push({
         descriptor: sourceDescriptor,
@@ -1278,7 +1286,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
           return providerHandoffProbe(
             sourceDescriptor,
             true,
-            "使用 Obsidian 原生入口查看；这里不显示未读取的版本数量。"
+            tr("使用 Obsidian 原生入口查看；这里不显示未读取的版本数量。", "Open with Obsidian's own entry; unread version counts are not shown here.")
           );
         }
       });
@@ -1319,23 +1327,23 @@ export default class GitNoteHistoryPlugin extends Plugin {
       const commit = history.commits.find(
         (candidate) => candidate.hash === version.sourceReference
       );
-      if (!commit) throw new Error("这个 Git 版本已不在当前读取窗口，请刷新后重试。");
+      if (!commit) throw new Error(tr("这个 Git 版本已不在当前读取窗口，请刷新后重试。", "This Git version is outside the loaded range. Refresh and try again."));
       await this.openDetail({
         filePath: file.path,
         repositoryRoot: history.context.repositoryRoot,
         base: { kind: "commit", commit },
-        target: { kind: "working", label: "当前工作区" }
+        target: { kind: "working", label: tr("当前工作区", "Working copy") }
       });
       return;
     }
     if (version.source !== "local-snapshot") {
-      throw new Error("这个来源需要在原生界面中查看。");
+      throw new Error(tr("这个来源需要在原生界面中查看。", "This source is viewed in Obsidian's own interface."));
     }
     const record = this.localSnapshots[
       version.sourceReference ?? version.id.replace(/^local-snapshot:/u, "")
     ];
     if (!record || record.filePath !== file.path) {
-      throw new Error("本地快照已被删除或不属于当前笔记。");
+      throw new Error(tr("本地快照已被删除或不属于当前笔记。", "The local snapshot was deleted or belongs to another note."));
     }
     const context = await this.gitClient.resolveFileContext(file);
     const pseudoHash = Array.from(record.id)
@@ -1345,11 +1353,11 @@ export default class GitNoteHistoryPlugin extends Plugin {
       .slice(0, 40);
     const commit: GitCommitVersion = {
       hash: pseudoHash,
-      shortHash: "本地",
+      shortHash: tr("本地", "Local"),
       authorName: "",
       authorEmail: "",
       authoredAt: record.capturedAt,
-      subject: `本地快照 · ${record.label}`,
+      subject: tr(`本地快照 · ${record.label}`, `Local snapshot · ${record.label}`),
       historicalPath: context.repositoryRelativePath,
       changeType: "M",
       addedLines: 0,
@@ -1360,12 +1368,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
       filePath: file.path,
       repositoryRoot: context.repositoryRoot,
       base: { kind: "commit", commit },
-      target: { kind: "working", label: "当前工作区" },
+      target: { kind: "working", label: tr("当前工作区", "Working copy") },
       initialMode: "unified",
       allowRecoveryCollection: true,
       recoverySourceOverride: {
         versionKey: `local-snapshot:${record.id}`,
-        label: `本地快照 · ${record.label}`,
+        label: tr(`本地快照 · ${record.label}`, `Local snapshot · ${record.label}`),
         historicalPath: context.repositoryRelativePath,
         authoredAt: record.capturedAt,
         subject: record.label
@@ -1668,12 +1676,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
       >= MAX_ACTIVE_HISTORICAL_SANDBOXES
     ) {
       throw new Error(
-        `同时最多保留 ${MAX_ACTIVE_HISTORICAL_SANDBOXES} 个使用中的历史沙盒；请先归档或删除一个。`
+        tr(`同时最多保留 ${MAX_ACTIVE_HISTORICAL_SANDBOXES} 个使用中的历史沙盒；请先归档或删除一个。`, `At most ${MAX_ACTIVE_HISTORICAL_SANDBOXES} sandboxes can be in use at once; archive or delete one first.`)
       );
     }
     if (records.length >= MAX_TOTAL_HISTORICAL_SANDBOXES) {
       throw new Error(
-        `最多管理 ${MAX_TOTAL_HISTORICAL_SANDBOXES} 个历史沙盒；请先删除不再需要的沙盒。`
+        tr(`最多管理 ${MAX_TOTAL_HISTORICAL_SANDBOXES} 个历史沙盒；请先删除不再需要的沙盒。`, `At most ${MAX_TOTAL_HISTORICAL_SANDBOXES} sandboxes can be managed; delete ones you no longer need.`)
       );
     }
     const record = await this.historicalSandboxManager.createCapsule({
@@ -1687,7 +1695,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     });
     if (this.isUnloading) {
       await this.historicalSandboxManager.remove(record).catch(() => undefined);
-      throw new Error("插件正在卸载，已取消创建历史沙盒。");
+      throw new Error(tr("插件正在卸载，已取消创建历史沙盒。", "The plugin is unloading; sandbox creation was cancelled."));
     }
     try {
       await this.mutateHistoricalSandboxes((records) => {
@@ -1765,28 +1773,28 @@ export default class GitNoteHistoryPlugin extends Plugin {
     const record = this.requireHistoricalSandbox(id);
     const inspection = await this.historicalSandboxManager.inspect(record);
     if (inspection.availability !== "ready") {
-      throw new Error("沙盒状态异常，不能读取实验文件。");
+      throw new Error(tr("沙盒状态异常，不能读取实验文件。", "The sandbox is in an unexpected state; its files cannot be read."));
     }
     if (!inspection.changedPaths.includes(repositoryPath)) {
-      throw new Error("这个文件不在沙盒的已跟踪改动中。");
+      throw new Error(tr("这个文件不在沙盒的已跟踪改动中。", "This file is not among the sandbox's tracked changes."));
     }
     const vaultPath = this.sandboxRepositoryPathToVaultPath(
       record,
       repositoryPath
     );
     if (!vaultPath.toLocaleLowerCase().endsWith(".md")) {
-      throw new Error("恢复篮子目前只接收 Markdown 文件。");
+      throw new Error(tr("恢复篮子目前只接收 Markdown 文件。", "The recovery basket only takes Markdown files for now."));
     }
     const file = this.app.vault.getFileByPath(vaultPath);
     if (!file || file.extension !== "md") {
-      throw new Error("当前 Vault 中没有对应笔记；若它是新文件，请使用“复制到当前 Vault”。");
+      throw new Error(tr("当前 Vault 中没有对应笔记；若它是新文件，请使用“复制到当前 Vault”。", "No matching note in this vault; if it is new, use \"Copy to current vault\"."));
     }
     const [sandbox, currentContent] = await Promise.all([
       this.historicalSandboxManager.readMarkdownFile(record, repositoryPath),
       this.app.vault.read(file)
     ]);
     if (sandbox.content === currentContent) {
-      throw new Error("沙盒文件与当前笔记内容相同，无需带回。");
+      throw new Error(tr("沙盒文件与当前笔记内容相同，无需带回。", "The sandbox file matches the current note; nothing to bring back."));
     }
     const sourceCommit: GitCommitVersion = {
       hash: record.source.commitHash,
@@ -1794,7 +1802,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       authorName: "",
       authorEmail: "",
       authoredAt: record.source.commitAuthoredAt || record.createdAt,
-      subject: `沙盒实验 · ${record.name}`,
+      subject: tr(`沙盒实验 · ${record.name}`, `Sandbox experiment · ${record.name}`),
       historicalPath: repositoryPath,
       changeType: "M",
       addedLines: 0,
@@ -1805,13 +1813,13 @@ export default class GitNoteHistoryPlugin extends Plugin {
       filePath: file.path,
       repositoryRoot: record.source.repositoryRoot,
       base: { kind: "commit", commit: sourceCommit },
-      target: { kind: "working", label: "当前工作区" },
+      target: { kind: "working", label: tr("当前工作区", "Working copy") },
       initialMode: "unified",
       readOnly: true,
       allowRecoveryCollection: true,
       recoverySourceOverride: {
         versionKey: `sandbox:${record.id}:${repositoryPath}`,
-        label: `沙盒实验 · ${record.name}`,
+        label: tr(`沙盒实验 · ${record.name}`, `Sandbox experiment · ${record.name}`),
         commitHash: record.source.commitHash,
         shortHash: record.source.shortHash,
         historicalPath: repositoryPath,
@@ -1833,17 +1841,17 @@ export default class GitNoteHistoryPlugin extends Plugin {
       inspection.availability !== "ready"
       || !inspection.untrackedPaths.includes(repositoryPath)
     ) {
-      throw new Error("这个文件不再是沙盒中的新文件，请刷新后重试。");
+      throw new Error(tr("这个文件不再是沙盒中的新文件，请刷新后重试。", "This file is no longer new in the sandbox. Refresh and try again."));
     }
     const vaultPath = this.sandboxRepositoryPathToVaultPath(
       record,
       repositoryPath
     );
     if (!vaultPath.toLocaleLowerCase().endsWith(".md")) {
-      throw new Error("目前只允许把新的 Markdown 笔记复制回当前 Vault。");
+      throw new Error(tr("目前只允许把新的 Markdown 笔记复制回当前 Vault。", "Only new Markdown notes can be copied back to the current vault."));
     }
     if (this.app.vault.getAbstractFileByPath(vaultPath)) {
-      throw new Error("当前 Vault 已存在同路径文件，未进行覆盖。");
+      throw new Error(tr("当前 Vault 已存在同路径文件，未进行覆盖。", "A file with the same path exists in this vault; nothing was overwritten."));
     }
     const sandbox = await this.historicalSandboxManager.readMarkdownFile(
       record,
@@ -1852,7 +1860,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     const parentPath = vaultPath.split("/").slice(0, -1).join("/");
     if (parentPath) await this.ensureVaultFolder(parentPath);
     if (this.app.vault.getAbstractFileByPath(vaultPath)) {
-      throw new Error("创建目录期间目标路径出现了文件，未进行覆盖。");
+      throw new Error(tr("创建目录期间目标路径出现了文件，未进行覆盖。", "A file appeared at the target path while creating folders; nothing was overwritten."));
     }
     const file = await this.app.vault.create(vaultPath, sandbox.content);
     await this.app.workspace.getLeaf("tab").openFile(file);
@@ -1878,7 +1886,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       inspection.availability !== "missing"
       && inspection.availability !== "untrusted"
     ) {
-      throw new Error("沙盒目录仍可安全管理，不能只移除记录。");
+      throw new Error(tr("沙盒目录仍可安全管理，不能只移除记录。", "The sandbox folder can still be managed safely; the record cannot be removed alone."));
     }
     await this.mutateHistoricalSandboxes((records) => {
       delete records[id];
@@ -1891,7 +1899,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     await navigator.clipboard.writeText(record.vaultPath);
     window.open("obsidian://choose-vault", "_blank");
     new Notice(
-      "沙盒路径已复制。请在仓库选择器中点“打开本地仓库”，粘贴这个目录；这是 Obsidian 对首次注册文件夹的安全限制。",
+      tr("沙盒路径已复制。请在仓库选择器中点“打开本地仓库”，粘贴这个目录；这是 Obsidian 对首次注册文件夹的安全限制。", "Sandbox path copied. In the vault switcher choose \"Open folder as vault\" and paste it; Obsidian requires this the first time a folder is registered."),
       12000
     );
   }
@@ -1917,7 +1925,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
   private requireHistoricalSandbox(id: string): HistoricalSandboxRecord {
     const record = this.historicalSandboxes[id];
-    if (!record) throw new Error("找不到这个历史沙盒记录。");
+    if (!record) throw new Error(tr("找不到这个历史沙盒记录。", "This historical sandbox record was not found."));
     return clonePlainData(record);
   }
 
@@ -1933,7 +1941,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       || normalized.startsWith("../")
       || normalized.includes("/../")
     ) {
-      throw new Error("沙盒文件路径越过了 Vault 边界。");
+      throw new Error(tr("沙盒文件路径越过了 Vault 边界。", "The sandbox file path leaves the vault."));
     }
     const vaultPrefix = record.vaultRelativePath
       .split(path.sep)
@@ -1941,7 +1949,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       .replace(/\/+$/u, "");
     if (!vaultPrefix) return normalized;
     if (!normalized.startsWith(`${vaultPrefix}/`)) {
-      throw new Error("这个沙盒文件位于当前 Vault 之外。");
+      throw new Error(tr("这个沙盒文件位于当前 Vault 之外。", "This sandbox file is outside the current vault."));
     }
     return normalized.slice(vaultPrefix.length + 1);
   }
@@ -1954,7 +1962,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       const existing = this.app.vault.getAbstractFileByPath(current);
       if (existing instanceof TFolder) continue;
       if (existing) {
-        throw new Error(`无法创建目录：${current} 已被同名文件占用。`);
+        throw new Error(tr(`无法创建目录：${current} 已被同名文件占用。`, `Cannot create folder: a file named ${current} is in the way.`));
       }
       await this.app.vault.createFolder(current);
     }
@@ -1966,7 +1974,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   ): Promise<KnowledgeTraceViewRun> {
     const file = this.app.vault.getFileByPath(setup.filePath);
     if (!file || file.extension !== "md") {
-      throw new GitCommandError("找不到要追踪的 Markdown 笔记。");
+      throw new GitCommandError(tr("找不到要追踪的 Markdown 笔记。", "No Markdown note to trace was found."));
     }
     const materialization = await this.knowledgeVersionMaterializer.materialize(
       file,
@@ -2010,7 +2018,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       || !snapshot.baseHash
       || !snapshot.headHash
     ) {
-      new Notice("这个文件缺少可读取的两端版本，请在工作事件内查看只读预览。");
+      new Notice(tr("这个文件缺少可读取的两端版本，请在工作事件内查看只读预览。", "This file lacks readable versions on both ends; view the read-only preview in the work event."));
       return;
     }
     const targetCommit = snapshot.commits[0];
@@ -2021,7 +2029,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       authorName: oldestCommit?.authorName ?? "",
       authorEmail: oldestCommit?.authorEmail ?? "",
       authoredAt: oldestCommit?.committedAt ?? snapshot.startedAt ?? snapshot.endedAt,
-      subject: "工作事件前",
+      subject: tr("工作事件前", "Before the work event"),
       historicalPath: change.originalRepositoryPath ?? change.repositoryPath,
       changeType: "M",
       addedLines: 0,
@@ -2038,7 +2046,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
             authorName: targetCommit?.authorName ?? "",
             authorEmail: targetCommit?.authorEmail ?? "",
             authoredAt: targetCommit?.authoredAt ?? snapshot.endedAt,
-            subject: targetCommit?.subject ?? "工作事件结束",
+            subject: targetCommit?.subject ?? tr("工作事件结束", "End of the work event"),
             historicalPath: change.repositoryPath,
             changeType: change.status,
             addedLines: change.addedLines,
@@ -2064,7 +2072,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
   async activateConflictResolver(file: TFile | null): Promise<void> {
     if (!file || file.extension !== "md") {
-      new Notice("请先打开一篇存在 Git 冲突的 Markdown 笔记。");
+      new Notice(tr("请先打开一篇存在 Git 冲突的 Markdown 笔记。", "Open a Markdown note with a Git conflict first."));
       return;
     }
     let leaf = this.app.workspace.getLeavesOfType(GIT_CONFLICT_RESOLVER_VIEW_TYPE)[0];
@@ -2108,7 +2116,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
 
   async activateHistoryInMain(file: TFile | null): Promise<void> {
     if (!file || file.extension !== "md") {
-      new Notice("请先打开一篇 Markdown 笔记。");
+      new Notice(tr("请先打开一篇 Markdown 笔记。", "Open a Markdown note first."));
       return;
     }
     let leaf = this.app.workspace.getLeavesOfType(GIT_NOTE_HISTORY_VIEW_TYPE)
@@ -2229,7 +2237,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
         filePath: file.path,
         repositoryRoot: note.context.repositoryRoot,
         base: { kind: "commit", commit: note.lastCommit },
-        target: { kind: "working", label: "当前工作区" },
+        target: { kind: "working", label: tr("当前工作区", "Working copy") },
         initialMode: this.settings.defaultDetailMode
       });
       if (!note.status.staged && !note.status.unstaged) {
@@ -2273,7 +2281,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
         filePath: file.path,
         repositoryRoot: history.context.repositoryRoot,
         base: { kind: "commit", commit },
-        target: { kind: "working", label: "当前工作区" },
+        target: { kind: "working", label: tr("当前工作区", "Working copy") },
         initialMode: this.settings.defaultDetailMode
       });
     } catch (error) {
@@ -2412,7 +2420,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
         ? findBlockAtLines(content, range.startLine, range.endLine)
         : null;
       if (range && !block) {
-        new Notice("没有找到可批注的 Markdown 内容块。");
+        new Notice(tr("没有找到可批注的 Markdown 内容块。", "No Markdown block to annotate was found."));
         return;
       }
       const fingerprint = contentFingerprint(content);
@@ -2421,7 +2429,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
         repositoryRoot: history.context.repositoryRoot,
         historicalPath: history.context.repositoryRelativePath,
         commitHash: `working:${fingerprint}`,
-        versionLabel: "当前工作区",
+        versionLabel: tr("当前工作区", "Working copy"),
         ...(block ? { block: annotationBlockAnchor(block) } : {})
       });
     } catch (error) {
@@ -2458,8 +2466,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
     block?: ReviewAnnotationBlockAnchor;
   }): void {
     const targetDescription = input.block
-      ? `${input.versionLabel} · 第 ${input.block.startLine + 1}–${input.block.endLine + 1} 行`
-      : `${input.versionLabel} · 整个版本`;
+      ? tr(`${input.versionLabel} · 第 ${input.block.startLine + 1}–${input.block.endLine + 1} 行`, `${input.versionLabel} · lines ${input.block.startLine + 1}–${input.block.endLine + 1}`)
+      : tr(`${input.versionLabel} · 整个版本`, `${input.versionLabel} · whole version`);
     new ReviewAnnotationModal(this.app, undefined, targetDescription, async (draft) => {
       if (!draft) return;
       const now = new Date().toISOString();
@@ -2473,10 +2481,10 @@ export default class GitNoteHistoryPlugin extends Plugin {
             && item.filePath === input.file.path
           ).length;
         if (total >= MAX_REVIEW_ANNOTATIONS) {
-          throw new Error(`批注总数已达到 ${MAX_REVIEW_ANNOTATIONS} 条上限。`);
+          throw new Error(tr(`批注总数已达到 ${MAX_REVIEW_ANNOTATIONS} 条上限。`, `The total of ${MAX_REVIEW_ANNOTATIONS} annotations has been reached.`));
         }
         if (fileCount >= MAX_REVIEW_ANNOTATIONS_PER_FILE) {
-          throw new Error(`这篇笔记的批注已达到 ${MAX_REVIEW_ANNOTATIONS_PER_FILE} 条上限。`);
+          throw new Error(tr(`这篇笔记的批注已达到 ${MAX_REVIEW_ANNOTATIONS_PER_FILE} 条上限。`, `This note has reached ${MAX_REVIEW_ANNOTATIONS_PER_FILE} annotations.`));
         }
         records[id] = {
           id,
@@ -2494,7 +2502,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
           updatedAt: now
         };
       });
-      new Notice("版本批注已保存。");
+      new Notice(tr("版本批注已保存。", "Version annotation saved."));
       await this.openReviewAnnotations(input.file);
       this.refreshOpenViews();
     }).open();
@@ -2506,7 +2514,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
   ): Promise<void> {
     await this.mutateReviewAnnotations((records) => {
       const existing = records[id];
-      if (!existing) throw new Error("找不到这条版本批注。");
+      if (!existing) throw new Error(tr("找不到这条版本批注。", "This version annotation was not found."));
       existing.comment = value.comment.trim().slice(0, 4000);
       existing.status = value.status;
       existing.updatedAt = new Date().toISOString();
@@ -2527,14 +2535,14 @@ export default class GitNoteHistoryPlugin extends Plugin {
       this.getReviewAnnotations(file.path)
     );
     await navigator.clipboard.writeText(markdown);
-    new Notice("Markdown 审阅包已复制到剪贴板。");
+    new Notice(tr("Markdown 审阅包已复制到剪贴板。", "Markdown review pack copied to the clipboard."));
   }
 
   async syncAnnotationsToGitNotes(file: TFile): Promise<void> {
     const annotations = this.getReviewAnnotations(file.path)
       .filter((item) => !item.commitHash.startsWith("working:"));
     if (annotations.length === 0) {
-      new Notice("没有绑定 Git commit 的批注；工作区批注不能写入 Git notes。", 7000);
+      new Notice(tr("没有绑定 Git commit 的批注；工作区批注不能写入 Git notes。", "No annotations are tied to a Git commit; working copy annotations cannot be written to Git notes."), 7000);
       return;
     }
     const byCommit = new Map<string, ReviewAnnotation[]>();
@@ -2570,7 +2578,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       );
     }
     new Notice(
-      `已写入 ${byCommit.size} 个 commit 的专用 Git notes${imported ? `，并导入 ${imported} 条批注` : ""}。普通 git push 默认不会同步该 ref。`,
+      tr(`已写入 ${byCommit.size} 个 commit 的专用 Git notes${imported ? `，并导入 ${imported} 条批注` : ""}。普通 git push 默认不会同步该 ref。`, `Wrote dedicated Git notes for ${byCommit.size} commits${imported ? `, imported ${imported} annotations` : ""}. A plain git push does not sync that ref.`),
       9000
     );
     this.refreshOpenViews();
@@ -2703,7 +2711,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       const milestones = state.milestones ??= {};
       if (milestone) {
         if (milestone.kind === "review-checkpoint") {
-          throw new Error("复查点由复查流程管理，不能手动创建。");
+          throw new Error(tr("复查点由复查流程管理，不能手动创建。", "Review points are managed by the review flow and cannot be created by hand."));
         }
         const id = milestoneId
           ?? `milestone:${(typeof crypto === "undefined" ? undefined : crypto.randomUUID?.()) ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
@@ -2887,7 +2895,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       } catch (error) {
         if (
           error instanceof GitCommandError
-          && error.message === "当前笔记不在检测到的 Git 仓库中。"
+          && error.problem === "outside-repo"
         ) return false;
         throw error;
       }
@@ -3056,7 +3064,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       typeof previousSchema === "number"
       && previousSchema > CURRENT_DATA_SCHEMA_VERSION
     ) {
-      const message = `Git Note History 数据来自更新版本（schema ${previousSchema}），v${this.manifest.version} 已停止加载以避免覆盖。`;
+      const message = tr(`Git Note History 数据来自更新版本（schema ${previousSchema}），v${this.manifest.version} 已停止加载以避免覆盖。`, `Git Note History data comes from a newer version (schema ${previousSchema}); v${this.manifest.version} stopped loading to avoid overwriting it.`);
       new Notice(message, 10000);
       throw new Error(message);
     }

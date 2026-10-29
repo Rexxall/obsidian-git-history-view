@@ -6,6 +6,7 @@ import {
   type MarkdownBlock
 } from "../history/markdown-blocks";
 import type { GitCommitVersion } from "../models";
+import { tr } from "../i18n";
 
 interface AgedBlock {
   block: MarkdownBlock;
@@ -15,7 +16,7 @@ interface AgedBlock {
 }
 
 function formatDate(value?: string): string {
-  if (!value) return "未知";
+  if (!value) return tr("未知", "Unknown");
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
@@ -37,13 +38,13 @@ export class BlockAgeModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ap", "ap-modal", "git-note-history-block-age-modal");
-    this.setTitle(`内容年龄镜头 · ${this.file.basename}`);
+    this.setTitle(tr(`内容年龄镜头 · ${this.file.basename}`, `Content age lens · ${this.file.basename}`));
     const intro = this.contentEl.createDiv({ cls: "git-note-history-block-age-intro" });
     setIcon(intro.createSpan(), "scan-eye");
-    intro.createSpan({ text: "按标题和段落估算首次出现与最近内容变化；关闭弹窗后不会在编辑器留下装饰。" });
+    intro.createSpan({ text: tr("按标题和段落估算首次出现与最近内容变化；关闭弹窗后不会在编辑器留下装饰。", "Estimates first appearance and last change per heading and paragraph; nothing stays in the editor after closing.") });
     const loading = this.contentEl.createDiv({
       cls: "git-note-history-loading",
-      text: "正在沿 Git 历史追踪 Markdown 区块…"
+      text: tr("正在沿 Git 历史追踪 Markdown 区块…", "Tracing Markdown blocks through Git history…")
     });
     void this.load(loading);
   }
@@ -106,7 +107,7 @@ export class BlockAgeModal extends Modal {
 
       loading.remove();
       if (aged.length === 0) {
-        this.contentEl.createDiv({ cls: "git-note-history-empty", text: "没有可追踪的 Markdown 内容区块。" });
+        this.contentEl.createDiv({ cls: "git-note-history-empty", text: tr("没有可追踪的 Markdown 内容区块。", "No Markdown blocks to trace.") });
         return;
       }
       const list = this.contentEl.createDiv({ cls: "git-note-history-block-age-list" });
@@ -114,7 +115,7 @@ export class BlockAgeModal extends Modal {
       if (extractMarkdownBlocks(currentContent).length > aged.length) {
         this.contentEl.createDiv({
           cls: "git-note-history-block-age-limit",
-          text: `为保持响应速度，本次显示前 ${aged.length} 个内容区块。`
+          text: tr(`为保持响应速度，本次显示前 ${aged.length} 个内容区块。`, `To stay responsive, the first ${aged.length} blocks are shown.`)
         });
       }
     } catch (error) {
@@ -134,12 +135,12 @@ export class BlockAgeModal extends Modal {
     const title = item.block.kind === "heading"
       ? item.block.content.replace(/^#{1,6}\s+/, "")
       : item.block.content.replace(/\s+/g, " ").slice(0, 110);
-    body.createSpan({ cls: "git-note-history-block-age-title", text: title || "（空区块）" });
+    body.createSpan({ cls: "git-note-history-block-age-title", text: title || tr("（空区块）", "(empty block)") });
     const path = item.block.headingPath.join(" › ");
     if (path && item.block.kind !== "heading") body.createSpan({ cls: "git-note-history-block-age-path", text: path });
     const meta = body.createSpan({ cls: "git-note-history-block-age-meta" });
-    meta.createSpan({ text: `首次出现 ${formatDate(item.firstSeen?.authoredAt)}` });
-    meta.createSpan({ text: item.uncommitted ? "当前工作区有新修改" : `最近变化 ${formatDate(item.lastChanged?.authoredAt)}` });
+    meta.createSpan({ text: tr(`首次出现 ${formatDate(item.firstSeen?.authoredAt)}`, `First seen ${formatDate(item.firstSeen?.authoredAt)}`) });
+    meta.createSpan({ text: item.uncommitted ? tr("当前工作区有新修改", "New edits in the working copy") : tr(`最近变化 ${formatDate(item.lastChanged?.authoredAt)}`, `Last changed ${formatDate(item.lastChanged?.authoredAt)}`) });
     row.addEventListener("click", () => void (async () => {
       this.close();
       await this.plugin.openFileAtLine(this.file, item.block.startLine);

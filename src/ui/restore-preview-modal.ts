@@ -6,8 +6,9 @@ import {
   extractFrontmatterAliases,
   type IncomingKnowledgeReference
 } from "../analysis/recovery-impact";
-import { buildSemanticDiff } from "../diff/semantic-diff";
+import { buildSemanticDiff, semanticGroupLabel } from "../diff/semantic-diff";
 import type { RestoreScope } from "../models";
+import { tr } from "../i18n";
 
 export interface RestorePreviewOptions {
   file: TFile;
@@ -50,7 +51,7 @@ export class RestorePreviewModal extends Modal {
     const text = title.createDiv();
     text.createEl("strong", { text: this.options.label });
     text.createDiv({
-      text: `${this.options.file.path}${this.options.sourceLabel ? ` · 来源 ${this.options.sourceLabel}` : ""}`
+      text: tr(`${this.options.file.path}${this.options.sourceLabel ? ` · 来源 ${this.options.sourceLabel}` : ""}`, `${this.options.file.path}${this.options.sourceLabel ? ` · from ${this.options.sourceLabel}` : ""}`)
     });
 
     const stats = lineStats(this.options.currentContent, this.options.targetContent);
@@ -73,9 +74,9 @@ export class RestorePreviewModal extends Modal {
       }
     );
     const metrics = intro.createDiv({ cls: "git-note-history-restore-metrics" });
-    metrics.createSpan({ cls: "is-added", text: `+${stats.added} 行` });
-    metrics.createSpan({ cls: "is-removed", text: `−${stats.deleted} 行` });
-    metrics.createSpan({ text: `${semantic.length} 个结构变化` });
+    metrics.createSpan({ cls: "is-added", text: tr(`+${stats.added} 行`, `+${stats.added} lines`) });
+    metrics.createSpan({ cls: "is-removed", text: tr(`−${stats.deleted} 行`, `−${stats.deleted} lines`) });
+    metrics.createSpan({ text: tr(`${semantic.length} 个结构变化`, `${semantic.length} structure changes`) });
     metrics.createSpan({
       cls: wave.severity === "danger"
         ? "is-danger"
@@ -87,18 +88,18 @@ export class RestorePreviewModal extends Modal {
 
     if (semantic.length > 0 || impact.removed.length > 0) {
       const checks = this.contentEl.createDiv({ cls: "git-note-history-restore-checks" });
-      checks.createEl("h5", { text: "写回前检查" });
+      checks.createEl("h5", { text: tr("写回前检查", "Check before writing") });
       for (const change of semantic.slice(0, 8)) {
         checks.createDiv({
           cls: `git-note-history-restore-check is-${change.kind}`,
-          text: `${change.kind === "added" ? "+" : change.kind === "removed" ? "−" : "↔"} ${change.group} · ${change.label}`
+          text: `${change.kind === "added" ? "+" : change.kind === "removed" ? "−" : "↔"} ${semanticGroupLabel(change.group)} · ${change.label}`
         });
       }
-      if (semantic.length > 8) checks.createDiv({ text: `另有 ${semantic.length - 8} 项结构变化` });
+      if (semantic.length > 8) checks.createDiv({ text: tr(`另有 ${semantic.length - 8} 项结构变化`, `${semantic.length - 8} more structure changes`) });
       for (const relation of impact.removed.slice(0, 6)) {
         checks.createDiv({
           cls: "git-note-history-restore-check is-warning",
-          text: `− 将移除 ${relation.kind === "tag" ? "标签" : "关系"}：${relation.label}`
+          text: tr(`− 将移除 ${relation.kind === "tag" ? "标签" : "关系"}：${relation.label}`, `− Will remove ${relation.kind === "tag" ? "tag" : "link"}: ${relation.label}`)
         });
       }
     }
@@ -117,26 +118,26 @@ export class RestorePreviewModal extends Modal {
           : "shield-check"
     );
     const waveHeading = waveSummary.createDiv();
-    waveHeading.createEl("strong", { text: "恢复冲击波" });
+    waveHeading.createEl("strong", { text: tr("恢复冲击波", "Restore impact") });
     waveHeading.createSpan({ text: wave.summary });
     const waveMetrics = wavePanel.createDiv({
       cls: "git-note-history-restore-wave-metrics"
     });
     waveMetrics.createDiv({
       text: `${wave.restoredRelations.length}`,
-      attr: { "data-label": "恢复旧关系" }
+      attr: { "data-label": tr("恢复旧关系", "Old links restored") }
     });
     waveMetrics.createDiv({
       text: `${wave.missingTargets.length}`,
-      attr: { "data-label": "恢复后断链" }
+      attr: { "data-label": tr("恢复后断链", "Broken links after restore") }
     });
     waveMetrics.createDiv({
       text: `${wave.brokenIncomingReferences.length}`,
-      attr: { "data-label": "受影响反链" }
+      attr: { "data-label": tr("受影响反链", "Affected backlinks") }
     });
     waveMetrics.createDiv({
       text: `${wave.missingAttachments.length}`,
-      attr: { "data-label": "缺失附件" }
+      attr: { "data-label": tr("缺失附件", "Missing attachments") }
     });
     if (wave.findings.length === 0) {
       const safe = wavePanel.createDiv({
@@ -144,7 +145,7 @@ export class RestorePreviewModal extends Modal {
       });
       setIcon(safe.createSpan(), "circle-check-big");
       safe.createSpan({
-        text: "当前 Vault 中未发现会因这次恢复新增的断链、缺失附件或失效入站锚点。"
+        text: tr("当前 Vault 中未发现会因这次恢复新增的断链、缺失附件或失效入站锚点。", "No new broken links, missing attachments or broken incoming anchors were found in this vault for this restore.")
       });
     } else {
       const findings = wavePanel.createDiv({
@@ -168,13 +169,13 @@ export class RestorePreviewModal extends Modal {
       }
       if (wave.findings.length > 16) {
         findings.createDiv({
-          text: `另有 ${wave.findings.length - 16} 项影响未展开`
+          text: tr(`另有 ${wave.findings.length - 16} 项影响未展开`, `${wave.findings.length - 16} more impacts not expanded`)
         });
       }
     }
 
     const result = this.contentEl.createEl("details", { cls: "git-note-history-restore-result" });
-    result.createEl("summary", { text: "查看恢复后的完整内容" });
+    result.createEl("summary", { text: tr("查看恢复后的完整内容", "View the full restored content") });
     const preview = result.createDiv({ cls: "markdown-preview-view git-note-history-restore-markdown-preview" });
     void MarkdownRenderer.render(
       this.app,
@@ -187,7 +188,7 @@ export class RestorePreviewModal extends Modal {
     const safety = this.contentEl.createDiv({ cls: "git-note-history-restore-safety-note" });
     setIcon(safety.createSpan(), "history");
     safety.createSpan({
-      text: "确认后会先保存恢复前内容并生成回执；插件不会修改 HEAD、分支或 Git 暂存区。"
+      text: tr("确认后会先保存恢复前内容并生成回执；插件不会修改 HEAD、分支或 Git 暂存区。", "On confirm, the content before the restore is saved and a receipt is kept; the plugin never changes HEAD, branches or the Git staging area.")
     });
 
     let cancelButton: HTMLButtonElement | null = null;
@@ -205,7 +206,7 @@ export class RestorePreviewModal extends Modal {
     new Setting(this.contentEl)
       .addButton((button) => {
         cancelButton = button.buttonEl;
-        button.setButtonText("取消").onClick(() => this.close());
+        button.setButtonText(tr("取消", "Cancel")).onClick(() => this.close());
       })
       .addButton((button) => {
         saveButton = button.buttonEl;
@@ -213,7 +214,7 @@ export class RestorePreviewModal extends Modal {
           button.buttonEl.hide();
           return;
         }
-        button.setButtonText("另存副本").onClick(async () => {
+        button.setButtonText(tr("另存副本", "Save as copy")).onClick(async () => {
           if (!beginAction()) return;
           try {
             await this.options.onSaveCopy?.();

@@ -3,11 +3,14 @@ import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { App, FileSystemAdapter, TFile } from "obsidian";
+import { tr } from "../i18n";
 import type {
   GitCommittedChange,
   GitCommitVersion,
   GitConflictVersions,
+  GitEmptyHistoryReason,
   GitFileHistory,
+  GitFileStatus,
   GitLineStats,
   GitNoteHistorySettings,
   GitNoteStatus,
@@ -100,13 +103,18 @@ function parseWorkEventCommitLog(raw: string): WorkEventCommit[] {
   return commits;
 }
 
+/** Why Git could not be read, so the view can offer the one step that fits. */
+export type GitProblem = "not-repo" | "no-git" | "outside-repo" | "not-desktop" | "timeout" | "failed";
+
 export class GitCommandError extends Error {
   readonly stderr: string;
+  readonly problem: GitProblem;
 
-  constructor(message: string, stderr = "") {
+  constructor(message: string, stderr = "", problem: GitProblem = "failed") {
     super(message);
     this.name = "GitCommandError";
     this.stderr = stderr;
+    this.problem = problem;
   }
 }
 
@@ -268,6 +276,7 @@ export class GitClient {
 
     const status = parseGitStatus(statusOutput);
     const workingTreeStats = await this.getWorkingTreeStats(context, status.untracked, file);
+    const empty = commits.length === 0 ? await this.explainEmptyHistory(context, status) : null;
 
     return {
       context,
@@ -275,7 +284,9 @@ export class GitClient {
       status,
       commits,
       hasMoreHistory: limitedHistory.hasMore,
-      workingTreeStats
+      workingTreeStats,
+      ...(empty ? { emptyReason: empty.reason } : {}),
+      ...(empty?.rule ? { ignoreRule: empty.rule } : {})
     };
   }
 
@@ -463,7 +474,7 @@ export class GitClient {
       || !stagedStatusStillStable
     ) {
       throw new GitCommandError(
-        "读取期间 Git HEAD、分支或当前笔记状态发生了变化，请重新发起追踪。"
+        tr("读取期间 Git HEAD、分支或当前笔记状态发生了变化，请重新发起追踪。", "Git HEAD, the branch or the note changed while reading; start the trace again.")
       );
     }
 
@@ -655,7 +666,7 @@ export class GitClient {
     historicalPath: string
   ): Promise<string> {
     if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
-      throw new GitCommandError("Git 提交哈希格式无效。");
+      throw new GitCommandError(tr("Git 提交哈希格式无效。", "Invalid Git commit hash."));
     }
 
     return this.runGit(repositoryRoot, ["show", `${commitHash}:${historicalPath}`]);
@@ -663,7 +674,7 @@ export class GitClient {
 
   async readReviewGitNote(repositoryRoot: string, commitHash: string): Promise<string> {
     if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
-      throw new GitCommandError("Git 提交哈希格式无效。");
+      throw new GitCommandError(tr("Git 提交哈希格式无效。", "Invalid Git commit hash."));
     }
     try {
       return await this.runGit(repositoryRoot, [
@@ -687,9 +698,9 @@ export class GitClient {
     content: string
   ): Promise<void> {
     if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
-      throw new GitCommandError("Git 提交哈希格式无效。");
+      throw new GitCommandError(tr("Git 提交哈希格式无效。", "Invalid Git commit hash."));
     }
-    if (!content.trim()) throw new GitCommandError("Git notes 内容不能为空。");
+    if (!content.trim()) throw new GitCommandError(tr("Git notes 内容不能为空。", "Git notes content cannot be empty."));
     await this.runGit(repositoryRoot, [
       "notes",
       "--ref=git-note-history-review",
@@ -738,10 +749,10 @@ export class GitClient {
     );
     if (capture.availability !== "ready") {
       const labels = {
-        missing: "当前笔记已经不存在。",
-        "too-large": "当前笔记超过 2 MB，可信度镜头未读取正文。",
-        "physical-boundary": "当前笔记的物理路径超出 Vault，可信度镜头拒绝读取。",
-        "concurrent-change": "读取期间笔记或 Git 状态发生变化，请重试。"
+        missing: tr("当前笔记已经不存在。", "The note no longer exists."),
+        "too-large": tr("当前笔记超过 2 MB，可信度镜头未读取正文。", "The note is over 2 MB; the lens did not read its text."),
+        "physical-boundary": tr("当前笔记的物理路径超出 Vault，可信度镜头拒绝读取。", "The note's physical path is outside the vault; the lens refused to read it."),
+        "concurrent-change": tr("读取期间笔记或 Git 状态发生变化，请重试。", "The note or Git state changed while reading; try again.")
       } as const;
       throw new GitCommandError(labels[capture.availability]);
     }
@@ -799,7 +810,7 @@ export class GitClient {
       || after.branch !== capture.branch
     ) {
       throw new GitCommandError(
-        "生成可信度镜头期间笔记或 Git 状态发生变化，请重新打开。"
+        tr("生成可信度镜头期间笔记或 Git 状态发生变化，请重新打开。", "The note or Git state changed while building the lens; open it again.")
       );
     }
     return {
@@ -996,7 +1007,7 @@ export class GitClient {
     if (request.repositoryRoot) {
       const requestedRoot = await this.resolveRealPath(request.repositoryRoot);
       if (requestedRoot !== repositoryRoot) {
-        throw new GitCommandError("工作事件请求来自另一个 Git 仓库，请从时间线重新打开。");
+        throw new GitCommandError(tr("工作事件请求来自另一个 Git 仓库，请从时间线重新打开。", "The work event request comes from another Git repository; open it again from the timeline."));
       }
     }
     const branch = (await this.getBranch(repositoryRoot)).trim() || "HEAD";
@@ -1024,7 +1035,7 @@ export class GitClient {
       "--",
       repositoryPath
     ])).trim();
-    if (!hash) throw new GitCommandError("Git 中没有找到可恢复的文件版本。");
+    if (!hash) throw new GitCommandError(tr("Git 中没有找到可恢复的文件版本。", "No restorable file version was found in Git."));
     const content = await this.getFileContent(repositoryRoot, hash, repositoryPath);
     return { hash, content };
   }
@@ -1043,7 +1054,7 @@ export class GitClient {
       || repositoryRelativePath === ".."
       || path.isAbsolute(repositoryRelativePath)
     ) {
-      throw new GitCommandError("当前笔记不在检测到的 Git 仓库中。");
+      throw new GitCommandError(tr("当前笔记不在检测到的 Git 仓库中。", "This note is outside the detected Git repository."), "", "outside-repo");
     }
     return {
       vaultRoot,
@@ -1065,7 +1076,7 @@ export class GitClient {
       context.repositoryRelativePath
     ]);
     if (!unmerged.trim()) {
-      throw new GitCommandError("当前笔记没有 Git 索引冲突。");
+      throw new GitCommandError(tr("当前笔记没有 Git 索引冲突。", "The note has no Git index conflict."));
     }
 
     const readStage = async (stage: 1 | 2 | 3): Promise<string> => {
@@ -1096,7 +1107,7 @@ export class GitClient {
   ): Promise<WorkEventSnapshot> {
     const { commitHash, aggregation } = source;
     if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) {
-      throw new GitCommandError("Git 提交哈希格式无效。");
+      throw new GitCommandError(tr("Git 提交哈希格式无效。", "Invalid Git commit hash."));
     }
     const logOutput = await this.runGit(context.repositoryRoot, [
       "log",
@@ -1108,7 +1119,7 @@ export class GitClient {
     const candidates = parseWorkEventCommitLog(logOutput);
     const anchor = candidates[0];
     if (!anchor || !anchor.hash.toLocaleLowerCase().startsWith(commitHash.toLocaleLowerCase())) {
-      throw new GitCommandError("没有找到这次工作事件对应的 Git 提交。");
+      throw new GitCommandError(tr("没有找到这次工作事件对应的 Git 提交。", "No Git commit matches this work event."));
     }
 
     const selection = aggregation === "session"
@@ -1120,7 +1131,7 @@ export class GitClient {
       : {
           commits: [anchor],
           confidence: "exact" as const,
-          reason: "精确显示这一个 Git 提交。"
+          reason: tr("精确显示这一个 Git 提交。", "Shows exactly this one Git commit.")
         };
     const sessionTruncated = aggregation === "session"
       && selectInferredSessionCommits(
@@ -1189,19 +1200,19 @@ export class GitClient {
     const capturedAt = new Date().toISOString();
     const warnings = [...hydrated.warnings];
     if (selection.confidence === "heuristic") {
-      warnings.unshift(`编辑会话为推测结果：${selection.reason}`);
+      warnings.unshift(tr(`编辑会话为推测结果：${selection.reason}`, `The editing session is a guess: ${selection.reason}`));
     }
     if (sessionTruncated) {
-      warnings.push("这组自动备份已达到 12 个提交上限，会话可能从更早开始。");
+      warnings.push(tr("这组自动备份已达到 12 个提交上限，会话可能从更早开始。", "This group of automatic backups reached the 12-commit limit; the session may have started earlier."));
     }
     if (sessionRestoredFiles > 0) {
       warnings.push(
-        `${sessionRestoredFiles} 个文件在会话中曾修改，但结束时回到了起点内容。`
+        tr(`${sessionRestoredFiles} 个文件在会话中曾修改，但结束时回到了起点内容。`, `${sessionRestoredFiles} files changed during the session but ended back at their starting content.`)
       );
     }
     if (hiddenRepositoryFileCount > 0) {
       warnings.push(
-        `另有 ${hiddenRepositoryFileCount} 个 Vault 外仓库文件未展示。`
+        tr(`另有 ${hiddenRepositoryFileCount} 个 Vault 外仓库文件未展示。`, `${hiddenRepositoryFileCount} more repository files outside the vault are not shown.`)
       );
     }
     return {
@@ -1391,7 +1402,7 @@ export class GitClient {
       || stateAfter.stats !== statsOutput
     ) {
       throw new GitCommandError(
-        "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+        tr("读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。", "Git HEAD or the working copy changed while reading; sample the uncommitted work again.")
       );
     }
     await this.assertWorkingPreviewUnchanged(context, hydrated.changes);
@@ -1406,14 +1417,14 @@ export class GitClient {
       || finalState.stats !== statsOutput
     ) {
       throw new GitCommandError(
-        "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+        tr("读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。", "Git HEAD or the working copy changed while reading; sample the uncommitted work again.")
       );
     }
     const capturedAt = new Date().toISOString();
     const warnings = [...hydrated.warnings];
     if (merged.hiddenRepositoryFileCount > 0) {
       warnings.push(
-        `另有 ${merged.hiddenRepositoryFileCount} 个 Vault 外仓库文件未展示。`
+        tr(`另有 ${merged.hiddenRepositoryFileCount} 个 Vault 外仓库文件未展示。`, `${merged.hiddenRepositoryFileCount} more repository files outside the vault are not shown.`)
       );
     }
     return {
@@ -1717,17 +1728,17 @@ export class GitClient {
     }
     if (skippedMarkdownFiles > 0) {
       warnings.push(
-        `关系与内容预览只分析了 ${analyzedMarkdownFiles}/${markdown.length} 篇 Markdown；其余文件因大小、数量或历史对象不可读而跳过。`
+        tr(`关系与内容预览只分析了 ${analyzedMarkdownFiles}/${markdown.length} 篇 Markdown；其余文件因大小、数量或历史对象不可读而跳过。`, `Link and content preview analysed only ${analyzedMarkdownFiles}/${markdown.length} Markdown notes; the rest were skipped for size, count or unreadable history objects.`)
       );
     }
     if (physicalBoundarySkipped > 0) {
       warnings.push(
-        `${physicalBoundarySkipped} 个工作区 Markdown 的物理路径位于 Vault 外，正文未读取。`
+        tr(`${physicalBoundarySkipped} 个工作区 Markdown 的物理路径位于 Vault 外，正文未读取。`, `${physicalBoundarySkipped} working copy Markdown files have physical paths outside the vault; their text was not read.`)
       );
     }
     if (skippedRelationChanges > 0) {
       warnings.push(
-        `${skippedRelationChanges} 项关系变化超过分析上限，未在本页展开。`
+        tr(`${skippedRelationChanges} 项关系变化超过分析上限，未在本页展开。`, `${skippedRelationChanges} link changes exceed the analysis limit and are not expanded here.`)
       );
     }
     return {
@@ -1823,7 +1834,7 @@ export class GitClient {
       if (change.status === "D") {
         if (currentFile) {
           throw new GitCommandError(
-            "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+            tr("读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。", "Git HEAD or the working copy changed while reading; sample the uncommitted work again.")
           );
         }
         continue;
@@ -1833,13 +1844,13 @@ export class GitClient {
         || !await this.isPhysicalVaultPath(context.vaultRoot, change.vaultPath)
       ) {
         throw new GitCommandError(
-          "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+          tr("读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。", "Git HEAD or the working copy changed while reading; sample the uncommitted work again.")
         );
       }
       const currentContent = await this.app.vault.read(currentFile);
       if (currentContent !== change.afterContent) {
         throw new GitCommandError(
-          "读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。"
+          tr("读取期间 Git HEAD 或工作区发生了变化，请重新采样当前未提交工作。", "Git HEAD or the working copy changed while reading; sample the uncommitted work again.")
         );
       }
     }
@@ -2005,7 +2016,7 @@ export class GitClient {
       return {
         historyPath: currentPath,
         renameWarning:
-          `检测到超过 ${EXACT_UNSTAGED_RENAME_MAX_CANDIDATES} 个未暂存删除候选，未猜测当前文件的旧路径。`
+          tr(`检测到超过 ${EXACT_UNSTAGED_RENAME_MAX_CANDIDATES} 个未暂存删除候选，未猜测当前文件的旧路径。`, `More than ${EXACT_UNSTAGED_RENAME_MAX_CANDIDATES} unstaged deletion candidates; the old path of the current file was not guessed.`)
       };
     }
 
@@ -2024,7 +2035,7 @@ export class GitClient {
         ...(capture.availability === "too-large"
           ? {
               renameWarning:
-                `当前文件超过 ${EXACT_UNSTAGED_RENAME_MAX_BYTES / 1024} KiB，未尝试精确识别未暂存重命名。`
+                tr(`当前文件超过 ${EXACT_UNSTAGED_RENAME_MAX_BYTES / 1024} KiB，未尝试精确识别未暂存重命名。`, `The current file is over ${EXACT_UNSTAGED_RENAME_MAX_BYTES / 1024} KiB; unstaged renames were not detected exactly.`)
             }
           : {})
       };
@@ -2050,7 +2061,7 @@ export class GitClient {
     if (trackedStatusAfter !== trackedStatusBefore) {
       return {
         historyPath: currentPath,
-        renameWarning: "识别旧路径期间工作区状态发生了变化，未猜测重命名关系。"
+        renameWarning: tr("识别旧路径期间工作区状态发生了变化，未猜测重命名关系。", "The working copy changed while finding the old path; no rename was guessed.")
       };
     }
     if (matches.length === 1) {
@@ -2069,13 +2080,13 @@ export class GitClient {
     if (matches.length > 1) {
       return {
         historyPath: currentPath,
-        renameWarning: "存在多个内容完全相同的旧路径候选，未猜测当前文件来自哪一篇笔记。"
+        renameWarning: tr("存在多个内容完全相同的旧路径候选，未猜测当前文件来自哪一篇笔记。", "Several old paths have identical content; which note this came from was not guessed.")
       };
     }
     return {
       historyPath: currentPath,
       renameWarning:
-        "检测到未暂存删除候选，但当前内容已变或无法唯一确认旧路径，未猜测重命名关系。"
+        tr("检测到未暂存删除候选，但当前内容已变或无法唯一确认旧路径，未猜测重命名关系。", "Unstaged deletion candidates exist, but the content changed or the old path is not unique; no rename was guessed.")
     };
   }
 
@@ -2116,7 +2127,7 @@ export class GitClient {
       ""
     )).trim();
     if (!/^[0-9a-f]{40,64}$/i.test(hash)) {
-      throw new GitCommandError("无法计算当前 Git 仓库格式对应的空目录对象。");
+      throw new GitCommandError(tr("无法计算当前 Git 仓库格式对应的空目录对象。", "Could not compute the empty tree object for this repository format."));
     }
     return hash;
   }
@@ -2128,7 +2139,7 @@ export class GitClient {
   private async resolveRepository(): Promise<{ vaultRoot: string; repositoryRoot: string }> {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new GitCommandError("当前 Vault 不是桌面文件系统，无法调用本机 Git。");
+      throw new GitCommandError(tr("当前库不在桌面文件系统上，无法调用本机 Git。", "This vault is not on a desktop file system, so local Git cannot run."), "", "not-desktop");
     }
     const unresolvedVaultRoot = path.resolve(adapter.getBasePath());
     const vaultRoot = await this.resolveRealPath(unresolvedVaultRoot);
@@ -2137,7 +2148,7 @@ export class GitClient {
       ? path.resolve(configuredRoot)
       : (await this.runGit(unresolvedVaultRoot, ["rev-parse", "--show-toplevel"])).trim();
     const repositoryRoot = await this.resolveRealPath(unresolvedRepositoryRoot);
-    if (!repositoryRoot) throw new GitCommandError("没有找到 Git 仓库根目录。");
+    if (!repositoryRoot) throw new GitCommandError(tr("没有找到 Git 仓库根目录。", "No Git repository root was found."), "", "not-repo");
     return { vaultRoot, repositoryRoot };
   }
 
@@ -2207,20 +2218,21 @@ export class GitClient {
           const detail = stderr.trim() || error.message;
           if ((error as { killed?: boolean }).killed) {
             reject(new GitCommandError(
-              `Git 命令超过 ${GIT_COMMAND_TIMEOUT_MS / 1000} 秒未完成，已停止。`,
-              detail
+              tr(`Git 命令超过 ${GIT_COMMAND_TIMEOUT_MS / 1000} 秒未完成，已停止。`, `A Git command took longer than ${GIT_COMMAND_TIMEOUT_MS / 1000} seconds and was stopped.`),
+              detail,
+              "timeout"
             ));
             return;
           }
           if (/not a git repository/i.test(detail)) {
-            reject(new GitCommandError("这个 Vault 不在 Git 仓库中。", detail));
+            reject(new GitCommandError(tr("这个库不在 Git 仓库里。", "This vault is not inside a Git repository."), detail, "not-repo"));
             return;
           }
           if (/ENOENT/.test(error.message)) {
-            reject(new GitCommandError(`找不到 Git 可执行文件：${executable}`, detail));
+            reject(new GitCommandError(tr(`找不到 Git 程序：${executable}`, `Git was not found: ${executable}`), detail, "no-git"));
             return;
           }
-          reject(new GitCommandError("Git 命令执行失败。", detail));
+          reject(new GitCommandError(tr("Git 命令执行失败。", "A Git command failed."), detail));
         }
       );
       if (input !== undefined) child.stdin?.end(input);
@@ -2234,9 +2246,23 @@ export class GitClient {
       try {
         return await this.runGit(repositoryRoot, ["rev-parse", "--short", "HEAD"]);
       } catch {
-        return "尚无提交";
+        return tr("尚无提交", "No commits yet");
       }
     }
+  }
+
+  /** Read-only checks that tell apart "no commits at all", "not tracked", "ignored" and "tracked but never committed". */
+  private async explainEmptyHistory(
+    context: GitRepositoryContext,
+    status: GitFileStatus
+  ): Promise<{ reason: GitEmptyHistoryReason; rule?: string }> {
+    const hasHead = await this.runGit(context.repositoryRoot, ["rev-parse", "--verify", "--quiet", "HEAD"]).then(() => true, () => false);
+    if (!hasHead) return { reason: "no-commits" };
+    if (status.untracked) return { reason: "untracked" };
+    const ignored = await this.runGit(context.repositoryRoot, ["check-ignore", "-v", "--", context.repositoryRelativePath]).catch(() => "");
+    if (ignored.trim()) return { reason: "ignored", rule: ignored.split("\t")[0]?.trim() ?? "" };
+    if (status.staged) return { reason: "staged" };
+    return { reason: "no-history" };
   }
 
   private isEmptyRepositoryError(stderr: string): boolean {
