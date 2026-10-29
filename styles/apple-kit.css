@@ -169,7 +169,8 @@
 }
 .ap .checkbox-container { width: 40px; height: 24px; border-radius: var(--ap-r-pill); background: var(--ap-fill-strong); box-shadow: none; }
 .ap .checkbox-container.is-enabled { background: var(--ap-accent); }
-.ap .checkbox-container::after { border-radius: var(--ap-r-pill); box-shadow: 0 1px 3px rgb(0 0 0 / 0.22); transition: transform var(--ap-base) var(--ap-ease-spring), width 0.1s ease-in-out 0.05s, height 0.1s ease-in-out 0.05s, margin-top 0.1s ease-in-out 0.05s, left 0.1s ease-in-out 0.05s, opacity 0.1s ease-in-out 0.05s; }
+/* On release the thumb turns round again (0.1s) before it slides; the slide waits for that. */
+.ap .checkbox-container::after { border-radius: var(--ap-r-pill); box-shadow: 0 1px 3px rgb(0 0 0 / 0.22); transition: width 0.1s ease-out, height 0.1s ease-out, margin-top 0.1s ease-out, left 0.1s ease-out, opacity 0.1s ease-out, transform var(--ap-base) var(--ap-ease-spring) 0.1s; }
 /* Pressed: the thumb stretches sideways and keeps its 2px inset, as on iOS, instead of Obsidian's bulge past the track. */
 .ap .checkbox-container:not(.is-disabled):active::after,
 .ap .setting-group.mod-list .checkbox-container:not(.is-disabled):active::after { width: calc(var(--toggle-s-thumb-width) + 6px); height: var(--toggle-s-thumb-height); margin-top: var(--toggle-s-border-width); }
@@ -328,7 +329,7 @@
 }
 /* Reduce motion: no movement, state changes are instant */
 @media (prefers-reduced-motion: reduce) {
-  .ap, .ap *, .modal.ap-modal { animation: none !important; transition: none !important; }
+  .ap, .ap *, .ap .checkbox-container::after, .modal.ap-modal { animation: none !important; transition: none !important; }
 }
 /* Phones: lighter blur, no blur on anything inside a scrolling list */
 .is-mobile .ap { --ap-blur: blur(16px) saturate(160%); --ap-blur-thin: blur(10px) saturate(150%); }
