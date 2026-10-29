@@ -8,6 +8,7 @@
 - **English interface:** the timeline, compare and restore views, conflict resolver, paragraph history, milestones, errors and empty states follow Obsidian's language. Lab views stay in Chinese for now.
 - **Themes:** checked with Default, Minimal, Blue Topaz and AnuPpuccin in light and dark. Added and removed counts, status labels and date groups are now readable on light themes; the view title no longer takes the theme's heading colour and is hidden in a narrow sidebar instead of wrapping; the buttons at the bottom of the sidebar wrap instead of being cut off; the selected version in the example is highlighted inside dialogs.
 - **README:** English and Chinese versions with new screenshots, a "Starting with Git" section, and what the plugin needs and costs up front.
+- **Toggles:** the switch thumb sits 2px from every edge when off, on and pressed. Sizes now go through Obsidian's own toggle variables instead of overriding the thumb's position, and pressing stretches the thumb sideways inside the track instead of growing past it.
 
 ## 0.10.0 — 2026-10-29
 
