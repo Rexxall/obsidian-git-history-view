@@ -182,7 +182,7 @@
   padding: 2px; border-radius: var(--ap-r-pill); background: var(--ap-fill);
 }
 .ap-seg button {
-  appearance: none; display: inline; box-sizing: content-box; margin: 0; border: 0; border-radius: 0; corner-shape: round; padding: 0; background: none; box-shadow: none; height: auto; justify-content: normal; align-items: normal; font: inherit; color: inherit; letter-spacing: inherit; text-align: inherit; text-rendering: inherit; white-space: inherit;
+  appearance: none; display: inline; box-sizing: content-box; margin: 0; border: 0; corner-shape: round; background: none; box-shadow: none; height: auto; justify-content: normal; align-items: normal; letter-spacing: inherit; text-rendering: inherit;
   cursor: pointer; text-align: center; white-space: nowrap;
   font: 500 12px/16px var(--ap-font); color: var(--ap-label);
   padding: 5px 14px; border-radius: var(--ap-r-pill);
@@ -196,7 +196,7 @@
 
 /* ---------- Buttons: capsules ---------- */
 .ap-btn {
-  appearance: none; display: inline; box-sizing: content-box; margin: 0; border: 0; border-radius: 0; corner-shape: round; padding: 0; background: none; box-shadow: none; height: auto; justify-content: normal; align-items: normal; font: inherit; color: inherit; letter-spacing: inherit; text-align: inherit; text-rendering: inherit; white-space: inherit;
+  appearance: none; margin: 0; border: 0; corner-shape: round; box-shadow: none; height: auto; letter-spacing: inherit; text-align: inherit; text-rendering: inherit;
   cursor: pointer; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   font: 500 13px/18px var(--ap-font); padding: 6px 14px; border-radius: var(--ap-r-pill);
   background: var(--ap-fill); color: var(--ap-label); white-space: nowrap;

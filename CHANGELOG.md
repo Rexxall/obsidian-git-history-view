@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.2 — 2026-10-30
+
+- **Directory review:** no duplicate CSS properties left; the look is unchanged.
+
 ## 0.11.1 — 2026-10-30
 
 - **Directory review:** no CSS warnings left in the community directory scorecard. The stylesheet no longer uses `!important`, `all`, `:has` or `text-decoration-color`. The timeline row shows keyboard focus and keeps its actions visible through classes the plugin sets; a removed word keeps its red strike, drawn as a thin line; the old version in the reading view is now struck through in the text colour instead of red. Reduced motion still switches every animation off. Checked by comparing the computed style of every control and screenshots in light and dark and in a narrow sidebar.

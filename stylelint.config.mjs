@@ -2,6 +2,7 @@
 export default {
   plugins: ["stylelint-no-unsupported-browser-features"],
   rules: {
+    "declaration-block-no-duplicate-properties": true,
     "declaration-no-important": true,
     "property-disallowed-list": ["all"],
     "selector-pseudo-class-disallowed-list": ["has"],

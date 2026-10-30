@@ -47,24 +47,15 @@
 /* Capsule picker: a value with a chevron, opens a menu. */
 .ap-picker {
   appearance: none;
-  display: inline;
-  box-sizing: content-box;
   margin: 0;
   border: 0;
-  border-radius: 0;
   corner-shape: round;
-  padding: 0;
-  background: none;
   box-shadow: none;
   height: auto;
   justify-content: normal;
-  align-items: normal;
-  font: inherit;
-  color: inherit;
   letter-spacing: inherit;
   text-align: inherit;
   text-rendering: inherit;
-  white-space: inherit;
   cursor: pointer;
   box-sizing: border-box;
   display: inline-flex;
@@ -87,20 +78,12 @@
 /* Disclosure row: one line that opens more (a view, a section, a menu). */
 .ap-disclosure-row {
   appearance: none;
-  display: inline;
-  box-sizing: content-box;
   margin: 0;
   border: 0;
-  border-radius: 0;
   corner-shape: round;
-  padding: 0;
-  background: none;
-  box-shadow: none;
   height: auto;
   justify-content: normal;
-  align-items: normal;
   font: inherit;
-  color: inherit;
   letter-spacing: inherit;
   text-align: inherit;
   text-rendering: inherit;
