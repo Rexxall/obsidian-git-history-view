@@ -31,13 +31,13 @@ describe("timeline style contract", () => {
   });
 
   it("shows keyboard focus on the row instead of the hidden button", () => {
-    expect(core).toContain(".git-note-history-commit:has(> .git-note-history-row-trigger:focus-visible)");
+    expect(rule(".git-note-history-commit.is-focus-visible")).toContain("box-shadow");
   });
 
-  it("ships without !important (except to switch motion off) and with the built stylesheet in sync", () => {
-    // The glass kit's reduced-motion rule must beat every transition, so it alone may use !important.
-    const withoutReducedMotion = styles.replace(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\}\s*\}/g, "");
-    expect(withoutReducedMotion.match(/!important/g)).toBeNull();
+  it("ships without !important, :has or all, and with the built stylesheet in sync", () => {
+    expect(styles.match(/!important/g)).toBeNull();
+    expect(styles).not.toMatch(/:has\(/);
+    expect(styles).not.toMatch(/(^|[\s;{])all\s*:/);
     expect(styles).toContain(core.trimEnd());
   });
 });

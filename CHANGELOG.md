@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1 — 2026-10-30
+
+- **Directory review:** no CSS warnings left in the community directory scorecard. The stylesheet no longer uses `!important`, `all`, `:has` or `text-decoration-color`. The timeline row shows keyboard focus and keeps its actions visible through classes the plugin sets; a removed word keeps its red strike, drawn as a thin line; the old version in the reading view is now struck through in the text colour instead of red. Reduced motion still switches every animation off. Checked by comparing the computed style of every control and screenshots in light and dark and in a narrow sidebar.
+- **Lint:** `npm run lint` now also runs Stylelint with the directory's CSS checks and the typed `no-unsafe-*` rules, so a release with one of these warnings fails before it ships.
+- **README:** a *Data flow* section explains the two directory warnings, running `git` and reading files outside the vault: why each is needed and the only places it is used.
+
 ## 0.11.0 — 2026-10-30
 
 - **Why there is no history:** the sidebar tells apart a vault outside any Git repository, a repository without commits, a note Git does not track, a note excluded by an ignore rule (naming the rule), a staged but uncommitted note, a missing Git program and a note outside the detected repository. Each case offers one read-only next step; the plugin still never initialises a repository or commits.

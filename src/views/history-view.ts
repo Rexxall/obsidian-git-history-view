@@ -493,6 +493,12 @@ export class GitNoteHistoryView extends ItemView {
     }, { restore: true });
   }
 
+  // The row draws the focus ring for its hidden button, since CSS would need :has to see that focus.
+  private mirrorRowFocus(row: HTMLElement, trigger: HTMLButtonElement): void {
+    trigger.addEventListener("focus", () => row.toggleClass("is-focus-visible", trigger.matches(":focus-visible")));
+    trigger.addEventListener("blur", () => row.removeClass("is-focus-visible"));
+  }
+
   private selectRow(row: HTMLElement, index: number): void {
     this.selectedIndex = index;
     row.parentElement
@@ -1074,6 +1080,7 @@ export class GitNoteHistoryView extends ItemView {
       text: group.summary
     });
     trigger.addEventListener("focus", () => this.selectRow(row, index));
+    this.mirrorRowFocus(row, trigger);
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const size = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(group.addedLines + group.deletedLines + 1) / 4)));
     const dot = rail.createSpan({ cls: `git-note-history-dot change-${representative.changeType.toLowerCase()} size-${size}` });
@@ -1112,7 +1119,9 @@ export class GitNoteHistoryView extends ItemView {
       );
     }
 
-    const actions = row.createDiv({ cls: "ap-row-actions git-note-history-row-actions" });
+    const actions = row.createDiv({
+      cls: `ap-row-actions git-note-history-row-actions ${this.expandedGroups.has(group.id) ? "is-pinned" : ""}`
+    });
     if (group.commits.length > 1) {
       const expand = actions.createEl("button", {
         cls: this.expandedGroups.has(group.id) ? "clickable-icon is-active" : "clickable-icon",
@@ -1779,6 +1788,7 @@ export class GitNoteHistoryView extends ItemView {
       text: commit.subject || tr("（无提交说明）", "(no commit message)")
     });
     trigger.addEventListener("focus", () => this.selectRow(row, filteredIndex));
+    this.mirrorRowFocus(row, trigger);
     const rail = row.createDiv({ cls: "git-note-history-rail" });
     const dot = rail.createSpan({ cls: `git-note-history-dot change-${commit.changeType.toLowerCase()}` });
     setIcon(dot, commit.changeType === "R" ? "file-symlink" : commit.changeType === "C" ? "copy" : "git-commit-horizontal");
@@ -1810,7 +1820,9 @@ export class GitNoteHistoryView extends ItemView {
       this.addBadge(badges, key === "agent" ? "bot" : "shield-check", value, `is-${key}`);
     }
 
-    const actions = row.createDiv({ cls: "ap-row-actions git-note-history-row-actions" });
+    const actions = row.createDiv({
+      cls: `ap-row-actions git-note-history-row-actions ${this.compareSelection.has(commit.hash) ? "is-pinned" : ""}`
+    });
     const select = actions.createEl("button", {
       cls: this.compareSelection.has(commit.hash) ? "clickable-icon is-active" : "clickable-icon",
       attr: { "aria-label": tr("选择用于双版本比较", "Select for two-version compare"), "aria-pressed": String(this.compareSelection.has(commit.hash)) }

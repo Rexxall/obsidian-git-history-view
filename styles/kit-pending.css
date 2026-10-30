@@ -33,9 +33,10 @@
   transition: opacity var(--ap-fast) var(--ap-ease);
 }
 
+/* .is-pinned keeps them visible while one of them is on; the plugin sets it. */
 :hover > .ap-row-actions,
 :focus-within > .ap-row-actions,
-.ap-row-actions:has([aria-expanded="true"], .is-active) {
+.ap-row-actions.is-pinned {
   opacity: 1;
 }
 
@@ -45,7 +46,25 @@
 
 /* Capsule picker: a value with a chevron, opens a menu. */
 .ap-picker {
-  all: unset;
+  appearance: none;
+  display: inline;
+  box-sizing: content-box;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  corner-shape: round;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  height: auto;
+  justify-content: normal;
+  align-items: normal;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-rendering: inherit;
+  white-space: inherit;
   cursor: pointer;
   box-sizing: border-box;
   display: inline-flex;
@@ -67,7 +86,25 @@
 
 /* Disclosure row: one line that opens more (a view, a section, a menu). */
 .ap-disclosure-row {
-  all: unset;
+  appearance: none;
+  display: inline;
+  box-sizing: content-box;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  corner-shape: round;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  height: auto;
+  justify-content: normal;
+  align-items: normal;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-rendering: inherit;
+  white-space: inherit;
   cursor: pointer;
   box-sizing: border-box;
   display: flex;

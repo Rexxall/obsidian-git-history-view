@@ -65,6 +65,15 @@ Colours, radii and spacing come from your theme's variables, and styles only app
 
 **Files outside the vault:** the repository may start in a folder above your vault; the plugin reads it with `git`. The lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (on macOS `~/Library/Application Support/Git Note History`), only when you create a sandbox. Nothing else outside the vault is read or written.
 
+### Data flow
+
+The community directory lists two warnings for this plugin. Both are needed to read Git, and neither touches the network.
+
+| Warning | Why it is needed | Where it is used |
+|---|---|---|
+| **Shell Execution** (`child_process`) | Git history lives in the repository, not in the vault, so the plugin starts the `git` program you set in the settings. It calls `git` directly with a list of arguments, never through a shell, so nothing in a note or file name can run as a command. | Reading history (`git log`, `show`, `diff`, `status`, `blame`), and the lab tool *historical sandboxes*, which also runs `git worktree` to check out an old state. |
+| **Direct Filesystem Access** (`fs`) | The vault API cannot see folders above the vault, where the repository may start. | Resolving the repository folder and checking that a moved repository still exists; and, only when you create a historical sandbox, writing and later removing its copy in the application data folder named above. |
+
 ## Starting with Git
 
 Git Note History reads history that already exists. To start one:

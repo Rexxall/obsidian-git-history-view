@@ -132,9 +132,9 @@
 .ap-settings .setting-item:not(.setting-item-heading):first-child,
 .ap-settings .setting-item-heading + .setting-item,
 .ap-settings > :not(.setting-item) + .setting-item { border-top-left-radius: var(--ap-r-group); border-top-right-radius: var(--ap-r-group); }
-.ap-settings .setting-item:not(.setting-item-heading):has(+ .setting-item-heading),
+/* The plugin marks a row followed by a heading or a note with .ap-group-end, which CSS cannot see without :has. */
 .ap-settings .setting-item:not(.setting-item-heading):last-child,
-.ap-settings .setting-item:not(.setting-item-heading):has(+ :not(.setting-item)) { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
+.ap-settings .setting-item.ap-group-end { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
 .ap-settings .setting-item-heading { background: none; padding: var(--ap-s6) var(--ap-s1) var(--ap-s2); min-height: 0; }
 .ap-settings .setting-item-heading .setting-item-name { font: var(--ap-headline); }
 .ap-settings .setting-item-heading .setting-item-description { padding-top: 4px; }
@@ -182,7 +182,8 @@
   padding: 2px; border-radius: var(--ap-r-pill); background: var(--ap-fill);
 }
 .ap-seg button {
-  all: unset; cursor: pointer; text-align: center; white-space: nowrap;
+  appearance: none; display: inline; box-sizing: content-box; margin: 0; border: 0; border-radius: 0; corner-shape: round; padding: 0; background: none; box-shadow: none; height: auto; justify-content: normal; align-items: normal; font: inherit; color: inherit; letter-spacing: inherit; text-align: inherit; text-rendering: inherit; white-space: inherit;
+  cursor: pointer; text-align: center; white-space: nowrap;
   font: 500 12px/16px var(--ap-font); color: var(--ap-label);
   padding: 5px 14px; border-radius: var(--ap-r-pill);
   transition: background var(--ap-base) var(--ap-ease), box-shadow var(--ap-base) var(--ap-ease);
@@ -195,7 +196,8 @@
 
 /* ---------- Buttons: capsules ---------- */
 .ap-btn {
-  all: unset; cursor: pointer; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  appearance: none; display: inline; box-sizing: content-box; margin: 0; border: 0; border-radius: 0; corner-shape: round; padding: 0; background: none; box-shadow: none; height: auto; justify-content: normal; align-items: normal; font: inherit; color: inherit; letter-spacing: inherit; text-align: inherit; text-rendering: inherit; white-space: inherit;
+  cursor: pointer; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   font: 500 13px/18px var(--ap-font); padding: 6px 14px; border-radius: var(--ap-r-pill);
   background: var(--ap-fill); color: var(--ap-label); white-space: nowrap;
   transition: background var(--ap-fast) var(--ap-ease), transform var(--ap-fast) var(--ap-ease);
@@ -221,7 +223,7 @@
 }
 .ap-field:focus { outline: none; box-shadow: 0 0 0 1px var(--ap-accent), 0 0 0 4px var(--ap-accent-tint); }
 .ap-search { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: var(--ap-r-pill); background: var(--ap-fill); color: var(--ap-label-3); }
-.ap-search input { all: unset; flex: 1; min-width: 0; font: var(--ap-body); color: var(--ap-label); }
+.ap-search input { appearance: none; box-sizing: content-box; margin: 0; border: 0; border-radius: 0; corner-shape: round; padding: 0; background: none; box-shadow: none; height: auto; text-rendering: inherit; flex: 1; min-width: 0; font: var(--ap-body); color: var(--ap-label); }
 
 /* ---------- Sidebar list ---------- */
 .ap-list { display: grid; gap: 2px; padding: var(--ap-s1); }
@@ -329,7 +331,8 @@
 }
 /* Reduce motion: no movement, state changes are instant */
 @media (prefers-reduced-motion: reduce) {
-  .ap, .ap *, .ap .checkbox-container::after, .modal.ap-modal { animation: none !important; transition: none !important; }
+  /* The never-matching id lifts these selectors above every class-based rule, so motion stops with no importance flag. */
+  :is(.ap, #ap-no-motion), :is(.ap, #ap-no-motion) *, :is(.ap, #ap-no-motion) .checkbox-container::after, :is(.modal.ap-modal, #ap-no-motion) { animation: none; transition: none; }
 }
 /* Phones: lighter blur, no blur on anything inside a scrolling list */
 .is-mobile .ap { --ap-blur: blur(16px) saturate(160%); --ap-blur-thin: blur(10px) saturate(150%); }

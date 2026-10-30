@@ -1,7 +1,7 @@
 {
   "id": "git-note-history",
   "name": "Git Note History",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "minAppVersion": "1.13.0",
   "description": "Browse a note's Git history, compare any two versions and restore one paragraph or the whole note with undo. Reads Git only and never commits for you.",
   "author": "Rexxall",

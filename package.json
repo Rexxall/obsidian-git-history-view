@@ -1,6 +1,6 @@
 {
   "name": "git-note-history",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "private": true,
   "license": "MIT",
   "description": "Git-backed note history viewer for Obsidian",
@@ -9,7 +9,7 @@
     "styles": "node scripts/build-styles.mjs",
     "build": "tsc --noEmit && node esbuild.config.mjs production",
     "test": "node scripts/build-styles.mjs && vitest run",
-    "lint": "eslint src",
+    "lint": "eslint src && stylelint \"styles/*.css\" styles.css",
     "check": "npm run build && npm run lint && npm test",
     "package:release": "npm run build && node scripts/package-release.mjs",
     "verify:release": "node scripts/verify-release.mjs",
@@ -28,6 +28,8 @@
     "eslint": "^9.39.5",
     "eslint-plugin-obsidianmd": "^0.4.2",
     "obsidian": "^1.8.7",
+    "stylelint": "^17.16.0",
+    "stylelint-no-unsupported-browser-features": "^8.1.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^3.2.4"
