@@ -15,18 +15,19 @@ import {
   type ProvenanceSource,
   type ProvenanceSourceKind
 } from "../provenance/provenance-lens";
+import { tr } from "../i18n";
 
 export const GIT_PROVENANCE_LENS_VIEW_TYPE = "git-provenance-lens";
 
 type LensFilter = "all" | "review" | "agent" | "citation";
 
 const SOURCE_LABELS: Record<ProvenanceSourceKind, string> = {
-  human: "人工",
+  human: tr("人工", "Human"),
   agent: "Agent",
-  automation: "自动化",
-  script: "脚本",
-  working: "工作区",
-  unknown: "未知"
+  automation: tr("自动化", "Automation"),
+  script: tr("脚本", "Script"),
+  working: tr("工作区", "Working copy"),
+  unknown: tr("未知", "Unknown")
 };
 
 function formatTime(value: string | undefined): string {
@@ -76,7 +77,7 @@ export class GitProvenanceLensView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "来源可信度镜头";
+    return tr("来源可信度镜头", "Provenance lens");
   }
 
   getIcon(): string {
@@ -196,13 +197,13 @@ export class GitProvenanceLensView extends ItemView {
     container.addClass("ap", "git-provenance-lens-view");
     const header = container.createDiv({ cls: "git-provenance-lens-header" });
     const title = header.createDiv();
-    title.createDiv({ cls: "git-provenance-lens-eyebrow", text: "临时只读镜头 · Esc 退出" });
-    title.createEl("h2", { text: this.file?.basename ?? "来源可信度镜头" });
+    title.createDiv({ cls: "git-provenance-lens-eyebrow", text: tr("临时只读镜头 · Esc 退出", "Temporary read-only lens · Esc to leave") });
+    title.createEl("h2", { text: this.file?.basename ?? tr("来源可信度镜头", "Provenance lens") });
     if (this.file) title.createDiv({ cls: "git-provenance-lens-path", text: this.file.path });
     const refresh = header.createEl("button", {
       cls: "clickable-icon",
       attr: {
-        "aria-label": this.loading ? "正在重新分析" : "重新分析来源",
+        "aria-label": this.loading ? tr("正在重新分析", "Analysing again") : tr("重新分析来源", "Analyse sources again"),
         "aria-busy": String(this.loading)
       }
     });
@@ -211,11 +212,11 @@ export class GitProvenanceLensView extends ItemView {
     refresh.addEventListener("click", () => void this.refresh());
 
     if (!this.file) {
-      this.renderState(container, "file-text", "打开一篇 Markdown 笔记后再进入可信度镜头。");
+      this.renderState(container, "file-text", tr("打开一篇 Markdown 笔记后再进入可信度镜头。", "Open a Markdown note to use the provenance lens."));
       return;
     }
     if (this.loading) {
-      this.renderState(container, "loader-circle", "正在按块读取 Git 来源与审阅状态…");
+      this.renderState(container, "loader-circle", tr("正在按块读取 Git 来源与审阅状态…", "Reading Git sources and review state block by block…"));
       return;
     }
     if (this.error) {
@@ -228,7 +229,7 @@ export class GitProvenanceLensView extends ItemView {
     const blocks = this.visibleBlocks();
     const list = container.createDiv({ cls: "git-provenance-block-list" });
     if (blocks.length === 0) {
-      this.renderState(list, "search-x", "当前筛选下没有知识块。");
+      this.renderState(list, "search-x", tr("当前筛选下没有知识块。", "No knowledge blocks match this filter."));
       return;
     }
     for (const block of blocks) this.renderBlock(list, block);
@@ -241,20 +242,20 @@ export class GitProvenanceLensView extends ItemView {
   ): void {
     const summary = container.createDiv({ cls: "git-provenance-summary" });
     const intro = summary.createDiv({ cls: "git-provenance-summary-copy" });
-    intro.createEl("strong", { text: `${analysis.summary.totalBlocks} 个知识块` });
+    intro.createEl("strong", { text: tr(`${analysis.summary.totalBlocks} 个知识块`, `${analysis.summary.totalBlocks} knowledge blocks`) });
     intro.createSpan({
       text: analysis.summary.needsReview > 0
-        ? `${analysis.summary.needsReview} 个需要人工复查`
-        : "当前没有未覆盖的 Agent / 自动化修改"
+        ? tr(`${analysis.summary.needsReview} 个需要人工复查`, `${analysis.summary.needsReview} need a human review`)
+        : tr("当前没有未覆盖的 Agent / 自动化修改", "No agent or automation edits are left unreviewed")
     });
     const metrics = summary.createDiv({ cls: "git-provenance-summary-metrics" });
     const values: Array<[string, number, string]> = [
-      ["人工", analysis.summary.humanBlocks, "human"],
+      [tr("人工", "Human"), analysis.summary.humanBlocks, "human"],
       ["Agent", analysis.summary.agentBlocks, "agent"],
-      ["自动化", analysis.summary.automationBlocks, "automation"],
-      ["工作区", analysis.summary.workingBlocks, "working"],
-      ["未知", analysis.summary.unknownBlocks, "unknown"],
-      ["引用待核", analysis.summary.citationSyncRisks, "citation"]
+      [tr("自动化", "Automation"), analysis.summary.automationBlocks, "automation"],
+      [tr("工作区", "Working copy"), analysis.summary.workingBlocks, "working"],
+      [tr("未知", "Unknown"), analysis.summary.unknownBlocks, "unknown"],
+      [tr("引用待核", "Citations to check"), analysis.summary.citationSyncRisks, "citation"]
     ];
     for (const [label, value, kind] of values) {
       const metric = metrics.createDiv({ cls: `git-provenance-metric is-${kind}` });
@@ -262,18 +263,18 @@ export class GitProvenanceLensView extends ItemView {
       metric.createEl("small", { text: label });
     }
     const meta = summary.createDiv({ cls: "git-provenance-summary-meta" });
-    meta.createSpan({ text: `分支 ${snapshot.branch}` });
+    meta.createSpan({ text: tr(`分支 ${snapshot.branch}`, `Branch ${snapshot.branch}`) });
     if (analysis.reviewedThrough) {
-      meta.createSpan({ text: `人工复查点 ${analysis.reviewedThrough.slice(0, 8)}` });
+      meta.createSpan({ text: tr(`人工复查点 ${analysis.reviewedThrough.slice(0, 8)}`, `Reviewed through ${analysis.reviewedThrough.slice(0, 8)}`) });
     } else {
-      meta.createSpan({ text: "尚未建立人工复查点" });
+      meta.createSpan({ text: tr("尚未建立人工复查点", "No human review point yet") });
     }
     if (snapshot.hasMoreHistory) {
-      meta.createSpan({ cls: "is-warning", text: "来源历史超过 240 版；较旧块可能显示为未知" });
+      meta.createSpan({ cls: "is-warning", text: tr("来源历史超过 240 版；较旧块可能显示为未知", "More than 240 source versions; older blocks may show as unknown") });
     }
     const latest = snapshot.commits[0];
     const mark = summary.createEl("button", {
-      text: "标记当前内容已人工复查",
+      text: tr("标记当前内容已人工复查", "Mark the current content as reviewed"),
       cls: "git-provenance-mark-reviewed"
     });
     mark.disabled = !latest;
@@ -284,7 +285,7 @@ export class GitProvenanceLensView extends ItemView {
         latest,
         snapshot.workingFingerprint
       );
-      new Notice(`已把当前内容人工复查到 ${latest.shortHash}。`);
+      new Notice(tr(`已把当前内容人工复查到 ${latest.shortHash}。`, `Current content marked as reviewed through ${latest.shortHash}.`));
       await this.refresh();
     })());
   }
@@ -292,10 +293,10 @@ export class GitProvenanceLensView extends ItemView {
   private renderToolbar(container: HTMLElement): void {
     const toolbar = container.createDiv({ cls: "git-provenance-toolbar" });
     const filters: Array<[LensFilter, string, string]> = [
-      ["all", "全部", "blocks"],
-      ["review", "待复查", "circle-alert"],
-      ["agent", "Agent / 自动化", "bot"],
-      ["citation", "引用待核", "quote"]
+      ["all", tr("全部", "All"), "blocks"],
+      ["review", tr("待复查", "To review"), "circle-alert"],
+      ["agent", tr("Agent / 自动化", "Agent / automation"), "bot"],
+      ["citation", tr("引用待核", "Citations to check"), "quote"]
     ];
     const group = toolbar.createDiv({ cls: "git-provenance-filters" });
     for (const [id, label, icon] of filters) {
@@ -311,7 +312,7 @@ export class GitProvenanceLensView extends ItemView {
       });
     }
     const search = new SearchComponent(toolbar);
-    search.setPlaceholder("搜索块、作者或来源").setValue(this.query).onChange((value) => {
+    search.setPlaceholder(tr("搜索块、作者或来源", "Search blocks, authors or sources")).setValue(this.query).onChange((value) => {
       this.query = value;
       this.render();
     });
@@ -348,27 +349,27 @@ export class GitProvenanceLensView extends ItemView {
     if (block.sources.length > 3) {
       badges.createSpan({ cls: "git-provenance-more", text: `+${block.sources.length - 3}` });
     }
-    body.createDiv({ cls: "git-provenance-block-preview", text: block.preview || "空块" });
+    body.createDiv({ cls: "git-provenance-block-preview", text: block.preview || tr("空块", "Empty block") });
     if (block.needsHumanReview || block.citationSyncRisk) {
       const alerts = body.createDiv({ cls: "git-provenance-alerts" });
       if (block.needsHumanReview) {
         const alert = alerts.createDiv({ cls: "is-review" });
         setIcon(alert.createSpan(), "circle-alert");
-        alert.createSpan({ text: block.reviewReason ?? "需要人工复查" });
+        alert.createSpan({ text: block.reviewReason ?? tr("需要人工复查", "Needs a human review") });
       }
       if (block.citationSyncRisk) {
         const alert = alerts.createDiv({ cls: "is-citation" });
         setIcon(alert.createSpan(), "quote");
-        alert.createSpan({ text: block.citationReason ?? "引用可能需要同步复核" });
+        alert.createSpan({ text: block.citationReason ?? tr("引用可能需要同步复核", "Citations may need checking too") });
       }
     }
     const details = body.createEl("details", { cls: "git-provenance-details" });
-    details.createEl("summary", { text: "查看来源证据" });
+    details.createEl("summary", { text: tr("查看来源证据", "View source evidence") });
     const evidence = details.createDiv();
     for (const item of block.sources) {
       const row = evidence.createDiv({ cls: "git-provenance-evidence-row" });
       row.createSpan({ text: sourceTitle(item) });
-      row.createEl("small", { text: `${item.lineCount} 行` });
+      row.createEl("small", { text: tr(`${item.lineCount} 行`, `${item.lineCount} lines`) });
       const trailers = [
         item.trailers.authority ? `Authority: ${item.trailers.authority}` : "",
         item.trailers["send-gate"] ? `Send-Gate: ${item.trailers["send-gate"]}` : "",
@@ -386,14 +387,14 @@ export class GitProvenanceLensView extends ItemView {
     if (!snapshot || !file || !source.commitHash) return;
     const commit = snapshot.commits.find((candidate) => candidate.hash === source.commitHash);
     if (!commit) {
-      new Notice("该来源提交位于当前读取窗口外，只保留了 blame 身份。", 7000);
+      new Notice(tr("该来源提交位于当前读取窗口外，只保留了 blame 身份。", "The source commit is outside the history read; only its blame identity is kept."), 7000);
       return;
     }
     await this.plugin.openDetail({
       filePath: file.path,
       repositoryRoot: snapshot.context.repositoryRoot,
       base: { kind: "commit", commit },
-      target: { kind: "working", label: "当前工作区" },
+      target: { kind: "working", label: tr("当前工作区", "Working copy") },
       readOnly: true,
       initialMode: "semantic"
     });
@@ -409,7 +410,7 @@ export class GitProvenanceLensView extends ItemView {
     setIcon(state.createSpan(), icon);
     state.createDiv({ text });
     if (retry) {
-      const button = state.createEl("button", { text: "重试" });
+      const button = state.createEl("button", { text: tr("重试", "Try again") });
       button.addEventListener("click", () => void this.refresh());
     }
   }

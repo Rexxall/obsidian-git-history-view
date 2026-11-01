@@ -17,6 +17,7 @@ import type {
   WorkEventRequest,
   WorkEventSnapshot
 } from "../work-events/types";
+import { tr } from "../i18n";
 
 export const GIT_WORK_EVENT_VIEW_TYPE = "git-work-event-view";
 
@@ -45,17 +46,17 @@ function compactPath(value: string): { folder: string; name: string } {
 }
 
 function statusLabel(change: WorkEventFileChange): string {
-  if (change.netUnchanged) return "会话内改后还原";
-  if (change.conflicted || change.status === "U") return "冲突";
-  if (change.untracked) return "未跟踪";
+  if (change.netUnchanged) return tr("会话内改后还原", "Changed and changed back");
+  if (change.conflicted || change.status === "U") return tr("冲突", "Conflict");
+  if (change.untracked) return tr("未跟踪", "Untracked");
   return {
-    A: "新增",
-    C: "复制",
-    D: "删除",
-    M: "修改",
-    R: "重命名",
-    T: "类型变化",
-    U: "冲突"
+    A: tr("新增", "Added"),
+    C: tr("复制", "Copied"),
+    D: tr("删除", "Deleted"),
+    M: tr("修改", "Modified"),
+    R: tr("重命名", "Renamed"),
+    T: tr("类型变化", "Type changed"),
+    U: tr("冲突", "Conflict")
   }[change.status];
 }
 
@@ -79,22 +80,22 @@ function sourceCopy(snapshot: WorkEventSnapshot): {
 } {
   if (snapshot.source === "working") {
     return {
-      title: "当前未提交工作",
-      label: "打开时快照",
-      description: `${snapshot.branch} · 采样于 ${formatEventTime(snapshot.capturedAt)}`
+      title: tr("当前未提交工作", "Current uncommitted work"),
+      label: tr("打开时快照", "Snapshot when opened"),
+      description: tr(`${snapshot.branch} · 采样于 ${formatEventTime(snapshot.capturedAt)}`, `${snapshot.branch} · sampled ${formatEventTime(snapshot.capturedAt)}`)
     };
   }
   const head = snapshot.commits[0];
   if (snapshot.source === "git-session") {
     return {
-      title: head?.subject || "跨文件编辑会话",
-      label: "推测会话",
-      description: `${snapshot.branch} · ${snapshot.commits.length} 个连续自动备份 · ${formatEventTime(snapshot.startedAt ?? snapshot.endedAt)} 至 ${formatEventTime(snapshot.endedAt)}`
+      title: head?.subject || tr("跨文件编辑会话", "Editing session across files"),
+      label: tr("推测会话", "Inferred session"),
+      description: tr(`${snapshot.branch} · ${snapshot.commits.length} 个连续自动备份 · ${formatEventTime(snapshot.startedAt ?? snapshot.endedAt)} 至 ${formatEventTime(snapshot.endedAt)}`, `${snapshot.branch} · ${snapshot.commits.length} automatic backups in a row · ${formatEventTime(snapshot.startedAt ?? snapshot.endedAt)} to ${formatEventTime(snapshot.endedAt)}`)
     };
   }
   return {
-    title: head?.subject || "本次 Git 提交",
-    label: "精确提交",
+    title: head?.subject || tr("本次 Git 提交", "This Git commit"),
+    label: tr("精确提交", "Exact commit"),
     description: `${snapshot.branch} · ${head?.shortHash ?? snapshot.headHash?.slice(0, 7) ?? ""} · ${formatEventTime(snapshot.endedAt)}`
   };
 }
@@ -155,7 +156,7 @@ export class GitWorkEventView extends ItemView {
   }
 
   getDisplayText(): string {
-    return this.snapshot?.source === "working" ? "当前未提交工作" : "工作事件";
+    return this.snapshot?.source === "working" ? tr("当前未提交工作", "Current uncommitted work") : tr("工作事件", "Work event");
   }
 
   getIcon(): string {
@@ -260,7 +261,7 @@ export class GitWorkEventView extends ItemView {
         attr: { role: "status", "aria-live": "polite" }
       });
       setIcon(loading.createSpan(), "loader-circle");
-      loading.createDiv({ text: "正在读取这次工作涉及的文件与关系…" });
+      loading.createDiv({ text: tr("正在读取这次工作涉及的文件与关系…", "Reading the files and relations in this piece of work…") });
       return;
     }
     if (this.error) {
@@ -270,16 +271,16 @@ export class GitWorkEventView extends ItemView {
       });
       setIcon(state.createSpan(), "triangle-alert");
       const copy = state.createDiv();
-      copy.createEl("strong", { text: "无法读取工作事件" });
+      copy.createEl("strong", { text: tr("无法读取工作事件", "Could not read the work event") });
       copy.createDiv({ text: this.error });
-      const retry = copy.createEl("button", { text: "重试" });
+      const retry = copy.createEl("button", { text: tr("重试", "Try again") });
       retry.addEventListener("click", () => void this.refresh());
       return;
     }
     if (!this.snapshot) {
       container.createDiv({
         cls: "git-work-event-state",
-        text: "请从 Git 时间线选择一次工作事件。",
+        text: tr("请从 Git 时间线选择一次工作事件。", "Choose a work event from the Git timeline."),
         attr: { role: "status" }
       });
       return;
@@ -293,8 +294,8 @@ export class GitWorkEventView extends ItemView {
       setIcon(empty.createSpan(), "circle-check");
       empty.createDiv({
         text: this.snapshot.source === "working"
-          ? "当前工作区没有未提交改动。"
-          : "这个提交没有可展示的 Vault 内文件变化。"
+          ? tr("当前工作区没有未提交改动。", "The working copy has no uncommitted edits.")
+          : tr("这个提交没有可展示的 Vault 内文件变化。", "This commit changes no files inside the vault that can be shown.")
       });
       return;
     }
@@ -308,7 +309,7 @@ export class GitWorkEventView extends ItemView {
     const identity = header.createDiv({ cls: "git-work-event-identity" });
     const eyebrow = identity.createDiv({ cls: "git-work-event-eyebrow" });
     setIcon(eyebrow.createSpan(), "git-pull-request-arrow");
-    eyebrow.createSpan({ text: "工作事件" });
+    eyebrow.createSpan({ text: tr("工作事件", "Work event") });
     if (this.snapshot) {
       const source = sourceCopy(this.snapshot);
       eyebrow.createSpan({
@@ -319,10 +320,10 @@ export class GitWorkEventView extends ItemView {
       identity.createDiv({ cls: "git-work-event-description", text: source.description });
       this.renderMetrics(header, this.snapshot);
     } else {
-      identity.createEl("h2", { text: "工作事件" });
+      identity.createEl("h2", { text: tr("工作事件", "Work event") });
       identity.createDiv({
         cls: "git-work-event-description",
-        text: "查看一次提交、编辑会话或当前工作区涉及的全部 Vault 文件。"
+        text: tr("查看一次提交、编辑会话或当前工作区涉及的全部 Vault 文件。", "See every vault file touched by a commit, an editing session or the working copy.")
       });
     }
     const actions = header.createDiv({ cls: "git-work-event-header-actions" });
@@ -330,8 +331,8 @@ export class GitWorkEventView extends ItemView {
       cls: "clickable-icon",
       attr: {
         "aria-label": this.snapshot?.source === "working"
-          ? "重新采样当前工作区"
-          : "重新读取工作事件"
+          ? tr("重新采样当前工作区", "Sample the working copy again")
+          : tr("重新读取工作事件", "Read the work event again")
       }
     });
     setIcon(refresh, "refresh-cw");
@@ -343,10 +344,10 @@ export class GitWorkEventView extends ItemView {
     const metrics = workEventMetrics(snapshot.netChanges, snapshot.relationDeltas.length);
     const row = container.createDiv({ cls: "git-work-event-metrics" });
     const values = [
-      ["files", `${metrics.files}`, "文件"],
-      ["notes", `${metrics.notes}`, "笔记"],
-      ["lines", `+${metrics.addedLines} / −${metrics.deletedLines}`, "行"],
-      ["links", `${metrics.relationChanges}`, "关系"]
+      ["files", `${metrics.files}`, tr("文件", "files")],
+      ["notes", `${metrics.notes}`, tr("笔记", "notes")],
+      ["lines", `+${metrics.addedLines} / −${metrics.deletedLines}`, tr("行", "lines")],
+      ["links", `${metrics.relationChanges}`, tr("关系", "relations")]
     ] as const;
     for (const [key, value, label] of values) {
       const metric = row.createDiv({ cls: `git-work-event-metric is-${key}` });
@@ -362,8 +363,8 @@ export class GitWorkEventView extends ItemView {
     setIcon(summary.createSpan(), snapshot.confidence === "heuristic" ? "sparkles" : "info");
     summary.createSpan({
       text: snapshot.confidence === "heuristic"
-        ? "这组提交是推测的编辑会话"
-        : `${snapshot.warnings.length} 项读取说明`
+        ? tr("这组提交是推测的编辑会话", "These commits are an inferred editing session")
+        : tr(`${snapshot.warnings.length} 项读取说明`, `${snapshot.warnings.length} reading notes`)
     });
     const list = details.createEl("ul");
     for (const warning of snapshot.warnings) list.createEl("li", { text: warning });
@@ -379,8 +380,8 @@ export class GitWorkEventView extends ItemView {
       const input = inputShell.createEl("input", {
         type: "search",
         value: this.query,
-        placeholder: "筛选这次工作中的文件",
-        attr: { "aria-label": "筛选这次工作中的文件" }
+        placeholder: tr("筛选这次工作中的文件", "Filter files in this work"),
+        attr: { "aria-label": tr("筛选这次工作中的文件", "Filter files in this work") }
       });
       let composing = false;
       const applyFilter = (): void => {
@@ -474,12 +475,12 @@ export class GitWorkEventView extends ItemView {
       for (const change of visibleFiles) this.renderFileButton(section, change);
     }
     if (groups.length === 0) {
-      container.createDiv({ cls: "git-work-event-no-results", text: "没有匹配的文件。" });
+      container.createDiv({ cls: "git-work-event-no-results", text: tr("没有匹配的文件。", "No matching files.") });
     }
     if (visible.length > this.visibleFileLimit) {
       const more = container.createEl("button", {
         cls: "git-work-event-load-more",
-        text: `再显示 ${Math.min(200, visible.length - this.visibleFileLimit)} 个文件`
+        text: tr(`再显示 ${Math.min(200, visible.length - this.visibleFileLimit)} 个文件`, `Show ${Math.min(200, visible.length - this.visibleFileLimit)} more files`)
       });
       more.addEventListener("click", () => {
         this.visibleFileLimit += 200;
@@ -490,7 +491,7 @@ export class GitWorkEventView extends ItemView {
       const hidden = container.createDiv({ cls: "git-work-event-hidden" });
       setIcon(hidden.createSpan(), "shield");
       hidden.createSpan({
-        text: `${snapshot.hiddenRepositoryFileCount} 个 Vault 外文件未展示`
+        text: tr(`${snapshot.hiddenRepositoryFileCount} 个 Vault 外文件未展示`, `${snapshot.hiddenRepositoryFileCount} files outside the vault not shown`)
       });
     }
   }
@@ -566,7 +567,7 @@ export class GitWorkEventView extends ItemView {
     if (this.narrow) {
       const back = detail.createEl("button", { cls: "git-work-event-back" });
       setIcon(back.createSpan(), "arrow-left");
-      back.createSpan({ text: "返回文件列表" });
+      back.createSpan({ text: tr("返回文件列表", "Back to the file list") });
       back.addEventListener("click", () => {
         this.returnToMaster();
       });
@@ -577,7 +578,7 @@ export class GitWorkEventView extends ItemView {
     if (!change) {
       detail.createDiv({
         cls: "git-work-event-preview-empty",
-        text: this.query ? "筛选结果中没有可显示的文件。" : "请选择一个文件查看修改。"
+        text: this.query ? tr("筛选结果中没有可显示的文件。", "No files to show in the filtered result.") : tr("请选择一个文件查看修改。", "Choose a file to see its changes.")
       });
       return;
     }
@@ -617,7 +618,7 @@ export class GitWorkEventView extends ItemView {
       ? null
       : this.app.vault.getFileByPath(change.vaultPath);
     if (currentFile && change.openable !== false) {
-      const open = actions.createEl("button", { text: "打开文件" });
+      const open = actions.createEl("button", { text: tr("打开文件", "Open file") });
       setIcon(open.createSpan(), "file-up");
       open.addEventListener("click", () => {
         void this.app.workspace.getLeaf("tab").openFile(currentFile);
@@ -625,12 +626,12 @@ export class GitWorkEventView extends ItemView {
     }
     const copyPath = actions.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "复制完整文件路径" }
+      attr: { "aria-label": tr("复制完整文件路径", "Copy full file path") }
     });
     setIcon(copyPath, "copy");
     copyPath.addEventListener("click", () => void (async () => {
       await navigator.clipboard.writeText(change.vaultPath);
-      new Notice("已复制完整文件路径。");
+      new Notice(tr("已复制完整文件路径。", "Full file path copied."));
     })());
     const canCompare = Boolean(
       currentFile
@@ -646,12 +647,12 @@ export class GitWorkEventView extends ItemView {
       .replace(/[^\w-]+/g, "-")}`;
     const compare = actions.createEl("button", {
       cls: canCompare ? "mod-cta" : "",
-      text: "打开完整对比",
+      text: tr("打开完整对比", "Open full compare"),
       attr: {
         ...(canCompare ? {} : { "aria-describedby": compareHelpId }),
         title: canCompare
           ? ""
-          : "新增、删除、未跟踪、根提交或当前已不存在的文件仅提供内联只读预览"
+          : tr("新增、删除、未跟踪、根提交或当前已不存在的文件仅提供内联只读预览", "Added, deleted, untracked, root-commit or no-longer-present files get an inline read-only preview only")
       }
     });
     setIcon(compare.createSpan(), "git-compare-arrows");
@@ -662,7 +663,7 @@ export class GitWorkEventView extends ItemView {
     if (!canCompare) {
       detail.createDiv({
         cls: "git-work-event-compare-help",
-        text: "这类变化缺少可验证的两端版本，因此只提供只读预览。",
+        text: tr("这类变化缺少可验证的两端版本，因此只提供只读预览。", "This kind of change has no two verifiable ends, so only a read-only preview is offered."),
         attr: { id: compareHelpId }
       });
     }
@@ -675,14 +676,14 @@ export class GitWorkEventView extends ItemView {
   private renderPreview(container: HTMLElement, change: WorkEventFileChange): void {
     const section = container.createDiv({ cls: "git-work-event-preview" });
     const title = section.createDiv({ cls: "git-work-event-section-title" });
-    title.createSpan({ text: "修改内容" });
-    title.createSpan({ text: "仅显示变化 · 已忽略空行" });
+    title.createSpan({ text: tr("修改内容", "Changes") });
+    title.createSpan({ text: tr("仅显示变化 · 已忽略空行", "Changes only · blank lines ignored") });
     if (change.previewStatus === "not-text") {
       section.createDiv({
         cls: "git-work-event-preview-empty",
         text: change.binary
-          ? "二进制或附件文件只显示状态与路径。"
-          : "这个文件类型暂不提供文本预览。"
+          ? tr("二进制或附件文件只显示状态与路径。", "Binary files and attachments show only their status and path.")
+          : tr("这个文件类型暂不提供文本预览。", "No text preview for this file type yet.")
       });
       return;
     }
@@ -690,8 +691,8 @@ export class GitWorkEventView extends ItemView {
       section.createDiv({
         cls: "git-work-event-preview-empty",
         text: change.previewStatus === "too-large"
-          ? "文件超出本页的安全预览范围，未载入正文。"
-          : "历史两端内容不完整，无法生成文本预览。"
+          ? tr("文件超出本页的安全预览范围，未载入正文。", "The file is larger than this page can safely preview, so its text was not loaded.")
+          : tr("历史两端内容不完整，无法生成文本预览。", "One end of the history is incomplete, so no text preview can be made.")
       });
       return;
     }
@@ -712,8 +713,8 @@ export class GitWorkEventView extends ItemView {
       section.createDiv({
         cls: "git-work-event-preview-empty",
         text: change.netUnchanged
-          ? "这个文件在会话中曾被修改，但结束时内容回到了会话起点。"
-          : "忽略空行后没有可见的正文变化。"
+          ? tr("这个文件在会话中曾被修改，但结束时内容回到了会话起点。", "This file was edited during the session but ended where the session started.")
+          : tr("忽略空行后没有可见的正文变化。", "No visible text changes once blank lines are ignored.")
       });
       return;
     }
@@ -722,7 +723,7 @@ export class GitWorkEventView extends ItemView {
       const card = cards.createDiv({ cls: "git-work-event-diff-group" });
       card.createDiv({
         cls: "git-work-event-diff-group-label",
-        text: `变化 ${index + 1}`
+        text: tr(`变化 ${index + 1}`, `Change ${index + 1}`)
       });
       this.renderDiffLines(card, group.removed, "removed", group.added);
       this.renderDiffLines(card, group.added, "added", group.removed);
@@ -730,7 +731,7 @@ export class GitWorkEventView extends ItemView {
     if (groups.length > 3) {
       section.createDiv({
         cls: "git-work-event-diff-more",
-        text: `还有 ${groups.length - 3} 处变化；打开完整对比可查看全部。`
+        text: tr(`还有 ${groups.length - 3} 处变化；打开完整对比可查看全部。`, `${groups.length - 3} more changes; open the full compare to see them all.`)
       });
     }
   }
@@ -766,7 +767,7 @@ export class GitWorkEventView extends ItemView {
     if (lines.length > visible.length) {
       container.createDiv({
         cls: `git-work-event-diff-omitted is-${kind}`,
-        text: `… ${lines.length - visible.length} 行未展开`
+        text: tr(`… ${lines.length - visible.length} 行未展开`, `… ${lines.length - visible.length} more lines`)
       });
     }
   }
@@ -787,14 +788,14 @@ export class GitWorkEventView extends ItemView {
     if (relations.length === 0) return;
     const section = container.createDiv({ cls: "git-work-event-relations" });
     const title = section.createDiv({ cls: "git-work-event-section-title" });
-    title.createSpan({ text: "关系变化" });
-    title.createSpan({ text: `${relations.length} 项` });
+    title.createSpan({ text: tr("关系变化", "Relation changes") });
+    title.createSpan({ text: tr(`${relations.length} 项`, `${relations.length} items`) });
     const list = section.createDiv({ cls: "git-work-event-relation-list" });
     for (const relation of relations.slice(0, 40)) {
       this.renderRelation(list, relation);
     }
     if (relations.length > 40) {
-      list.createDiv({ text: `另有 ${relations.length - 40} 项未展开。` });
+      list.createDiv({ text: tr(`另有 ${relations.length - 40} 项未展开。`, `${relations.length - 40} more not shown.`) });
     }
   }
 
@@ -817,16 +818,16 @@ export class GitWorkEventView extends ItemView {
     );
     row.createSpan({
       cls: "git-work-event-relation-change",
-      text: relation.change === "added" ? "新增" : "移除"
+      text: relation.change === "added" ? tr("新增", "Added") : tr("移除", "Removed")
     });
     row.createSpan({ cls: "git-work-event-relation-target", text: relation.label });
-    if (relation.eventLocal) row.createSpan({ cls: "git-work-event-relation-local", text: "本事件内" });
+    if (relation.eventLocal) row.createSpan({ cls: "git-work-event-relation-local", text: tr("本事件内", "Within this event") });
     if (
       !relation.currentResolvedVaultPath
       && relation.kind !== "tag"
       && relation.kind !== "footnote"
     ) {
-      row.createSpan({ cls: "git-work-event-relation-unresolved", text: "当前未解析" });
+      row.createSpan({ cls: "git-work-event-relation-unresolved", text: tr("当前未解析", "Not resolved now") });
     }
   }
 
@@ -845,7 +846,7 @@ export class GitWorkEventView extends ItemView {
     if (relevant.length === 0) return;
     const details = container.createEl("details", { cls: "git-work-event-commits" });
     details.createEl("summary", {
-      text: `这篇文件出现在会话中的 ${relevant.length} 个提交`
+      text: tr(`这篇文件出现在会话中的 ${relevant.length} 个提交`, `This file appears in ${relevant.length} commits of the session`)
     });
     for (const slice of relevant) {
       const row = details.createDiv({ cls: "git-work-event-commit" });

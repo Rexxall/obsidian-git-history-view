@@ -5,6 +5,7 @@ import {
   type NoteRelationKind
 } from "../analysis/link-impact";
 import type { VersionReference } from "../models";
+import { tr } from "../i18n";
 
 export const GRAPH_TIME_MACHINE_MAX_VERSIONS = 80;
 export const GRAPH_TIME_MACHINE_MAX_RELATIONS_PER_VERSION = 500;
@@ -52,7 +53,7 @@ function sanitizeVersion(version: KnowledgeGraphVersion): KnowledgeGraphVersion 
     return {
       ...metadata,
       availability: "too-large",
-      warning: `版本内容为 ${Math.ceil(size / 1024)} KB，超过 2 MB 关系分析上限。`
+      warning: tr(`版本内容为 ${Math.ceil(size / 1024)} KB，超过 2 MB 关系分析上限。`, `The version is ${Math.ceil(size / 1024)} KB, over the 2 MB limit for relation analysis.`)
     };
   }
   const relationCount = extractNoteRelations(version.content).length;
@@ -61,7 +62,7 @@ function sanitizeVersion(version: KnowledgeGraphVersion): KnowledgeGraphVersion 
     return {
       ...metadata,
       availability: "too-large",
-      warning: `版本包含 ${relationCount} 个关系，超过单版 500 个关系上限。`
+      warning: tr(`版本包含 ${relationCount} 个关系，超过单版 500 个关系上限。`, `The version has ${relationCount} relations, over the limit of 500 per version.`)
     };
   }
   return version;
@@ -78,7 +79,7 @@ export function buildKnowledgeGraphTimeline(
   const warnings: string[] = [];
   if (truncated) {
     warnings.push(
-      `只分析最近 ${GRAPH_TIME_MACHINE_MAX_VERSIONS} 个版本；更早版本未载入。`
+      tr(`只分析最近 ${GRAPH_TIME_MACHINE_MAX_VERSIONS} 个版本；更早版本未载入。`, `Only the latest ${GRAPH_TIME_MACHINE_MAX_VERSIONS} versions are analysed; earlier ones were not loaded.`)
     );
   }
 
@@ -91,7 +92,7 @@ export function buildKnowledgeGraphTimeline(
       || from.content === undefined
       || to.content === undefined
     ) {
-      const warning = from.warning || to.warning || "相邻版本至少有一端不可读取。";
+      const warning = from.warning || to.warning || tr("相邻版本至少有一端不可读取。", "At least one of the neighbouring versions cannot be read.");
       transitions.push({
         id: `${from.id}\u0000${to.id}`,
         from,

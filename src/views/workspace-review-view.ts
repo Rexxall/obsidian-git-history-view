@@ -23,6 +23,7 @@ import {
   type ReviewInboxFilter
 } from "../review/review-inbox";
 import { workspaceNoteLabel } from "../workspace/change-presentation";
+import { tr } from "../i18n";
 
 export const GIT_WORKSPACE_REVIEW_VIEW_TYPE = "git-workspace-review-view";
 
@@ -33,10 +34,10 @@ interface PendingInboxItem {
 }
 
 const FILTER_LABELS: Record<ReviewInboxFilter, string> = {
-  pending: "待复查",
-  committed: "已提交",
-  working: "未提交",
-  snoozed: "稍后"
+  pending: tr("待复查", "To review"),
+  committed: tr("已提交", "Committed"),
+  working: tr("未提交", "Uncommitted"),
+  snoozed: tr("稍后", "Later")
 };
 
 export class GitWorkspaceReviewView extends ItemView {
@@ -56,7 +57,7 @@ export class GitWorkspaceReviewView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "复查收件箱";
+    return tr("复查收件箱", "Review inbox");
   }
 
   getIcon(): string {
@@ -140,14 +141,14 @@ export class GitWorkspaceReviewView extends ItemView {
     const headingIcon = heading.createSpan();
     setIcon(headingIcon, "inbox");
     const headingText = heading.createDiv();
-    headingText.createEl("h4", { text: "复查收件箱" });
-    headingText.createSpan({ text: "集中处理自上次确认后的笔记变化" });
+    headingText.createEl("h4", { text: tr("复查收件箱", "Review inbox") });
+    headingText.createSpan({ text: tr("集中处理自上次确认后的笔记变化", "Note changes since you last confirmed, in one place") });
 
     const headerActions = header.createDiv({ cls: "git-review-inbox-header-actions" });
     const refresh = headerActions.createEl("button", {
       cls: this.loading ? "clickable-icon is-loading" : "clickable-icon",
       attr: {
-        "aria-label": this.loading ? "正在刷新复查收件箱" : "刷新复查收件箱",
+        "aria-label": this.loading ? tr("正在刷新复查收件箱", "Refreshing the review inbox") : tr("刷新复查收件箱", "Refresh the review inbox"),
         "aria-busy": String(this.loading)
       }
     });
@@ -162,7 +163,7 @@ export class GitWorkspaceReviewView extends ItemView {
       });
       const icon = loading.createSpan();
       setIcon(icon, "loader-circle");
-      loading.createSpan({ text: "正在汇总已提交与未提交变化…" });
+      loading.createSpan({ text: tr("正在汇总已提交与未提交变化…", "Gathering committed and uncommitted changes…") });
       return;
     }
     if (this.error) {
@@ -188,15 +189,15 @@ export class GitWorkspaceReviewView extends ItemView {
     const icon = notice.createSpan();
     setIcon(icon, checkpoint ? "triangle-alert" : "flag");
     const copy = notice.createDiv();
-    copy.createEl("strong", { text: checkpoint ? "原复查起点已不可用" : "先建立全库复查起点" });
+    copy.createEl("strong", { text: checkpoint ? tr("原复查起点已不可用", "The old review starting point is gone") : tr("先建立全库复查起点", "Set a starting point for the whole vault") });
     copy.createSpan({
       text: checkpoint
-        ? "可能发生过历史重写；重新从当前提交开始，不会修改 Git。"
-        : "以后进入 Git 的笔记变化会自动出现在这里，当前未提交内容仍会保留。"
+        ? tr("可能发生过历史重写；重新从当前提交开始，不会修改 Git。", "History may have been rewritten. Start again from the current commit; Git is not changed.")
+        : tr("以后进入 Git 的笔记变化会自动出现在这里，当前未提交内容仍会保留。", "Note changes that reach Git from now on appear here; current uncommitted content is kept.")
     });
     const action = notice.createEl("button", {
       cls: "mod-cta",
-      text: checkpoint ? "重设为当前" : "从现在开始"
+      text: checkpoint ? tr("重设为当前", "Reset to now") : tr("从现在开始", "Start from now")
     });
     action.disabled = !this.snapshot.headHash;
     action.addEventListener("click", () => void this.setCurrentStartingPoint());
@@ -213,22 +214,22 @@ export class GitWorkspaceReviewView extends ItemView {
     branch.createSpan({ text: this.snapshot.branch });
 
     const metrics = summary.createDiv({ cls: "git-review-inbox-metrics" });
-    this.renderMetric(metrics, String(active.length), "待复查");
+    this.renderMetric(metrics, String(active.length), tr("待复查", "To review"));
     this.renderMetric(
       metrics,
       String(active.filter((entry) => entry.item.committedChange).length),
-      "已提交"
+      tr("已提交", "Committed")
     );
     this.renderMetric(
       metrics,
       String(active.filter((entry) => entry.item.workspaceChange).length),
-      "未提交"
+      tr("未提交", "Uncommitted")
     );
-    if (snoozed > 0) this.renderMetric(metrics, String(snoozed), "稍后");
+    if (snoozed > 0) this.renderMetric(metrics, String(snoozed), tr("稍后", "Later"));
 
     const markAll = summary.createEl("button", {
       cls: "git-review-inbox-mark-all",
-      text: "全部确认"
+      text: tr("全部确认", "Confirm all")
     });
     markAll.disabled = active.length === 0;
     markAll.addEventListener("click", () => this.confirmMarkAllReviewed());
@@ -243,14 +244,14 @@ export class GitWorkspaceReviewView extends ItemView {
   private renderControls(container: HTMLElement): void {
     const controls = container.createDiv({ cls: "git-review-inbox-controls" });
     const search = new SearchComponent(controls.createDiv({ cls: "git-review-inbox-search" }));
-    search.setPlaceholder("筛选笔记或目录").setValue(this.query).onChange((value) => {
+    search.setPlaceholder(tr("筛选笔记或目录", "Filter notes or folders")).setValue(this.query).onChange((value) => {
       this.query = value.trim().toLocaleLowerCase();
       this.render();
     });
 
     const filter = controls.createEl("button", {
       cls: "git-review-inbox-filter",
-      attr: { "aria-label": "筛选复查收件箱" }
+      attr: { "aria-label": tr("筛选复查收件箱", "Filter the review inbox") }
     });
     const filterIcon = filter.createSpan();
     setIcon(filterIcon, "list-filter");
@@ -275,14 +276,14 @@ export class GitWorkspaceReviewView extends ItemView {
       const emptyIcon = empty.createSpan({ cls: "git-workspace-review-empty-icon" });
       setIcon(emptyIcon, query ? "search-x" : this.filter === "snoozed" ? "clock-3" : "circle-check");
       empty.createEl("h5", {
-        text: query ? "没有匹配的笔记" : this.filter === "snoozed" ? "没有稍后处理的笔记" : "收件箱已清空"
+        text: query ? tr("没有匹配的笔记", "No matching notes") : this.filter === "snoozed" ? tr("没有稍后处理的笔记", "No notes set aside for later") : tr("收件箱已清空", "Inbox is empty")
       });
       empty.createEl("p", {
         text: query
-          ? `没有找到“${query}”。`
+          ? tr(`没有找到“${query}”。`, `Nothing found for "${query}".`)
           : this.filter === "snoozed"
-            ? "暂时没有被推迟的变化。"
-            : "当前筛选下没有需要确认的变化。"
+            ? tr("暂时没有被推迟的变化。", "No changes are postponed.")
+            : tr("当前筛选下没有需要确认的变化。", "No changes to confirm under this filter.")
       });
       return;
     }
@@ -315,7 +316,7 @@ export class GitWorkspaceReviewView extends ItemView {
     const open = row.createEl("button", {
       cls: "git-review-inbox-open",
       attr: {
-        "aria-label": `审阅 ${note.title}`,
+        "aria-label": tr(`审阅 ${note.title}`, `Review ${note.title}`),
         title: item.vaultPath,
         type: "button"
       }
@@ -336,17 +337,17 @@ export class GitWorkspaceReviewView extends ItemView {
     const detail = body.createSpan({ cls: "git-review-inbox-detail" });
     if (item.latestCommit) {
       detail.createSpan({
-        text: `${item.latestCommit.subject || "Git 版本"} · ${this.formatDate(item.latestCommit.authoredAt)}`
+        text: tr(`${item.latestCommit.subject || "Git 版本"} · ${this.formatDate(item.latestCommit.authoredAt)}`, `${item.latestCommit.subject || "Git version"} · ${this.formatDate(item.latestCommit.authoredAt)}`)
       });
     } else if (item.workspaceChange?.untracked) {
-      detail.createSpan({ text: "尚未进入 Git 的新笔记" });
+      detail.createSpan({ text: tr("尚未进入 Git 的新笔记", "New note not yet in Git") });
     } else {
-      detail.createSpan({ text: "当前工作区有新变化" });
+      detail.createSpan({ text: tr("当前工作区有新变化", "New changes in the working copy") });
     }
     const badges = body.createSpan({ cls: "git-review-inbox-badges" });
-    if (item.committedChange) badges.createSpan({ text: "已提交" });
-    if (item.workspaceChange) badges.createSpan({ text: "未提交" });
-    if (entry.snoozed) badges.createSpan({ cls: "is-snoozed", text: "稍后" });
+    if (item.committedChange) badges.createSpan({ text: tr("已提交", "Committed") });
+    if (item.workspaceChange) badges.createSpan({ text: tr("未提交", "Uncommitted") });
+    if (entry.snoozed) badges.createSpan({ cls: "is-snoozed", text: tr("稍后", "Later") });
     if (!item.binary && (item.addedLines > 0 || item.deletedLines > 0)) {
       const stats = badges.createSpan({ cls: "git-review-inbox-line-stats" });
       if (item.addedLines > 0) stats.createSpan({ cls: "is-added", text: `+${item.addedLines}` });
@@ -357,13 +358,13 @@ export class GitWorkspaceReviewView extends ItemView {
     const actions = row.createDiv({ cls: "git-review-inbox-row-actions" });
     const snooze = actions.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": entry.snoozed ? "移回待复查" : "24 小时后再提醒" }
+      attr: { "aria-label": entry.snoozed ? tr("移回待复查", "Move back to review") : tr("24 小时后再提醒", "Remind me in 24 hours") }
     });
     setIcon(snooze, entry.snoozed ? "undo-2" : "clock-3");
     snooze.addEventListener("click", () => void this.toggleSnooze(entry));
     const mark = actions.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "标记已复查" }
+      attr: { "aria-label": tr("标记已复查", "Mark as reviewed") }
     });
     setIcon(mark, "check");
     mark.addEventListener("click", () => void this.markItemReviewed(entry));
@@ -392,7 +393,7 @@ export class GitWorkspaceReviewView extends ItemView {
       this.snapshot.context.repositoryRoot,
       this.snapshot.headHash
     );
-    new Notice("已从当前 Git 版本开始追踪待复查变化。");
+    new Notice(tr("已从当前 Git 版本开始追踪待复查变化。", "Now tracking changes to review from the current Git version."));
     await this.refresh();
   }
 
@@ -402,9 +403,9 @@ export class GitWorkspaceReviewView extends ItemView {
     if (!active.length) return;
     new ConfirmActionModal(
       this.app,
-      "确认全部复查完成？",
-      `将把 ${active.length} 篇笔记记录为已复查，并以当前 Git 版本作为新的全库起点。不会提交或修改任何笔记。`,
-      "全部确认",
+      tr("确认全部复查完成？", "Confirm everything as reviewed?"),
+      tr(`将把 ${active.length} 篇笔记记录为已复查，并以当前 Git 版本作为新的全库起点。不会提交或修改任何笔记。`, `${active.length} notes will be recorded as reviewed, with the current Git version as the new starting point for the vault. Nothing is committed and no note changes.`),
+      tr("全部确认", "Confirm all"),
       async () => {
         if (!this.snapshot) return;
         await this.plugin.markInboxItemsReviewed(
@@ -416,7 +417,7 @@ export class GitWorkspaceReviewView extends ItemView {
             ...(entry.workingFingerprint ? { workingFingerprint: entry.workingFingerprint } : {})
           }))
         );
-        new Notice(`已确认 ${active.length} 篇笔记。`);
+        new Notice(tr(`已确认 ${active.length} 篇笔记。`, `${active.length} notes confirmed.`));
         await this.refresh();
       }
     ).open();
@@ -430,7 +431,7 @@ export class GitWorkspaceReviewView extends ItemView {
             hash: this.snapshot.headHash,
             shortHash: this.snapshot.headHash.slice(0, 7),
             authoredAt: new Date().toISOString(),
-            subject: "当前全库版本"
+            subject: tr("当前全库版本", "Current vault version")
           }
         : undefined
     );
@@ -439,7 +440,7 @@ export class GitWorkspaceReviewView extends ItemView {
       latestCommit,
       entry.workingFingerprint
     );
-    new Notice(`已复查：${workspaceNoteLabel(entry.item.vaultPath).title}`);
+    new Notice(tr(`已复查：${workspaceNoteLabel(entry.item.vaultPath).title}`, `Reviewed: ${workspaceNoteLabel(entry.item.vaultPath).title}`));
     await this.refresh();
   }
 
@@ -452,7 +453,7 @@ export class GitWorkspaceReviewView extends ItemView {
       this.itemContext(this.snapshot, entry.item),
       until
     );
-    new Notice(entry.snoozed ? "已移回待复查。" : "已推迟 24 小时。");
+    new Notice(entry.snoozed ? tr("已移回待复查。", "Moved back to review.") : tr("已推迟 24 小时。", "Postponed for 24 hours."));
     await this.refresh();
   }
 
@@ -468,7 +469,7 @@ export class GitWorkspaceReviewView extends ItemView {
       ) {
         await this.offerDeletedFileRestore(item, item.vaultPath);
       } else {
-        new Notice(`笔记已不存在：${item.vaultPath}`, 6000);
+        new Notice(tr(`笔记已不存在：${item.vaultPath}`, `The note no longer exists: ${item.vaultPath}`), 6000);
       }
       return;
     }
@@ -498,7 +499,7 @@ export class GitWorkspaceReviewView extends ItemView {
           filePath: file.path,
           repositoryRoot: history.context.repositoryRoot,
           base: { kind: "commit", commit: base },
-          target: { kind: "working", label: "当前工作区" },
+          target: { kind: "working", label: tr("当前工作区", "Working copy") },
           initialMode: this.plugin.settings.defaultDetailMode
         });
         return;
@@ -538,7 +539,7 @@ export class GitWorkspaceReviewView extends ItemView {
       authorName: "",
       authorEmail: "",
       authoredAt: checkpoint.reviewedAt,
-      subject: "上次复查点",
+      subject: tr("上次复查点", "Last review point"),
       historicalPath: checkpoint.historicalPath,
       changeType: "M",
       addedLines: 0,
@@ -557,7 +558,7 @@ export class GitWorkspaceReviewView extends ItemView {
       authorName: "",
       authorEmail: "",
       authoredAt: checkpoint.reviewedAt,
-      subject: "全库复查起点",
+      subject: tr("全库复查起点", "Vault review starting point"),
       historicalPath,
       changeType: "M",
       addedLines: 0,
@@ -575,9 +576,9 @@ export class GitWorkspaceReviewView extends ItemView {
       );
       new ConfirmActionModal(
         this.app,
-        "恢复已删除笔记？",
-        `将从 Git ${version.hash.slice(0, 7)} 恢复到 ${vaultPath}，不会自动暂存或提交。`,
-        "恢复笔记",
+        tr("恢复已删除笔记？", "Restore the deleted note?"),
+        tr(`将从 Git ${version.hash.slice(0, 7)} 恢复到 ${vaultPath}，不会自动暂存或提交。`, `It will be restored from Git ${version.hash.slice(0, 7)} to ${vaultPath}, without staging or committing.`),
+        tr("恢复笔记", "Restore note"),
         async () => {
           const normalized = normalizePath(vaultPath);
           const parts = normalized.split("/").slice(0, -1);
@@ -588,7 +589,7 @@ export class GitWorkspaceReviewView extends ItemView {
           }
           const restored = await this.app.vault.create(normalized, version.content);
           await this.app.workspace.getLeaf(false).openFile(restored);
-          new Notice(`已恢复：${normalized}`);
+          new Notice(tr(`已恢复：${normalized}`, `Restored: ${normalized}`));
           await this.refresh();
         }
       ).open();

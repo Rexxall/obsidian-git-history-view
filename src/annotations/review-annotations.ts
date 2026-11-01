@@ -10,6 +10,7 @@ import type {
   ReviewAnnotationBlockAnchor,
   ReviewAnnotationStatus
 } from "./types";
+import { tr } from "../i18n";
 
 export const MAX_REVIEW_ANNOTATIONS = 1000;
 export const MAX_REVIEW_ANNOTATIONS_PER_FILE = 200;
@@ -167,27 +168,27 @@ export function buildMarkdownReviewPackage(
     `annotations: ${sorted.length}`,
     "---",
     "",
-    `# ${filePath} · 版本审阅`,
+    tr(`# ${filePath} · 版本审阅`, `# ${filePath} · Version review`),
     ""
   ];
   if (sorted.length === 0) {
-    lines.push("> 暂无批注。", "");
+    lines.push(tr("> 暂无批注。", "> No notes yet."), "");
     return lines.join("\n");
   }
   for (const item of sorted) {
     const status = item.status === "pending"
-      ? "待处理"
-      : item.status === "resolved" ? "已解决" : "无需处理";
+      ? tr("待处理", "Open")
+      : item.status === "resolved" ? tr("已解决", "Resolved") : tr("无需处理", "No action needed");
     lines.push(
       `## ${status} · ${item.versionLabel || item.commitHash.slice(0, 8)}`,
       "",
-      `- 版本：\`${item.commitHash}\``,
-      `- 历史路径：\`${item.historicalPath || item.filePath}\``,
-      `- 目标：${item.target === "block" ? "内容块" : "整个版本"}`,
-      `- 更新时间：${item.updatedAt}`,
+      tr(`- 版本：\`${item.commitHash}\``, `- Version: \`${item.commitHash}\``),
+      tr(`- 历史路径：\`${item.historicalPath || item.filePath}\``, `- Past path: \`${item.historicalPath || item.filePath}\``),
+      tr(`- 目标：${item.target === "block" ? "内容块" : "整个版本"}`, `- Target: ${item.target === "block" ? "block" : "whole version"}`),
+      tr(`- 更新时间：${item.updatedAt}`, `- Updated: ${item.updatedAt}`),
       ...(item.block ? [
-        `- 原位置：第 ${item.block.startLine + 1}–${item.block.endLine + 1} 行`,
-        `- 标题路径：${item.block.headingPath.join(" / ") || "（无）"}`
+        tr(`- 原位置：第 ${item.block.startLine + 1}–${item.block.endLine + 1} 行`, `- Original place: lines ${item.block.startLine + 1}–${item.block.endLine + 1}`),
+        tr(`- 标题路径：${item.block.headingPath.join(" / ") || "（无）"}`, `- Heading path: ${item.block.headingPath.join(" / ") || "(none)"}`)
       ] : []),
       "",
       item.comment,

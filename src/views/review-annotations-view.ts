@@ -9,13 +9,14 @@ import type { ReviewAnnotationStatus } from "../annotations/types";
 import { locateReviewAnnotation } from "../annotations/review-annotations";
 import { ReviewAnnotationModal } from "../ui/review-annotation-modal";
 import { ConfirmActionModal } from "../ui/confirm-modal";
+import { tr } from "../i18n";
 
 export const GIT_REVIEW_ANNOTATIONS_VIEW_TYPE = "git-review-annotations";
 
 const STATUS_LABEL: Record<ReviewAnnotationStatus, string> = {
-  pending: "待处理",
-  resolved: "已解决",
-  "wont-fix": "无需处理"
+  pending: tr("待处理", "Open"),
+  resolved: tr("已解决", "Resolved"),
+  "wont-fix": tr("无需处理", "No action needed")
 };
 
 export class GitReviewAnnotationsView extends ItemView {
@@ -36,7 +37,7 @@ export class GitReviewAnnotationsView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "版本批注";
+    return tr("版本批注", "Version notes");
   }
 
   getIcon(): string {
@@ -77,12 +78,12 @@ export class GitReviewAnnotationsView extends ItemView {
     container.addClass("ap", "git-review-annotations-view");
     const header = container.createDiv({ cls: "git-review-annotations-header" });
     const title = header.createDiv();
-    title.createDiv({ cls: "git-review-annotations-eyebrow", text: "本地审阅层 · 不改正文与 commit" });
-    title.createEl("h2", { text: this.file?.basename ?? "版本批注" });
+    title.createDiv({ cls: "git-review-annotations-eyebrow", text: tr("本地审阅层 · 不改正文与 commit", "Local review layer · text and commits unchanged") });
+    title.createEl("h2", { text: this.file?.basename ?? tr("版本批注", "Version notes") });
     if (this.file) title.createDiv({ cls: "git-review-annotations-path", text: this.file.path });
     const add = header.createEl("button", {
       cls: "mod-cta",
-      text: "批注当前版本",
+      text: tr("批注当前版本", "Note on this version"),
       attr: { type: "button" }
     });
     add.disabled = !this.file || this.loading;
@@ -92,10 +93,10 @@ export class GitReviewAnnotationsView extends ItemView {
 
     const toolbar = container.createDiv({ cls: "git-review-annotations-toolbar" });
     for (const [value, label] of [
-      ["all", "全部"],
-      ["pending", "待处理"],
-      ["resolved", "已解决"],
-      ["wont-fix", "无需处理"]
+      ["all", tr("全部", "All")],
+      ["pending", tr("待处理", "Open")],
+      ["resolved", tr("已解决", "Resolved")],
+      ["wont-fix", tr("无需处理", "No action needed")]
     ] as const) {
       const button = toolbar.createEl("button", {
         text: label,
@@ -106,18 +107,18 @@ export class GitReviewAnnotationsView extends ItemView {
         this.render();
       });
     }
-    const exportButton = toolbar.createEl("button", { text: "复制审阅包", attr: { type: "button" } });
+    const exportButton = toolbar.createEl("button", { text: tr("复制审阅包", "Copy review pack"), attr: { type: "button" } });
     exportButton.addEventListener("click", () => {
       if (this.file) void this.plugin.copyAnnotationReviewPackage(this.file);
     });
-    const notesButton = toolbar.createEl("button", { text: "同步 Git notes…", attr: { type: "button" } });
+    const notesButton = toolbar.createEl("button", { text: tr("同步 Git notes…", "Sync to Git notes…"), attr: { type: "button" } });
     notesButton.addEventListener("click", () => {
       if (!this.file) return;
       new ConfirmActionModal(
         this.app,
-        "写入专用 Git notes？",
-        "这不会修改 commit 或笔记正文，但普通 git push 默认不会同步 notes。插件将只写 refs/notes/git-note-history-review，并保留其中非插件内容。",
-        "确认写入",
+        tr("写入专用 Git notes？", "Write to a dedicated Git notes ref?"),
+        tr("这不会修改 commit 或笔记正文，但普通 git push 默认不会同步 notes。插件将只写 refs/notes/git-note-history-review，并保留其中非插件内容。", "Commits and note text do not change, but a plain git push does not send notes by default. The plugin writes only refs/notes/git-note-history-review and keeps anything there it did not write."),
+        tr("确认写入", "Write"),
         () => this.plugin.syncAnnotationsToGitNotes(this.file!)
       ).open();
     });
@@ -127,15 +128,15 @@ export class GitReviewAnnotationsView extends ItemView {
         .filter((item) => this.filter === "all" || item.status === this.filter)
       : [];
     if (this.loading) {
-      container.createDiv({ cls: "git-review-annotations-empty", text: "正在读取笔记与批注…" });
+      container.createDiv({ cls: "git-review-annotations-empty", text: tr("正在读取笔记与批注…", "Reading the note and its notes…") });
       return;
     }
     if (annotations.length === 0) {
       container.createDiv({
         cls: "git-review-annotations-empty",
         text: this.filter === "all"
-          ? "还没有批注。可给整个工作区版本，或在编辑器中选中内容块后添加。"
-          : "这个状态下没有批注。"
+          ? tr("还没有批注。可给整个工作区版本，或在编辑器中选中内容块后添加。", "No notes yet. Add one to the whole working version, or select a block in the editor first.")
+          : tr("这个状态下没有批注。", "No notes in this state.")
       });
       return;
     }
@@ -147,9 +148,9 @@ export class GitReviewAnnotationsView extends ItemView {
       const meta = card.createDiv({ cls: "git-review-annotation-meta" });
       meta.createSpan({ cls: "git-review-annotation-status", text: STATUS_LABEL[item.status] });
       meta.createSpan({ text: item.versionLabel || item.commitHash.slice(0, 8) });
-      meta.createSpan({ text: item.target === "block" ? "内容块" : "整个版本" });
-      if (located.relocated) meta.createSpan({ cls: "git-review-annotation-relocated", text: "已重定位" });
-      if (located.unresolved) meta.createSpan({ cls: "git-review-annotation-unresolved", text: "原块未找到" });
+      meta.createSpan({ text: item.target === "block" ? tr("内容块", "Block") : tr("整个版本", "Whole version") });
+      if (located.relocated) meta.createSpan({ cls: "git-review-annotation-relocated", text: tr("已重定位", "Relocated") });
+      if (located.unresolved) meta.createSpan({ cls: "git-review-annotation-unresolved", text: tr("原块未找到", "Original block not found") });
       card.createDiv({ cls: "git-review-annotation-comment", text: item.comment });
       if (item.block) {
         const context = card.createEl("pre", { cls: "git-review-annotation-context" });
@@ -158,14 +159,14 @@ export class GitReviewAnnotationsView extends ItemView {
       const actions = card.createDiv({ cls: "git-review-annotation-actions" });
       const edit = actions.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": "编辑批注", type: "button" }
+        attr: { "aria-label": tr("编辑批注", "Edit note"), type: "button" }
       });
       setIcon(edit, "pencil");
       edit.addEventListener("click", () => {
         new ReviewAnnotationModal(
           this.app,
           item,
-          item.target === "block" ? "内容块批注" : "版本批注",
+          item.target === "block" ? tr("内容块批注", "Block note") : tr("版本批注", "Version note"),
           async (draft) => {
             if (draft) await this.plugin.updateReviewAnnotation(item.id, draft);
             else await this.plugin.deleteReviewAnnotation(item.id);

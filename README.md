@@ -45,11 +45,11 @@ No Git yet? Run **See an example (no repository needed)**: three pre-written ver
 - **Status bar**: how long ago the active note was last committed, with a dot when it has uncommitted edits.
 - **Version links**: *Copy version link* in a version's menu; clicking the link later opens that version against the current note.
 
-Lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, historical sandboxes, history sources) sit behind *Show lab tools* in settings and are off by default. Their views are in Chinese for now. The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.md).
+Lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, historical sandboxes, history sources) sit behind *Show lab tools* in settings and are off by default. The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.md).
 
 ## Language and themes
 
-Commands, settings, the timeline, compare and restore views, errors and empty states follow Obsidian's language: Chinese, or English for every other language.
+The whole interface, lab tools included, follows Obsidian's language: Chinese, or English for every other language.
 
 Colours, radii and spacing come from your theme's variables, and styles only apply inside the plugin's own views. Checked in light and dark mode with Default, Minimal, Blue Topaz and AnuPpuccin, including a narrow sidebar, the side-by-side diff (line numbers, horizontal space, long paths) and dropdowns. *Reduce transparency* and *Reduce motion* are respected.
 

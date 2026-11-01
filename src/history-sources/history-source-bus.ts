@@ -6,6 +6,7 @@ import type {
   HistorySourceSnapshot,
   HistorySourceVersion
 } from "./types";
+import { tr } from "../i18n";
 
 function aborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
@@ -23,7 +24,7 @@ function failedProbe(
     descriptor,
     available: false,
     status: "error",
-    summary: "读取失败，其他历史来源仍可继续使用。",
+    summary: tr("读取失败，其他历史来源仍可继续使用。", "Could not read this source; the other history sources still work."),
     versions: [],
     error: errorText(error)
   };

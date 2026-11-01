@@ -21,6 +21,7 @@ import type {
   HistoricalSandboxPatchExport,
   HistoricalSandboxRecord
 } from "./types";
+import { tr } from "../i18n";
 
 const MAX_COMMAND_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_SANDBOX_MARKDOWN_BYTES = 2 * 1024 * 1024;
@@ -110,7 +111,7 @@ function safeName(value: string): string {
     .replace(UNSAFE_NAME_CHARACTERS, " ")
     .replace(/\s+/gu, " ")
     .trim();
-  return compact.slice(0, 80) || "历史沙盒";
+  return compact.slice(0, 80) || tr("历史沙盒", "Historical sandboxes");
 }
 
 function isCommitHash(value: string): boolean {
@@ -125,12 +126,12 @@ function assertInside(parent: string, child: string, allowEqual = false): void {
     || relative.startsWith(`..${path.sep}`)
     || path.isAbsolute(relative)
   ) {
-    throw new Error("沙盒路径越过了受管目录边界。");
+    throw new Error(tr("沙盒路径越过了受管目录边界。", "The sandbox path goes outside the managed folder."));
   }
 }
 
 function sandboxCss(record: HistoricalSandboxRecord): string {
-  const mode = record.mode === "capsule" ? "只读时间胶囊" : "可编辑历史沙盒";
+  const mode = record.mode === "capsule" ? tr("只读时间胶囊", "Read-only time capsule") : tr("可编辑历史沙盒", "Editable historical sandbox");
   const label = `${mode} · ${record.source.shortHash}`.replace(/["\\]/gu, "\\$&");
   return [
     "body::before {",
@@ -209,7 +210,7 @@ export class HistoricalSandboxManager {
     input: HistoricalSandboxCreateInput
   ): Promise<HistoricalSandboxRecord> {
     if (!isCommitHash(input.commitHash)) {
-      throw new Error("历史沙盒只接受已经解析出的完整 Git commit hash。");
+      throw new Error(tr("历史沙盒只接受已经解析出的完整 Git commit hash。", "A historical sandbox only accepts a full, resolved Git commit hash."));
     }
     const repositoryRoot = await realpath(path.resolve(input.repositoryRoot));
     const vaultRoot = await realpath(path.resolve(input.vaultRoot));
@@ -221,7 +222,7 @@ export class HistoricalSandboxManager {
         `${input.commitHash}^{commit}`
       ])
     ).stdout.trim();
-    if (!isCommitHash(verified)) throw new Error("无法验证历史沙盒的源 commit。");
+    if (!isCommitHash(verified)) throw new Error(tr("无法验证历史沙盒的源 commit。", "Cannot verify the sandbox's source commit."));
 
     await mkdir(this.storageRoot, { recursive: true });
     const managedRoot = await realpath(this.storageRoot);
@@ -232,7 +233,7 @@ export class HistoricalSandboxManager {
       .slice(0, 20);
     const rootPath = path.join(managedRoot, id);
     assertInside(managedRoot, rootPath);
-    if (await exists(rootPath)) throw new Error("沙盒目录已经存在，请重试。");
+    if (await exists(rootPath)) throw new Error(tr("沙盒目录已经存在，请重试。", "The sandbox folder already exists; try again."));
 
     const vaultRelativePath = path.relative(repositoryRoot, vaultRoot);
     const vaultPath = path.join(rootPath, vaultRelativePath);
@@ -242,7 +243,7 @@ export class HistoricalSandboxManager {
       id,
       name: safeName(
         input.name
-        ?? `${input.commitSubject || "历史版本"} · ${(input.shortHash || verified).slice(0, 7)}`
+        ?? tr(`${input.commitSubject || "历史版本"} · ${(input.shortHash || verified).slice(0, 7)}`, `${input.commitSubject || "Past version"} · ${(input.shortHash || verified).slice(0, 7)}`)
       ),
       rootPath,
       vaultPath,
@@ -278,14 +279,14 @@ export class HistoricalSandboxManager {
       ]);
       worktreeAdded = true;
       if (!(await exists(vaultPath))) {
-        throw new Error("源 commit 中不存在对应的 Vault 目录。");
+        throw new Error(tr("源 commit 中不存在对应的 Vault 目录。", "The vault folder does not exist in the source commit."));
       }
       const historicalVaultInfo = await lstat(vaultPath);
       if (
         historicalVaultInfo.isSymbolicLink()
         || !historicalVaultInfo.isDirectory()
       ) {
-        throw new Error("源 commit 中的 Vault 根目录不是安全的普通目录。");
+        throw new Error(tr("源 commit 中的 Vault 根目录不是安全的普通目录。", "The vault root in the source commit is not a safe plain folder."));
       }
       const actualWorktreeRoot = await realpath(rootPath);
       const actualVaultPath = await realpath(vaultPath);
@@ -420,7 +421,7 @@ export class HistoricalSandboxManager {
     await this.assertManagedRecord(record);
     const inspection = await this.inspect(record);
     if (inspection.availability !== "ready") {
-      throw new Error("沙盒已丢失或不再位于创建时的 commit，不能导出补丁。");
+      throw new Error(tr("沙盒已丢失或不再位于创建时的 commit，不能导出补丁。", "The sandbox is missing or no longer at the commit it was made from, so no patch can be exported."));
     }
     const patch = (
       await this.git(record.rootPath, [
@@ -472,7 +473,7 @@ export class HistoricalSandboxManager {
       || repositoryPath.includes("\u0000")
       || path.isAbsolute(repositoryPath)
     ) {
-      throw new Error("沙盒文件路径无效。");
+      throw new Error(tr("沙盒文件路径无效。", "Invalid sandbox file path."));
     }
     const candidate = path.resolve(
       record.rootPath,
@@ -481,14 +482,14 @@ export class HistoricalSandboxManager {
     assertInside(record.rootPath, candidate);
     const candidateInfo = await lstat(candidate);
     if (candidateInfo.isSymbolicLink() || !candidateInfo.isFile()) {
-      throw new Error("只允许读取沙盒中的普通 Markdown 文件。");
+      throw new Error(tr("只允许读取沙盒中的普通 Markdown 文件。", "Only plain Markdown files in a sandbox can be read."));
     }
     const actual = await realpath(candidate);
     const actualRoot = await realpath(record.rootPath);
     assertInside(actualRoot, actual);
     const sizeBytes = candidateInfo.size;
     if (sizeBytes > MAX_SANDBOX_MARKDOWN_BYTES) {
-      throw new Error("沙盒笔记超过 2 MB 安全读取上限。");
+      throw new Error(tr("沙盒笔记超过 2 MB 安全读取上限。", "The sandbox note is over the 2 MB safe read limit."));
     }
     return {
       content: await readFile(actual, "utf8"),
@@ -617,13 +618,13 @@ export class HistoricalSandboxManager {
       managedRoot = await realpath(this.storageRoot);
     } catch {
       assertInside(this.storageRoot, rootPath);
-      throw new Error("沙盒受管目录不存在。");
+      throw new Error(tr("沙盒受管目录不存在。", "The managed sandbox folder does not exist."));
     }
     assertInside(managedRoot, rootPath);
     const actualRoot = await realpath(rootPath);
     assertInside(managedRoot, actualRoot);
     if (actualRoot !== rootPath) {
-      throw new Error("沙盒目录经过了符号链接重定向，已停止操作。");
+      throw new Error(tr("沙盒目录经过了符号链接重定向，已停止操作。", "The sandbox folder is redirected through a symbolic link, so this stopped."));
     }
     const markerPath = path.join(
       record.vaultPath,
@@ -633,7 +634,7 @@ export class HistoricalSandboxManager {
     const marker = JSON.parse(await readFile(markerPath, "utf8")) as
       Partial<HistoricalSandboxRecord>;
     if (marker.id !== record.id || marker.rootPath !== record.rootPath) {
-      throw new Error("沙盒身份标记不匹配，已停止操作。");
+      throw new Error(tr("沙盒身份标记不匹配，已停止操作。", "The sandbox identity marker does not match, so this stopped."));
     }
   }
 

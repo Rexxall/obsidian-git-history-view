@@ -17,6 +17,7 @@ import type {
   StructureKnowledgeAssertion,
   TextKnowledgeAssertion
 } from "./types";
+import { tr } from "../i18n";
 
 function normalizeText(
   value: string,
@@ -102,8 +103,8 @@ function evaluateTextAssertion(
   return automaticResult(
     holds,
     holds
-      ? "该版本满足文本断言。"
-      : "该版本不满足文本断言。",
+      ? tr("该版本满足文本断言。", "This version satisfies the text assertion.")
+      : tr("该版本不满足文本断言。", "This version does not satisfy the text assertion."),
     evidence
   );
 }
@@ -217,13 +218,13 @@ function evaluatePropertyAssertion(
 ): KnowledgeAssertionEvaluation {
   const property = assertion.property.trim();
   if (!property) {
-    return unknownAutomatic("invalid-assertion", "属性名不能为空。");
+    return unknownAutomatic("invalid-assertion", tr("属性名不能为空。", "The property name cannot be empty."));
   }
   const frontmatter = inspectFrontmatter(content);
   if (frontmatter.state === "invalid") {
     return unknownAutomatic(
       "invalid-frontmatter",
-      `Frontmatter 无法解析：${frontmatter.error}`,
+      tr(`Frontmatter 无法解析：${frontmatter.error}`, `The frontmatter cannot be parsed: ${frontmatter.error}`),
       propertyEvidence(content, frontmatter.bodyStart)
     );
   }
@@ -242,8 +243,8 @@ function evaluatePropertyAssertion(
     return automaticResult(
       holds,
       holds
-        ? `属性“${property}”${present ? "存在" : "缺失"}。`
-        : `属性“${property}”${present ? "仍然存在" : "并不存在"}。`,
+        ? tr(`属性“${property}”${present ? "存在" : "缺失"}。`, `Property "${property}" ${present ? "exists" : "is missing"}.`)
+        : tr(`属性“${property}”${present ? "仍然存在" : "并不存在"}。`, `Property "${property}" ${present ? "still exists" : "does not exist"}.`),
       evidence
     );
   }
@@ -251,14 +252,14 @@ function evaluatePropertyAssertion(
   if (!("expected" in assertion)) {
     return unknownAutomatic(
       "invalid-assertion",
-      `属性 ${assertion.operator} 断言缺少期望值。`,
+      tr(`属性 ${assertion.operator} 断言缺少期望值。`, `The property ${assertion.operator} assertion has no expected value.`),
       evidence
     );
   }
   if (!present) {
     return automaticResult(
       false,
-      `属性“${property}”缺失，不能满足 ${assertion.operator} 断言。`
+      tr(`属性“${property}”缺失，不能满足 ${assertion.operator} 断言。`, `Property "${property}" is missing, so the ${assertion.operator} assertion cannot hold.`)
     );
   }
 
@@ -269,8 +270,8 @@ function evaluatePropertyAssertion(
   return automaticResult(
     holds,
     holds
-      ? `属性“${property}”以 ${valueType(value)} 类型满足断言。`
-      : `属性“${property}”的 ${valueType(value)} 类型值不满足断言。`,
+      ? tr(`属性“${property}”以 ${valueType(value)} 类型满足断言。`, `Property "${property}" satisfies the assertion as a ${valueType(value)}.`)
+      : tr(`属性“${property}”的 ${valueType(value)} 类型值不满足断言。`, `Property "${property}" as a ${valueType(value)} does not satisfy the assertion.`),
     evidence
   );
 }
@@ -301,7 +302,7 @@ function evaluateRelationAssertion(
 ): KnowledgeAssertionEvaluation {
   const target = normalizeRelationTarget(assertion);
   if (!target) {
-    return unknownAutomatic("invalid-assertion", "关系目标不能为空。");
+    return unknownAutomatic("invalid-assertion", tr("关系目标不能为空。", "The relation target cannot be empty."));
   }
   const comparableContent = maskMarkdownRelationLiterals(content);
   const expectedKind = assertion.relation === "markdown-link"
@@ -323,8 +324,8 @@ function evaluateRelationAssertion(
   return automaticResult(
     holds,
     holds
-      ? `关系 ${assertion.relation} “${assertion.target}”满足断言。`
-      : `关系 ${assertion.relation} “${assertion.target}”不满足断言。`,
+      ? tr(`关系 ${assertion.relation} “${assertion.target}”满足断言。`, `Relation ${assertion.relation} "${assertion.target}" satisfies the assertion.`)
+      : tr(`关系 ${assertion.relation} “${assertion.target}”不满足断言。`, `Relation ${assertion.relation} "${assertion.target}" does not satisfy the assertion.`),
     exists && evidenceIndex >= 0
       ? evidenceFromRange(
           content,
@@ -360,8 +361,8 @@ function evaluateStructureAssertion(
   return automaticResult(
     holds,
     holds
-      ? `${assertion.structure}${namedValue} 满足结构断言。`
-      : `${assertion.structure}${namedValue} 不满足结构断言。`,
+      ? tr(`${assertion.structure}${namedValue} 满足结构断言。`, `${assertion.structure}${namedValue} satisfies the structure assertion.`)
+      : tr(`${assertion.structure}${namedValue} 不满足结构断言。`, `${assertion.structure}${namedValue} does not satisfy the structure assertion.`),
     match?.evidence
   );
 }
@@ -376,8 +377,8 @@ function evaluateRuleAssertion(
       return automaticResult(
         !marker,
         marker
-          ? "检测到未解决的 Git 冲突标记。"
-          : "未检测到 Git 冲突标记。",
+          ? tr("检测到未解决的 Git 冲突标记。", "Unresolved Git conflict markers found.")
+          : tr("未检测到 Git 冲突标记。", "No Git conflict markers found."),
         marker
           ? evidenceFromRange(
               content,
@@ -392,10 +393,10 @@ function evaluateRuleAssertion(
       return automaticResult(
         frontmatter.state !== "invalid",
         frontmatter.state === "invalid"
-          ? `Frontmatter 无效：${frontmatter.error}`
+          ? tr(`Frontmatter 无效：${frontmatter.error}`, `The frontmatter is invalid: ${frontmatter.error}`)
           : frontmatter.state === "ready"
-            ? "Frontmatter 是有效的属性对象。"
-            : "笔记没有 Frontmatter，不存在 YAML 解析错误。",
+            ? tr("Frontmatter 是有效的属性对象。", "The frontmatter is a valid set of properties.")
+            : tr("笔记没有 Frontmatter，不存在 YAML 解析错误。", "The note has no frontmatter, so there is no YAML error."),
         frontmatter.state === "invalid"
           ? evidenceFromRange(content, 0, frontmatter.bodyStart)
           : undefined
@@ -406,7 +407,7 @@ function evaluateRuleAssertion(
       if (frontmatter.state === "invalid") {
         return unknownAutomatic(
           "invalid-frontmatter",
-          `无法确定正文边界：${frontmatter.error}`,
+          tr(`无法确定正文边界：${frontmatter.error}`, `Cannot tell where the text starts: ${frontmatter.error}`),
           evidenceFromRange(content, 0, frontmatter.bodyStart)
         );
       }
@@ -416,7 +417,7 @@ function evaluateRuleAssertion(
       const offset = frontmatter.bodyStart;
       return automaticResult(
         holds,
-        holds ? "笔记正文包含非空白内容。" : "笔记正文为空。",
+        holds ? tr("笔记正文包含非空白内容。", "The note text has non-blank content.") : tr("笔记正文为空。", "The note text is empty."),
         holds
           ? evidenceFromRange(
               content,
@@ -429,7 +430,7 @@ function evaluateRuleAssertion(
     default:
       return unknownAutomatic(
         "unsupported-assertion",
-        `未知的内置规则：${assertion.ruleId}`
+        tr(`未知的内置规则：${assertion.ruleId}`, `Unknown built-in rule: ${assertion.ruleId}`)
       );
   }
 }
@@ -442,7 +443,7 @@ function evaluateManualAssertion(
     return {
       outcome: "unknown",
       reason: "manual-unjudged",
-      detail: version.manualDetail?.trim() || "该版本尚未人工判定。",
+      detail: version.manualDetail?.trim() || tr("该版本尚未人工判定。", "Not judged yet."),
       provenance: "manual"
     };
   }
@@ -450,7 +451,7 @@ function evaluateManualAssertion(
     outcome,
     reason: outcome === "holds" ? "condition-met" : "condition-not-met",
     detail: version.manualDetail?.trim()
-      || (outcome === "holds" ? "人工判定：成立。" : "人工判定：不成立。"),
+      || (outcome === "holds" ? tr("人工判定：成立。", "Human judgement: holds.") : tr("人工判定：不成立。", "Human judgement: does not hold.")),
     provenance: "manual"
   };
 }
@@ -461,7 +462,7 @@ export function evaluateKnowledgeAssertion(
 ): KnowledgeAssertionEvaluation {
   if (typeof version.content !== "string") {
     const detail = version.unavailableReason?.trim()
-      || "该版本正文不可读，不能推断断言结果。";
+      || tr("该版本正文不可读，不能推断断言结果。", "This version's text cannot be read, so the assertion cannot be inferred.");
     return assertion.kind === "manual"
       ? {
           outcome: "unknown",

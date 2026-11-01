@@ -8,6 +8,7 @@ import type {
 } from "../git/git-client";
 import { GitClient } from "../git/git-client";
 import type { KnowledgeTraceVersion } from "./types";
+import { tr } from "../i18n";
 
 export const DEFAULT_KNOWLEDGE_MATERIALIZATION_LIMITS = {
   maxVersions: 240,
@@ -92,12 +93,12 @@ type PlannedHistoricalObject =
   | { availability: "physical-boundary"; sizeBytes: null };
 
 const UNAVAILABLE_REASON: Record<KnowledgeVersionUnavailableCode, string> = {
-  missing: "这个版本中找不到可读取的笔记内容。",
-  "too-large": "这个版本超过单文件读取上限。",
-  "total-limit": "本次追踪已达到总读取量上限。",
-  "read-error": "Git 对象无法读取。",
-  "physical-boundary": "当前文件的物理路径位于 Vault 之外。",
-  "concurrent-change": "采样期间笔记或 Git 状态发生了变化。"
+  missing: tr("这个版本中找不到可读取的笔记内容。", "No readable note content in this version."),
+  "too-large": tr("这个版本超过单文件读取上限。", "This version is over the single-file read limit."),
+  "total-limit": tr("本次追踪已达到总读取量上限。", "This trace reached its total read limit."),
+  "read-error": tr("Git 对象无法读取。", "The Git object cannot be read."),
+  "physical-boundary": tr("当前文件的物理路径位于 Vault 之外。", "The file's real path is outside the vault."),
+  "concurrent-change": tr("采样期间笔记或 Git 状态发生了变化。", "The note or Git state changed while sampling.")
 };
 
 function clampInteger(
@@ -187,7 +188,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new Error("知识追踪已取消。");
+  if (signal?.aborted) throw new Error(tr("知识追踪已取消。", "Knowledge trace cancelled."));
 }
 
 function isHistoricalPathInsideVault(
@@ -279,14 +280,14 @@ export class KnowledgeVersionMaterializer {
       }
     }
     if (history.workingRename?.kind === "staged") {
-      warnings.push("已按 Git 暂存区确认的重命名，从旧路径连续读取历史。");
+      warnings.push(tr("已按 Git 暂存区确认的重命名，从旧路径连续读取历史。", "Following a rename confirmed in the Git index, history is read on from the old path."));
     } else if (
       history.workingRename?.kind === "exact-unstaged"
       && exactRenameStillMatches
     ) {
-      warnings.push("已通过与 HEAD 文件内容完全一致，确认未暂存重命名并从旧路径连续读取历史。");
+      warnings.push(tr("已通过与 HEAD 文件内容完全一致，确认未暂存重命名并从旧路径连续读取历史。", "The content matches the HEAD file exactly, so an unstaged rename is confirmed and history is read on from the old path."));
     } else if (history.workingRename?.kind === "exact-unstaged") {
-      warnings.push("识别未暂存重命名后当前内容再次变化；旧路径历史仍冻结保留，当前工作区样本标记为未知。");
+      warnings.push(tr("识别未暂存重命名后当前内容再次变化；旧路径历史仍冻结保留，当前工作区样本标记为未知。", "The current content changed again after the unstaged rename was found; history from the old path stays frozen and the working-copy sample is marked unknown."));
     }
     if (history.renameWarning) warnings.push(history.renameWarning);
 
@@ -360,7 +361,7 @@ export class KnowledgeVersionMaterializer {
       const object = objects[plan.index]!;
       const base: Omit<KnowledgeTraceVersion, "content" | "unavailableReason"> = {
         key: `commit:${commit.hash}:${commit.historicalPath}`,
-        label: `${commit.shortHash} · ${commit.subject || "无提交说明"}`,
+        label: tr(`${commit.shortHash} · ${commit.subject || "无提交说明"}`, `${commit.shortHash} · ${commit.subject || "No commit message"}`),
         kind: "commit",
         commitHash: commit.hash,
         shortHash: commit.shortHash,
@@ -393,19 +394,19 @@ export class KnowledgeVersionMaterializer {
       }
     });
     if (plans.some((plan) => !plan.allowedByTotalLimit)) {
-      warnings.push("部分版本因达到总读取量上限而保留为未知。");
+      warnings.push(tr("部分版本因达到总读取量上限而保留为未知。", "Some versions stay unknown because the total read limit was reached."));
     }
     if (plans.some((plan) => plan.inspection.availability === "too-large")) {
-      warnings.push("部分版本超过单文件读取上限，未读取内容。");
+      warnings.push(tr("部分版本超过单文件读取上限，未读取内容。", "Some versions are over the single-file read limit and were not read."));
     }
     if (
       plans.some((plan) => plan.inspection.availability === "missing")
       || objects.some((object) => object.availability === "read-error")
     ) {
-      warnings.push("部分 Git 版本不可读，结果不会跨越这些版本推断。");
+      warnings.push(tr("部分 Git 版本不可读，结果不会跨越这些版本推断。", "Some Git versions cannot be read; the result is not inferred across them."));
     }
     if (objects.some((object) => object.availability === "physical-boundary")) {
-      warnings.push("部分历史路径位于 Vault 之外，未读取其正文。");
+      warnings.push(tr("部分历史路径位于 Vault 之外，未读取其正文。", "Some past paths are outside the vault; their text was not read."));
     }
 
     const samples = workingVersion
@@ -417,7 +418,7 @@ export class KnowledgeVersionMaterializer {
         workingSnapshot
       );
       if (workingSnapshot.staleAtCompletion) {
-        warnings.push("当前笔记在物化完成前已变化；工作区样本保持冻结并标记为过期。");
+        warnings.push(tr("当前笔记在物化完成前已变化；工作区样本保持冻结并标记为过期。", "The note changed before reading finished; the working-copy sample stays frozen and is marked out of date."));
       }
     }
     throwIfAborted(signal);
@@ -473,7 +474,7 @@ export class KnowledgeVersionMaterializer {
       `working:${capture.headHash || "unborn"}:${capturedAt}:${file.path}`;
     const baseVersion: Omit<KnowledgeTraceVersion, "content" | "unavailableReason"> = {
       key: versionKey,
-      label: "当前工作区（冻结快照）",
+      label: tr("当前工作区（冻结快照）", "Working copy (frozen snapshot)"),
       kind: "working",
       historicalPath: capture.context.repositoryRelativePath,
       ...(capture.sizeBytes === null ? {} : { sizeBytes: capture.sizeBytes })

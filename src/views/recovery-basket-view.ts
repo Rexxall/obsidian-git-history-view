@@ -15,6 +15,7 @@ import type {
 } from "../recovery-basket/types";
 import { RestorePreviewModal } from "../ui/restore-preview-modal";
 import { ConfirmActionModal } from "../ui/confirm-modal";
+import { tr } from "../i18n";
 
 export const GIT_RECOVERY_BASKET_VIEW_TYPE = "git-recovery-basket-view";
 
@@ -32,9 +33,9 @@ function formatTime(value: string): string {
 
 function operationLabel(operation: "replace" | "insert" | "delete"): string {
   return {
-    replace: "替换",
-    insert: "插入",
-    delete: "删除"
+    replace: tr("替换", "Replace"),
+    insert: tr("插入", "Insert"),
+    delete: tr("删除", "Delete")
   }[operation];
 }
 
@@ -68,7 +69,7 @@ export class GitRecoveryBasketView extends ItemView {
 
   getDisplayText(): string {
     const count = this.basket?.items.length ?? 0;
-    return count > 0 ? `恢复篮子 · ${count}` : "恢复篮子";
+    return count > 0 ? tr(`恢复篮子 · ${count}`, `Recovery basket · ${count}`) : tr("恢复篮子", "Recovery basket");
   }
 
   getIcon(): string {
@@ -100,7 +101,7 @@ export class GitRecoveryBasketView extends ItemView {
         this.file = null;
         this.basket = this.plugin.getRecoveryBasket(this.filePath) ?? null;
         this.plan = null;
-        this.error = `找不到恢复篮子的目标笔记：${this.filePath}`;
+        this.error = tr(`找不到恢复篮子的目标笔记：${this.filePath}`, `Cannot find the recovery basket's note: ${this.filePath}`);
         return;
       }
       const currentContent = await this.app.vault.read(file);
@@ -133,7 +134,7 @@ export class GitRecoveryBasketView extends ItemView {
         attr: { role: "status", "aria-live": "polite" }
       });
       setIcon(state.createSpan(), "loader-circle");
-      state.createDiv({ text: "正在核对冻结基线和篮子项目…" });
+      state.createDiv({ text: tr("正在核对冻结基线和篮子项目…", "Checking the frozen baseline and basket items…") });
       return;
     }
     if (this.error) {
@@ -146,13 +147,13 @@ export class GitRecoveryBasketView extends ItemView {
       return;
     }
     if (!this.filePath) {
-      this.renderEmpty(container, "请先打开一篇 Markdown 笔记，再打开恢复篮子。");
+      this.renderEmpty(container, tr("请先打开一篇 Markdown 笔记，再打开恢复篮子。", "Open a Markdown note first, then the recovery basket."));
       return;
     }
     if (!this.basket || this.basket.items.length === 0 || !this.plan) {
       this.renderEmpty(
         container,
-        "这篇笔记的恢复篮子还是空的。请从历史版本对比中的修改块或属性旁加入内容。"
+        tr("这篇笔记的恢复篮子还是空的。请从历史版本对比中的修改块或属性旁加入内容。", "This note's recovery basket is empty. Add changed blocks or properties from a version compare.")
       );
       return;
     }
@@ -167,13 +168,13 @@ export class GitRecoveryBasketView extends ItemView {
     const identity = header.createDiv({ cls: "git-recovery-basket-identity" });
     const eyebrow = identity.createDiv({ cls: "git-recovery-basket-eyebrow" });
     setIcon(eyebrow.createSpan(), "shopping-basket");
-    eyebrow.createSpan({ text: "恢复篮子" });
+    eyebrow.createSpan({ text: tr("恢复篮子", "Recovery basket") });
     eyebrow.createSpan({
       cls: "git-recovery-basket-transaction",
-      text: "统一预演 · 一次写回"
+      text: tr("统一预演 · 一次写回", "One preview · one write")
     });
     identity.createEl("h2", {
-      text: this.filePath ? this.filePath.split("/").at(-1)?.replace(/\.md$/i, "") ?? "恢复篮子" : "恢复篮子"
+      text: this.filePath ? this.filePath.split("/").at(-1)?.replace(/\.md$/i, "") ?? tr("恢复篮子", "Recovery basket") : tr("恢复篮子", "Recovery basket")
     });
     if (this.filePath) {
       identity.createDiv({
@@ -185,14 +186,14 @@ export class GitRecoveryBasketView extends ItemView {
     if (this.file) {
       const collect = actions.createEl("button");
       setIcon(collect.createSpan(), "history");
-      collect.createSpan({ text: "继续收集" });
+      collect.createSpan({ text: tr("继续收集", "Keep collecting") });
       collect.addEventListener("click", () =>
         void this.plugin.activateHistoryInMain(this.file)
       );
     }
     const refresh = actions.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "重新核对恢复篮子" }
+      attr: { "aria-label": tr("重新核对恢复篮子", "Check the recovery basket again") }
     });
     setIcon(refresh, "refresh-cw");
     refresh.disabled = this.loading;
@@ -203,10 +204,10 @@ export class GitRecoveryBasketView extends ItemView {
     const empty = container.createDiv({ cls: "git-recovery-basket-state is-empty" });
     setIcon(empty.createSpan(), "shopping-basket");
     const copy = empty.createDiv();
-    copy.createEl("h3", { text: "先收集，再恢复" });
+    copy.createEl("h3", { text: tr("先收集，再恢复", "Collect first, then restore") });
     copy.createDiv({ text: message });
     if (this.file) {
-      const open = copy.createEl("button", { text: "打开这篇笔记的 Git 历史" });
+      const open = copy.createEl("button", { text: tr("打开这篇笔记的 Git 历史", "Open this note's Git history") });
       open.addEventListener("click", () =>
         void this.plugin.activateHistoryInMain(this.file)
       );
@@ -224,15 +225,15 @@ export class GitRecoveryBasketView extends ItemView {
     setIcon(baseline.createSpan(), plan.stale ? "triangle-alert" : "snowflake");
     const copy = baseline.createDiv({ cls: "git-recovery-basket-baseline-copy" });
     copy.createEl("strong", {
-      text: plan.stale ? "笔记已偏离冻结基线" : "目标仍与冻结基线一致"
+      text: plan.stale ? tr("笔记已偏离冻结基线", "The note has moved on from the frozen baseline") : tr("目标仍与冻结基线一致", "The note still matches the frozen baseline")
     });
     copy.createDiv({
       text: plan.stale
-        ? "可以继续查看方案，但应用已停止；清空后从最新内容重新收集。"
-        : `篮子创建于 ${formatTime(basket.createdAt)}；所有项目统一相对这份内容合并。`
+        ? tr("可以继续查看方案，但应用已停止；清空后从最新内容重新收集。", "You can still look at the plan, but applying is stopped; empty the basket and collect again from the latest content.")
+        : tr(`篮子创建于 ${formatTime(basket.createdAt)}；所有项目统一相对这份内容合并。`, `Basket created ${formatTime(basket.createdAt)}; every item is merged against this content.`)
     });
     const metrics = baseline.createDiv({ cls: "git-recovery-basket-baseline-metrics" });
-    metrics.createSpan({ text: `${basket.items.length} 项` });
+    metrics.createSpan({ text: tr(`${basket.items.length} 项`, `${basket.items.length} items`) });
     metrics.createSpan({ text: `+${plan.addedLines}` });
     metrics.createSpan({ text: `−${plan.deletedLines}` });
   }
@@ -245,9 +246,9 @@ export class GitRecoveryBasketView extends ItemView {
     const section = container.createEl("section", { cls: "git-recovery-basket-items" });
     const heading = section.createDiv({ cls: "git-recovery-basket-section-heading" });
     const title = heading.createDiv();
-    title.createEl("h3", { text: "恢复项目" });
-    title.createSpan({ text: "按冻结基线定位；上下顺序只影响审阅，不改变锚点。" });
-    const clear = heading.createEl("button", { text: "清空篮子" });
+    title.createEl("h3", { text: tr("恢复项目", "Items to restore") });
+    title.createSpan({ text: tr("按冻结基线定位；上下顺序只影响审阅，不改变锚点。", "Placed by the frozen baseline; the order here only affects review, not where items land.") });
+    const clear = heading.createEl("button", { text: tr("清空篮子", "Empty basket") });
     clear.disabled = this.actionInFlight;
     clear.addEventListener("click", () => this.confirmClear());
 
@@ -285,7 +286,7 @@ export class GitRecoveryBasketView extends ItemView {
 
       const handle = row.createDiv({
         cls: "git-recovery-basket-item-handle",
-        attr: { title: "拖动调整审阅顺序" }
+        attr: { title: tr("拖动调整审阅顺序", "Drag to change the review order") }
       });
       setIcon(handle, "grip-vertical");
       const body = row.createDiv({ cls: "git-recovery-basket-item-body" });
@@ -296,39 +297,39 @@ export class GitRecoveryBasketView extends ItemView {
       });
       top.createEl("strong", { text: item.label });
       if (item.kind === "property") {
-        top.createSpan({ cls: "git-recovery-basket-kind", text: "属性" });
+        top.createSpan({ cls: "git-recovery-basket-kind", text: tr("属性", "Property") });
       }
       if (duplicateIds.has(item.id)) {
-        top.createSpan({ cls: "git-recovery-basket-kind is-warning", text: "重复项" });
+        top.createSpan({ cls: "git-recovery-basket-kind is-warning", text: tr("重复项", "Duplicate") });
       }
       body.createDiv({
         cls: "git-recovery-basket-source",
-        text: `${item.source.label} · 加入于 ${formatTime(item.addedAt)}`
+        text: tr(`${item.source.label} · 加入于 ${formatTime(item.addedAt)}`, `${item.source.label} · added ${formatTime(item.addedAt)}`)
       });
       const preview = body.createEl("details", { cls: "git-recovery-basket-item-preview" });
-      preview.createEl("summary", { text: "查看这一项的前后内容" });
+      preview.createEl("summary", { text: tr("查看这一项的前后内容", "View before and after for this item") });
       const values = preview.createDiv();
-      values.createDiv({ cls: "is-before", text: item.previewBefore || "无" });
-      values.createDiv({ cls: "is-after", text: item.previewAfter || "无" });
+      values.createDiv({ cls: "is-before", text: item.previewBefore || tr("无", "None") });
+      values.createDiv({ cls: "is-after", text: item.previewAfter || tr("无", "None") });
 
       const controls = row.createDiv({ cls: "git-recovery-basket-item-actions" });
       const up = controls.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": `上移：${item.label}` }
+        attr: { "aria-label": tr(`上移：${item.label}`, `Move up: ${item.label}`) }
       });
       setIcon(up, "arrow-up");
       up.disabled = index === 0 || this.actionInFlight;
       up.addEventListener("click", () => void this.moveItem(item.id, -1));
       const down = controls.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": `下移：${item.label}` }
+        attr: { "aria-label": tr(`下移：${item.label}`, `Move down: ${item.label}`) }
       });
       setIcon(down, "arrow-down");
       down.disabled = index === basket.items.length - 1 || this.actionInFlight;
       down.addEventListener("click", () => void this.moveItem(item.id, 1));
       const remove = controls.createEl("button", {
         cls: "clickable-icon",
-        attr: { "aria-label": `移除：${item.label}` }
+        attr: { "aria-label": tr(`移除：${item.label}`, `Remove: ${item.label}`) }
       });
       setIcon(remove, "x");
       remove.disabled = this.actionInFlight;
@@ -340,20 +341,20 @@ export class GitRecoveryBasketView extends ItemView {
     const section = container.createEl("section", { cls: "git-recovery-basket-checks" });
     const heading = section.createDiv({ cls: "git-recovery-basket-section-heading" });
     const title = heading.createDiv();
-    title.createEl("h3", { text: "写回前检查" });
+    title.createEl("h3", { text: tr("写回前检查", "Checks before writing") });
     const blockers = plan.issues.filter((issue) => issue.severity === "blocking").length;
     const warnings = plan.issues.filter((issue) => issue.severity === "warning").length;
     title.createSpan({
       text: blockers > 0
-        ? `${blockers} 个阻止项 · ${warnings} 个提醒`
+        ? tr(`${blockers} 个阻止项 · ${warnings} 个提醒`, `${blockers} blocking · ${warnings} warnings`)
         : warnings > 0
-          ? `没有阻止项 · ${warnings} 个提醒`
-          : "没有发现冲突、重复、断链或属性覆盖"
+          ? tr(`没有阻止项 · ${warnings} 个提醒`, `Nothing blocking · ${warnings} warnings`)
+          : tr("没有发现冲突、重复、断链或属性覆盖", "No conflicts, duplicates, broken links or property overwrites found")
     });
     if (plan.issues.length === 0) {
       const clear = section.createDiv({ cls: "git-recovery-basket-check is-clear" });
       setIcon(clear.createSpan(), "circle-check");
-      clear.createSpan({ text: "方案可以生成最终 Markdown。" });
+      clear.createSpan({ text: tr("方案可以生成最终 Markdown。", "The plan can produce the final Markdown.") });
       return;
     }
     for (const issue of plan.issues) {
@@ -369,23 +370,23 @@ export class GitRecoveryBasketView extends ItemView {
     const section = container.createEl("section", { cls: "git-recovery-basket-final" });
     const heading = section.createDiv({ cls: "git-recovery-basket-section-heading" });
     const title = heading.createDiv();
-    title.createEl("h3", { text: "最终 Markdown 预演" });
+    title.createEl("h3", { text: tr("最终 Markdown 预演", "Final Markdown preview") });
     title.createSpan({
-      text: `最终结果 +${plan.addedLines} / −${plan.deletedLines}；确认后只写回一次。`
+      text: tr(`最终结果 +${plan.addedLines} / −${plan.deletedLines}；确认后只写回一次。`, `Final result +${plan.addedLines} / −${plan.deletedLines}; written once after you confirm.`)
     });
     const actions = heading.createDiv({ cls: "git-recovery-basket-final-actions" });
     const copy = actions.createEl("button");
     setIcon(copy.createSpan(), "copy");
-    copy.createSpan({ text: "复制预演" });
+    copy.createSpan({ text: tr("复制预演", "Copy preview") });
     copy.addEventListener("click", () => void (async () => {
       await navigator.clipboard.writeText(plan.targetContent);
-      new Notice("已复制最终 Markdown 预演。");
+      new Notice(tr("已复制最终 Markdown 预演。", "Final Markdown preview copied."));
     })());
     const apply = actions.createEl("button", {
       cls: "mod-warning"
     });
     setIcon(apply.createSpan(), "archive-restore");
-    apply.createSpan({ text: "应用全部项目…" });
+    apply.createSpan({ text: tr("应用全部项目…", "Apply all items…") });
     apply.disabled = !plan.canApply || this.actionInFlight;
     apply.addEventListener("click", () => this.confirmApply(plan));
 
@@ -393,7 +394,7 @@ export class GitRecoveryBasketView extends ItemView {
       cls: "git-recovery-basket-final-preview"
     });
     preview.open = true;
-    preview.createEl("summary", { text: "查看合并后的完整笔记" });
+    preview.createEl("summary", { text: tr("查看合并后的完整笔记", "View the whole merged note") });
     const rendered = preview.createDiv({
       cls: "markdown-preview-view git-recovery-basket-markdown-preview"
     });
@@ -422,9 +423,9 @@ export class GitRecoveryBasketView extends ItemView {
     if (!this.basket || this.actionInFlight) return;
     new ConfirmActionModal(
       this.app,
-      "清空恢复篮子？",
-      `将移除 ${this.basket.items.length} 个尚未应用的恢复项目，不会修改笔记。`,
-      "清空篮子",
+      tr("清空恢复篮子？", "Empty the recovery basket?"),
+      tr(`将移除 ${this.basket.items.length} 个尚未应用的恢复项目，不会修改笔记。`, `${this.basket.items.length} items not yet applied will be removed. The note does not change.`),
+      tr("清空篮子", "Empty basket"),
       async () => {
         await this.plugin.clearRecoveryBasket(this.filePath);
         await this.refresh();
@@ -440,15 +441,15 @@ export class GitRecoveryBasketView extends ItemView {
     const sources = [...new Set(basket.items.map((item) => item.source.label))];
     new RestorePreviewModal(this.app, {
       file,
-      title: `应用恢复篮子 · ${basket.items.length} 项`,
+      title: tr(`应用恢复篮子 · ${basket.items.length} 项`, `Apply recovery basket · ${basket.items.length} items`),
       currentContent: plan.baselineContent,
       targetContent: plan.targetContent,
-      label: `应用恢复篮子（${basket.items.length} 项）`,
+      label: tr(`应用恢复篮子（${basket.items.length} 项）`, `Apply recovery basket (${basket.items.length} items)`),
       sourceLabel: sources.length <= 2
         ? sources.join("；")
-        : `${sources.slice(0, 2).join("；")} 等 ${sources.length} 个版本`,
+        : tr(`${sources.slice(0, 2).join("；")} 等 ${sources.length} 个版本`, `${sources.slice(0, 2).join("; ")} and ${sources.length} versions in all`),
       scope: "basket",
-      confirmText: "确认一次写回",
+      confirmText: tr("确认一次写回", "Confirm one write"),
       onConfirm: async () => {
         if (this.actionInFlight) return;
         this.actionInFlight = true;
@@ -456,13 +457,13 @@ export class GitRecoveryBasketView extends ItemView {
           const latestBasket = this.plugin.getRecoveryBasket(file.path);
           const latestFile = this.app.vault.getFileByPath(file.path);
           if (!latestBasket || !(latestFile instanceof TFile)) {
-            new Notice("恢复篮子或目标笔记已经不存在。", 8000);
+            new Notice(tr("恢复篮子或目标笔记已经不存在。", "The recovery basket or its note no longer exists."), 8000);
             return;
           }
           const currentContent = await this.app.vault.read(latestFile);
           const latestPlan = buildRecoveryBasketPlan(latestBasket, currentContent);
           if (!latestPlan.canApply) {
-            new Notice("方案在确认前已经失效，请重新检查恢复篮子。", 8000);
+            new Notice(tr("方案在确认前已经失效，请重新检查恢复篮子。", "The plan went out of date before you confirmed; check the recovery basket again."), 8000);
             await this.refresh();
             return;
           }
@@ -470,7 +471,7 @@ export class GitRecoveryBasketView extends ItemView {
             latestFile,
             latestPlan.targetContent,
             {
-              label: `应用恢复篮子（${latestBasket.items.length} 项）`,
+              label: tr(`应用恢复篮子（${latestBasket.items.length} 项）`, `Apply recovery basket (${latestBasket.items.length} items)`),
               sourceLabel: sources.join("；"),
               scope: "basket",
               expectedCurrentContent: currentContent
@@ -481,7 +482,7 @@ export class GitRecoveryBasketView extends ItemView {
             await this.plugin.clearRecoveryBasket(file.path);
           } catch (error) {
             new Notice(
-              `笔记已写回，但恢复篮子未能清空：${error instanceof Error ? error.message : String(error)}`,
+              tr(`笔记已写回，但恢复篮子未能清空：${error instanceof Error ? error.message : String(error)}`, `The note was written, but the recovery basket could not be emptied: ${error instanceof Error ? error.message : String(error)}`),
               9000
             );
           }

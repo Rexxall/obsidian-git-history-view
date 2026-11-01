@@ -16,18 +16,19 @@ import type {
   HistorySignalKind,
   HistorySignalProfile
 } from "../health/types";
+import { tr } from "../i18n";
 
 export const GIT_HISTORY_HEALTH_VIEW_TYPE = "git-history-health";
 const MAX_SIGNAL_CONTENT_BYTES = 2 * 1024 * 1024;
 
 const SIGNAL_LABELS: Record<HistorySignalKind, string> = {
-  content: "有效内容",
-  metadata: "维护属性",
-  generated: "生成字段",
-  formatting: "格式变化",
-  duplicate: "重复内容",
+  content: tr("有效内容", "Real content"),
+  metadata: tr("维护属性", "Housekeeping properties"),
+  generated: tr("生成字段", "Generated fields"),
+  formatting: tr("格式变化", "Formatting"),
+  duplicate: tr("重复内容", "Duplicate"),
   "ignored-revision": "Ignore rev",
-  unknown: "未知"
+  unknown: tr("未知", "Unknown")
 };
 
 type HealthFilter = "signal" | "all" | "noise" | "unknown";
@@ -53,7 +54,7 @@ export class GitHistoryHealthView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "历史健康中心";
+    return tr("历史健康中心", "History health");
   }
 
   getIcon(): string {
@@ -168,39 +169,39 @@ export class GitHistoryHealthView extends ItemView {
     const title = header.createDiv();
     title.createDiv({
       cls: "git-history-health-eyebrow",
-      text: "只读诊断 · 不 fetch、不 push、不修改 Git"
+      text: tr("只读诊断 · 不 fetch、不 push、不修改 Git", "Read-only diagnosis · no fetch, no push, no Git changes")
     });
-    title.createEl("h2", { text: this.file?.basename ?? "历史健康中心" });
+    title.createEl("h2", { text: this.file?.basename ?? tr("历史健康中心", "History health") });
     if (this.file) title.createDiv({ cls: "git-history-health-path", text: this.file.path });
     const refresh = header.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "重新检查历史健康", "aria-busy": String(this.loading) }
+      attr: { "aria-label": tr("重新检查历史健康", "Check history health again"), "aria-busy": String(this.loading) }
     });
     refresh.disabled = this.loading;
     setIcon(refresh, this.loading ? "loader-circle" : "refresh-cw");
     refresh.addEventListener("click", () => void this.refresh());
 
     if (!this.file) {
-      this.renderEmpty(container, "file-search", "请先打开一篇 Markdown 笔记。");
+      this.renderEmpty(container, "file-search", tr("请先打开一篇 Markdown 笔记。", "Open a Markdown note first."));
       return;
     }
     if (this.loading) {
-      this.renderEmpty(container, "loader-circle", "正在读取受限历史、upstream 与对象完整性…");
+      this.renderEmpty(container, "loader-circle", tr("正在读取受限历史、upstream 与对象完整性…", "Reading limited history, upstream and object integrity…"));
       return;
     }
     if (this.error || !this.snapshot || !this.analysis) {
-      this.renderEmpty(container, "circle-alert", this.error || "无法完成历史诊断。");
+      this.renderEmpty(container, "circle-alert", this.error || tr("无法完成历史诊断。", "Could not finish the history diagnosis."));
       return;
     }
 
     const summary = container.createDiv({ cls: "git-history-health-summary" });
-    this.metric(summary, "有效版本", this.analysis.signalCount, "signal");
-    this.metric(summary, "可解释噪音", this.analysis.noiseCount, "noise");
-    this.metric(summary, "无法判断", this.analysis.unknownCount, "unknown");
-    this.metric(summary, "仅本地 commit", this.snapshot.ahead, "local");
+    this.metric(summary, tr("有效版本", "Real versions"), this.analysis.signalCount, "signal");
+    this.metric(summary, tr("可解释噪音", "Explained noise"), this.analysis.noiseCount, "noise");
+    this.metric(summary, tr("无法判断", "Cannot tell"), this.analysis.unknownCount, "unknown");
+    this.metric(summary, tr("仅本地 commit", "Local-only commits"), this.snapshot.ahead, "local");
 
     const diagnostics = container.createDiv({ cls: "git-history-health-diagnostics" });
-    diagnostics.createEl("h3", { text: "历史完整性" });
+    diagnostics.createEl("h3", { text: tr("历史完整性", "History integrity") });
     for (const item of this.analysis.diagnostics) {
       const card = diagnostics.createDiv({
         cls: `git-history-health-diagnostic is-${item.severity}`
@@ -223,12 +224,12 @@ export class GitHistoryHealthView extends ItemView {
 
     const signal = container.createDiv({ cls: "git-history-health-signal" });
     const signalHeader = signal.createDiv({ cls: "git-history-health-section-header" });
-    signalHeader.createEl("h3", { text: "版本信噪比" });
+    signalHeader.createEl("h3", { text: tr("版本信噪比", "Signal to noise") });
     const profiles = signalHeader.createDiv({ cls: "git-history-health-profiles" });
     for (const [profile, label] of [
-      ["balanced", "平衡"],
-      ["strict", "严格"],
-      ["raw", "原始 Git"]
+      ["balanced", tr("平衡", "Balanced")],
+      ["strict", tr("严格", "Strict")],
+      ["raw", tr("原始 Git", "Raw Git")]
     ] as const) {
       const button = profiles.createEl("button", {
         text: label,
@@ -241,14 +242,14 @@ export class GitHistoryHealthView extends ItemView {
     }
     signal.createDiv({
       cls: "git-history-health-rule-note",
-      text: "过滤只影响此视图，不改写 commit、blame 或时间线。任何未知版本都会保留。规则可在插件设置中按 Vault 调整。"
+      text: tr("过滤只影响此视图，不改写 commit、blame 或时间线。任何未知版本都会保留。规则可在插件设置中按 Vault 调整。", "Filtering affects only this view; commits, blame and the timeline are not rewritten. Unknown versions are always kept. Rules can be set per vault in the plugin settings.")
     });
     const filters = signal.createDiv({ cls: "git-history-health-filters" });
     for (const [filter, label] of [
-      ["signal", "当前结果"],
-      ["all", "全部原始"],
-      ["noise", "仅噪音"],
-      ["unknown", "无法判断"]
+      ["signal", tr("当前结果", "Current result")],
+      ["all", tr("全部原始", "All, raw")],
+      ["noise", tr("仅噪音", "Noise only")],
+      ["unknown", tr("无法判断", "Cannot tell")]
     ] as const) {
       const button = filters.createEl("button", {
         text: label,
@@ -261,7 +262,7 @@ export class GitHistoryHealthView extends ItemView {
     }
     const entries = this.visibleEntries();
     if (entries.length === 0) {
-      signal.createDiv({ cls: "git-history-health-empty", text: "这个筛选下没有版本。" });
+      signal.createDiv({ cls: "git-history-health-empty", text: tr("这个筛选下没有版本。", "No versions under this filter.") });
       return;
     }
     const list = signal.createDiv({ cls: "git-history-health-list" });
@@ -269,7 +270,7 @@ export class GitHistoryHealthView extends ItemView {
       const index = this.analysis.entries.indexOf(entry);
       const row = list.createEl("button", {
         cls: "git-history-health-row",
-        attr: { type: "button", "aria-label": `查看 ${entry.commit.shortHash} 的原始变化` }
+        attr: { type: "button", "aria-label": tr(`查看 ${entry.commit.shortHash} 的原始变化`, `View the raw changes in ${entry.commit.shortHash}`) }
       });
       row.dataset.kind = entry.kind;
       const badge = row.createSpan({
@@ -278,7 +279,7 @@ export class GitHistoryHealthView extends ItemView {
       });
       badge.setAttribute("aria-hidden", "true");
       const copy = row.createDiv({ cls: "git-history-health-row-copy" });
-      copy.createEl("strong", { text: entry.commit.subject || "无提交说明" });
+      copy.createEl("strong", { text: entry.commit.subject || tr("无提交说明", "No commit message") });
       copy.createDiv({
         cls: "git-history-health-row-reason",
         text: `${entry.commit.shortHash} · ${entry.reason}`

@@ -7,6 +7,7 @@ import type {
   KnowledgeTraceResult,
   KnowledgeVersionEvaluation
 } from "./types";
+import { tr } from "../i18n";
 
 type KnownOutcome = Exclude<KnowledgeAssertionOutcome, "unknown">;
 
@@ -119,7 +120,7 @@ export function traceKnowledgeBoundary(
     return {
       conclusion: "empty",
       confirmed: false,
-      summary: "没有可追踪的版本。",
+      summary: tr("没有可追踪的版本。", "No versions to trace."),
       candidate,
       boundary: null,
       transitions,
@@ -134,7 +135,7 @@ export function traceKnowledgeBoundary(
     return {
       conclusion: "all-unknown",
       confirmed: false,
-      summary: "所有版本都不可判定，尚不能定位变化边界。",
+      summary: tr("所有版本都不可判定，尚不能定位变化边界。", "No version can be decided, so the boundary cannot be found yet."),
       candidate,
       boundary: null,
       transitions,
@@ -149,7 +150,7 @@ export function traceKnowledgeBoundary(
     return {
       conclusion: "unknown-gap",
       confirmed: false,
-      summary: "版本序列存在未知间隙，不能跨越间隙推断首次变化。",
+      summary: tr("版本序列存在未知间隙，不能跨越间隙推断首次变化。", "There is an unknown gap in the versions, so the first change cannot be inferred across it."),
       candidate,
       boundary: null,
       transitions,
@@ -164,7 +165,7 @@ export function traceKnowledgeBoundary(
     return {
       conclusion: "repeated-change",
       confirmed: false,
-      summary: `断言状态发生了 ${transitions.length} 次变化，不能压缩为单一首次边界。`,
+      summary: tr(`断言状态发生了 ${transitions.length} 次变化，不能压缩为单一首次边界。`, `The assertion changed ${transitions.length} times, so it cannot be reduced to one first boundary.`),
       candidate,
       boundary: null,
       transitions,
@@ -181,7 +182,7 @@ export function traceKnowledgeBoundary(
       return {
         conclusion: "manual-candidate",
         confirmed: false,
-        summary: "人工逐版判定得到唯一相邻转变；这是人工候选，不是自动确认。",
+        summary: tr("人工逐版判定得到唯一相邻转变；这是人工候选，不是自动确认。", "Judging each version by hand gives one change between neighbours; this is a human candidate, not an automatic confirmation."),
         candidate,
         boundary: null,
         transitions,
@@ -194,7 +195,7 @@ export function traceKnowledgeBoundary(
     return {
       conclusion: "confirmed",
       confirmed: true,
-      summary: "完整区间逐版自动验证后，已确认唯一的相邻变化边界。",
+      summary: tr("完整区间逐版自动验证后，已确认唯一的相邻变化边界。", "Every version in the range was checked automatically and one change between neighbours is confirmed."),
       candidate,
       boundary: onlyTransition,
       transitions,
@@ -213,8 +214,8 @@ export function traceKnowledgeBoundary(
     conclusion: "stable",
     confirmed: false,
     summary: stableOutcome === "holds"
-      ? "所有可读版本都满足断言，历史保持成立。"
-      : "所有可读版本都不满足断言，历史保持不成立。",
+      ? tr("所有可读版本都满足断言，历史保持成立。", "Every readable version satisfies the assertion; it has always held.")
+      : tr("所有可读版本都不满足断言，历史保持不成立。", "No readable version satisfies the assertion; it has never held."),
     candidate,
     boundary: null,
     transitions,

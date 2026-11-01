@@ -306,7 +306,7 @@ export function setReviewCheckpointMilestone(
   milestones[id] = {
     id,
     kind: "review-checkpoint",
-    label: "复查点",
+    label: tr("复查点", "Review point"),
     commitHash: commit.hash,
     historicalPath: commit.historicalPath,
     commitAuthoredAt: commit.authoredAt,

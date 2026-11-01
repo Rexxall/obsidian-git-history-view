@@ -7,6 +7,7 @@ import {
   type NoteRelation
 } from "../analysis/link-impact";
 import { contentFingerprint } from "../history/version-groups";
+import { tr } from "../i18n";
 
 export type ProvenanceSourceKind =
   | "human"
@@ -189,7 +190,7 @@ export function parseMarkdownBlocks(content: string): ProvenanceBlock[] {
       headingStack.splice(level - 1);
       headingStack[level - 1] = heading[2]!.trim();
     }
-    const headingPath = headingStack.filter(Boolean).join(" › ") || "文档开头";
+    const headingPath = headingStack.filter(Boolean).join(" › ") || tr("文档开头", "Top of the document");
     const ordinal = (ordinalBySection.get(headingPath) ?? 0) + 1;
     ordinalBySection.set(headingPath, ordinal);
     blocks.push({
@@ -238,12 +239,12 @@ export function classifyCommitSource(
   if (line?.working) {
     return {
       kind: "working",
-      label: "当前工作区",
+      label: tr("当前工作区", "Working copy"),
       trailers: {}
     };
   }
   if (!commit) {
-    const label = line?.authorName || "来源未知";
+    const label = line?.authorName || tr("来源未知", "Unknown source");
     return {
       kind: "unknown",
       label,
@@ -283,7 +284,7 @@ export function classifyCommitSource(
   if (SCRIPT_IDENTITY.test(identity)) {
     return {
       kind: "script",
-      label: commit.authorName || "脚本",
+      label: commit.authorName || tr("脚本", "Script"),
       commitHash: commit.hash,
       shortHash: commit.shortHash,
       authoredAt: commit.authoredAt,
@@ -401,7 +402,7 @@ export function buildProvenanceLensAnalysis(input: {
     );
     const primarySource = sources[0] ?? {
       kind: "unknown" as const,
-      label: "来源未知",
+      label: tr("来源未知", "Unknown source"),
       trailers: {},
       lineCount: block.endLine - block.startLine + 1
     };
@@ -418,10 +419,10 @@ export function buildProvenanceLensAnalysis(input: {
       needsHumanReview: pending.length > 0,
       citationSyncRisk,
       ...(pending.length > 0
-        ? { reviewReason: `${pending.map((source) => source.label).join("、")} 的修改尚未被当前复查点覆盖` }
+        ? { reviewReason: tr(`${pending.map((source) => source.label).join("、")} 的修改尚未被当前复查点覆盖`, `Edits by ${pending.map((source) => source.label).join(", ")} are not yet covered by the review point`) }
         : {}),
       ...(citationSyncRisk
-        ? { citationReason: "正文已变化，但该块的引用集合与上一 Git 版本相同，请确认引用是否仍支持新表述" }
+        ? { citationReason: tr("正文已变化，但该块的引用集合与上一 Git 版本相同，请确认引用是否仍支持新表述", "The text changed but this block cites the same sources as the previous Git version; check that the citations still support the new wording") }
         : {})
     };
   });

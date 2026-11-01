@@ -1,5 +1,6 @@
 import { parseYaml } from "obsidian";
 import type { KnowledgeAssertionEvidence } from "./types";
+import { tr } from "../i18n";
 
 export type FrontmatterInspection =
   | {
@@ -25,7 +26,7 @@ export type FrontmatterInspection =
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message.trim()
     ? error.message.trim()
-    : "YAML 解析失败。";
+    : tr("YAML 解析失败。", "YAML could not be parsed.");
 }
 
 export function inspectFrontmatter(content: string): FrontmatterInspection {
@@ -44,7 +45,7 @@ export function inspectFrontmatter(content: string): FrontmatterInspection {
       bodyStart: content.length,
       body: "",
       raw: content.slice(rawStart),
-      error: "Frontmatter 缺少结束分隔线。"
+      error: tr("Frontmatter 缺少结束分隔线。", "The frontmatter has no closing line.")
     };
   }
 
@@ -65,7 +66,7 @@ export function inspectFrontmatter(content: string): FrontmatterInspection {
         bodyStart,
         body: content.slice(bodyStart),
         raw,
-        error: "Frontmatter 顶层必须是属性对象。"
+        error: tr("Frontmatter 顶层必须是属性对象。", "The top of the frontmatter must be properties.")
       };
     }
     return {

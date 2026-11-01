@@ -1,4 +1,5 @@
 import { contentFingerprint } from "../history/version-groups";
+import { tr } from "../i18n";
 
 export const LOCAL_SNAPSHOT_SCHEMA_VERSION = 1;
 export const MAX_LOCAL_SNAPSHOT_CONTENT_BYTES = 2 * 1024 * 1024;
@@ -35,7 +36,7 @@ function byteLength(value: string): number {
 
 function normalizedLabel(value: string | undefined): string {
   const trimmed = value?.trim().replace(/\s+/gu, " ") ?? "";
-  return (trimmed || "手动快照").slice(0, 80);
+  return (trimmed || tr("手动快照", "Manual snapshot")).slice(0, 80);
 }
 
 function recordTime(record: LocalHistorySnapshot): number {
@@ -145,9 +146,9 @@ export class LocalSnapshotStore {
     record: LocalHistorySnapshot;
     created: boolean;
   } {
-    if (!input.filePath) throw new Error("快照缺少笔记路径。");
+    if (!input.filePath) throw new Error(tr("快照缺少笔记路径。", "The snapshot has no note path."));
     if (byteLength(input.content) > MAX_LOCAL_SNAPSHOT_CONTENT_BYTES) {
-      throw new Error("笔记超过 2 MB，本地快照未创建。");
+      throw new Error(tr("笔记超过 2 MB，本地快照未创建。", "The note is over 2 MB, so no local snapshot was made."));
     }
     const fingerprint = contentFingerprint(input.content);
     const duplicate = this.list(input.filePath).find(
@@ -156,9 +157,9 @@ export class LocalSnapshotStore {
     if (duplicate) return { record: duplicate, created: false };
 
     const capturedAt = new Date(this.now());
-    if (Number.isNaN(capturedAt.getTime())) throw new Error("快照时间无效。");
+    if (Number.isNaN(capturedAt.getTime())) throw new Error(tr("快照时间无效。", "The snapshot time is invalid."));
     const id = this.createId();
-    if (!id || this.records[id]) throw new Error("无法生成唯一的快照标识。");
+    if (!id || this.records[id]) throw new Error(tr("无法生成唯一的快照标识。", "Could not make a unique snapshot ID."));
     const record: LocalHistorySnapshot = {
       schemaVersion: LOCAL_SNAPSHOT_SCHEMA_VERSION,
       id,
@@ -176,7 +177,7 @@ export class LocalSnapshotStore {
       [record.id]: record
     });
     if (!normalized[record.id]) {
-      throw new Error("本地快照已达到容量上限，请先清理旧快照。");
+      throw new Error(tr("本地快照已达到容量上限，请先清理旧快照。", "Local snapshots are full. Delete old snapshots first."));
     }
     for (const key of Object.keys(this.records)) delete this.records[key];
     Object.assign(this.records, normalized);

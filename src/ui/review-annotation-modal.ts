@@ -8,6 +8,7 @@ import type {
   ReviewAnnotation,
   ReviewAnnotationStatus
 } from "../annotations/types";
+import { tr } from "../i18n";
 
 export interface ReviewAnnotationDraft {
   comment: string;
@@ -34,18 +35,18 @@ export class ReviewAnnotationModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ap", "ap-modal");
-    this.setTitle(this.current ? "编辑版本批注" : "添加版本批注");
+    this.setTitle(this.current ? tr("编辑版本批注", "Edit version note") : tr("添加版本批注", "Add version note"));
     this.contentEl.createDiv({
       cls: "git-review-annotation-target",
       text: this.targetDescription
     });
     new Setting(this.contentEl)
-      .setName("审阅意见")
-      .setDesc("只保存在插件数据中，不修改笔记或 commit。")
+      .setName(tr("审阅意见", "Review comment"))
+      .setDesc(tr("只保存在插件数据中，不修改笔记或 commit。", "Saved only in plugin data; the note and commits do not change."))
       .addTextArea((text) => {
         this.commentInput = text;
         text
-          .setPlaceholder("写下需要确认、修正或保留的原因…")
+          .setPlaceholder(tr("写下需要确认、修正或保留的原因…", "Write what needs checking, fixing or keeping, and why…"))
           .setValue(this.comment)
           .onChange((value) => {
             this.comment = value.trim();
@@ -56,24 +57,24 @@ export class ReviewAnnotationModal extends Modal {
         window.setTimeout(() => text.inputEl.focus(), 0);
       });
     new Setting(this.contentEl)
-      .setName("状态")
-      .setDesc("批注可在待处理、已解决、无需处理之间流转。")
+      .setName(tr("状态", "Status"))
+      .setDesc(tr("批注可在待处理、已解决、无需处理之间流转。", "A note can move between open, resolved and no action needed."))
       .addDropdown((dropdown) => dropdown
-        .addOption("pending", "待处理")
-        .addOption("resolved", "已解决")
-        .addOption("wont-fix", "无需处理")
+        .addOption("pending", tr("待处理", "Open"))
+        .addOption("resolved", tr("已解决", "Resolved"))
+        .addOption("wont-fix", tr("无需处理", "No action needed"))
         .setValue(this.status)
         .onChange((value) => {
           this.status = value as ReviewAnnotationStatus;
         }));
     new Setting(this.contentEl)
       .addButton((button) => button.setDestructive()
-        .setButtonText("删除")
+        .setButtonText(tr("删除", "Delete"))
         .setDisabled(!this.current)
         .onClick(() => void this.submit(null)))
       .addButton((button) => {
         button
-          .setButtonText("保存批注")
+          .setButtonText(tr("保存批注", "Save note"))
           .setCta()
           .onClick(() => void this.submit({
             comment: this.comment,

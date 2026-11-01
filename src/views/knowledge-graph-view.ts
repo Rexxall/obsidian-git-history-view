@@ -15,6 +15,7 @@ import type {
   NoteRelation,
   NoteRelationKind
 } from "../analysis/link-impact";
+import { tr } from "../i18n";
 
 export const GIT_KNOWLEDGE_GRAPH_VIEW_TYPE = "git-knowledge-graph-time-machine";
 
@@ -26,11 +27,11 @@ const FILTERS: Array<{
   icon: string;
   kinds: NoteRelationKind[];
 }> = [
-  { id: "links", label: "链接", icon: "link", kinds: ["wikilink", "markdown"] },
-  { id: "embed", label: "嵌入", icon: "panel-top", kinds: ["embed"] },
-  { id: "attachment", label: "附件", icon: "paperclip", kinds: ["attachment"] },
-  { id: "tag", label: "标签", icon: "tag", kinds: ["tag"] },
-  { id: "footnote", label: "脚注", icon: "superscript", kinds: ["footnote"] }
+  { id: "links", label: tr("链接", "Links"), icon: "link", kinds: ["wikilink", "markdown"] },
+  { id: "embed", label: tr("嵌入", "Embeds"), icon: "panel-top", kinds: ["embed"] },
+  { id: "attachment", label: tr("附件", "Attachments"), icon: "paperclip", kinds: ["attachment"] },
+  { id: "tag", label: tr("标签", "Tags"), icon: "tag", kinds: ["tag"] },
+  { id: "footnote", label: tr("脚注", "Footnotes"), icon: "superscript", kinds: ["footnote"] }
 ];
 
 function formatTime(value: string): string {
@@ -52,12 +53,12 @@ function relationLabel(relation: NoteRelation): string {
 
 function kindLabel(kind: NoteRelationKind): string {
   return {
-    wikilink: "双链",
-    markdown: "链接",
-    embed: "嵌入",
-    attachment: "附件",
-    tag: "标签",
-    footnote: "脚注"
+    wikilink: tr("双链", "Wikilink"),
+    markdown: tr("链接", "Link"),
+    embed: tr("嵌入", "Embed"),
+    attachment: tr("附件", "Attachment"),
+    tag: tr("标签", "Tag"),
+    footnote: tr("脚注", "Footnote")
   }[kind];
 }
 
@@ -84,7 +85,7 @@ export class GitKnowledgeGraphView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "知识图谱时间机";
+    return tr("知识图谱时间机", "Knowledge graph time machine");
   }
 
   getIcon(): string {
@@ -181,11 +182,11 @@ export class GitKnowledgeGraphView extends ItemView {
     container.addClass("ap", "git-note-history-graph-machine");
     this.renderHeader(container);
     if (!this.file) {
-      this.renderEmpty(container, "file-text", "请先打开一篇 Markdown 笔记");
+      this.renderEmpty(container, "file-text", tr("请先打开一篇 Markdown 笔记", "Open a Markdown note first"));
       return;
     }
     if (this.loading && !this.timeline) {
-      this.renderEmpty(container, "loader-circle", "正在读取关系历史");
+      this.renderEmpty(container, "loader-circle", tr("正在读取关系历史", "Reading link history"));
       return;
     }
     if (this.error) {
@@ -200,8 +201,8 @@ export class GitKnowledgeGraphView extends ItemView {
         container,
         "git-compare",
         this.activeFilters.size
-          ? "所选关系类型没有发生变化"
-          : "已读取版本之间没有关系变化"
+          ? tr("所选关系类型没有发生变化", "The chosen relation types did not change")
+          : tr("已读取版本之间没有关系变化", "No relation changes between the versions read")
       );
       this.renderWarnings(container);
       return;
@@ -222,15 +223,15 @@ export class GitKnowledgeGraphView extends ItemView {
       cls: "git-note-history-graph-machine-eyebrow"
     });
     setIcon(eyebrow.createSpan(), "orbit");
-    eyebrow.createSpan({ text: "知识图谱时间机" });
-    identity.createEl("h2", { text: this.file?.basename ?? "关系演化" });
+    eyebrow.createSpan({ text: tr("知识图谱时间机", "Knowledge graph time machine") });
+    identity.createEl("h2", { text: this.file?.basename ?? tr("关系演化", "Relation history") });
     if (this.file) identity.createDiv({
       cls: "git-note-history-graph-machine-path",
       text: this.file.path
     });
     const refresh = header.createEl("button", {
       cls: "clickable-icon",
-      attr: { "aria-label": "重新读取关系历史" }
+      attr: { "aria-label": tr("重新读取关系历史", "Read link history again") }
     });
     setIcon(refresh, "refresh-cw");
     refresh.disabled = this.loading || !this.file;
@@ -241,7 +242,7 @@ export class GitKnowledgeGraphView extends ItemView {
     const bar = container.createDiv({
       cls: "git-note-history-graph-machine-filters"
     });
-    bar.createSpan({ text: "只看" });
+    bar.createSpan({ text: tr("只看", "Show only") });
     for (const filter of FILTERS) {
       const active = this.activeFilters.has(filter.id);
       const button = bar.createEl("button", {
@@ -261,7 +262,7 @@ export class GitKnowledgeGraphView extends ItemView {
     if (this.activeFilters.size) {
       const clear = bar.createEl("button", {
         cls: "git-note-history-graph-machine-filter-clear",
-        text: "全部"
+        text: tr("全部", "All")
       });
       clear.addEventListener("click", () => {
         this.activeFilters.clear();
@@ -280,7 +281,7 @@ export class GitKnowledgeGraphView extends ItemView {
     });
     const controls = player.createDiv();
     const previous = controls.createEl("button", {
-      attr: { "aria-label": "上一处关系变化" }
+      attr: { "aria-label": tr("上一处关系变化", "Previous relation change") }
     });
     setIcon(previous, "chevron-left");
     previous.disabled = this.selectedIndex === 0;
@@ -291,7 +292,7 @@ export class GitKnowledgeGraphView extends ItemView {
     });
     const play = controls.createEl("button", {
       cls: "git-note-history-graph-machine-play",
-      attr: { "aria-label": this.playbackTimer === null ? "播放关系变化" : "暂停播放" }
+      attr: { "aria-label": this.playbackTimer === null ? tr("播放关系变化", "Play relation changes") : tr("暂停播放", "Pause") }
     });
     setIcon(play, this.playbackTimer === null ? "play" : "pause");
     play.addEventListener("click", () => {
@@ -300,7 +301,7 @@ export class GitKnowledgeGraphView extends ItemView {
       this.render();
     });
     const next = controls.createEl("button", {
-      attr: { "aria-label": "下一处关系变化" }
+      attr: { "aria-label": tr("下一处关系变化", "Next relation change") }
     });
     setIcon(next, "chevron-right");
     next.disabled = this.selectedIndex >= transitions.length - 1;
@@ -318,7 +319,7 @@ export class GitKnowledgeGraphView extends ItemView {
         min: "0",
         max: String(transitions.length - 1),
         value: String(this.selectedIndex),
-        "aria-label": "关系变化时间轴"
+        "aria-label": tr("关系变化时间轴", "Relation change timeline")
       }
     });
     range.addEventListener("input", () => {
@@ -327,7 +328,7 @@ export class GitKnowledgeGraphView extends ItemView {
       this.render();
     });
     player.createSpan({
-      text: `${this.selectedIndex + 1} / ${transitions.length} 次关系变化`
+      text: tr(`${this.selectedIndex + 1} / ${transitions.length} 次关系变化`, `${this.selectedIndex + 1} / ${transitions.length} relation changes`)
     });
   }
 
@@ -350,18 +351,18 @@ export class GitKnowledgeGraphView extends ItemView {
       text: `${transition.from.label} → ${transition.to.label}`
     });
     identity.createDiv({
-      text: `+${transition.added.length} 新关系 · −${transition.removed.length} 移除`
+      text: tr(`+${transition.added.length} 新关系 · −${transition.removed.length} 移除`, `+${transition.added.length} new · −${transition.removed.length} removed`)
     });
     const compare = top.createEl("button");
     setIcon(compare.createSpan(), "git-compare-arrows");
-    compare.createSpan({ text: "查看该次修改" });
+    compare.createSpan({ text: tr("查看该次修改", "View this edit") });
     compare.addEventListener("click", () => void this.openTransition(transition));
     this.renderGraph(stage, transition);
     const changes = stage.createDiv({
       cls: "git-note-history-graph-machine-changes"
     });
-    this.renderRelationColumn(changes, "新增", "added", transition.added);
-    this.renderRelationColumn(changes, "移除", "removed", transition.removed);
+    this.renderRelationColumn(changes, tr("新增", "Added"), "added", transition.added);
+    this.renderRelationColumn(changes, tr("移除", "Removed"), "removed", transition.removed);
   }
 
   private renderGraph(
@@ -378,7 +379,7 @@ export class GitKnowledgeGraphView extends ItemView {
     const svg = graph.createSvg("svg");
     svg.setAttribute("viewBox", "0 0 760 330");
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "该版本边界新增和移除的知识关系");
+    svg.setAttribute("aria-label", tr("该版本边界新增和移除的知识关系", "Relations added and removed at this version boundary"));
     const centerX = 380;
     const centerY = 165;
     changes.forEach(({ relation, state }, index) => {
@@ -404,13 +405,13 @@ export class GitKnowledgeGraphView extends ItemView {
     });
     const center = graph.createDiv({
       cls: "git-note-history-graph-machine-center",
-      text: this.file?.basename ?? "当前笔记"
+      text: this.file?.basename ?? tr("当前笔记", "This note")
     });
     center.setAttr("aria-hidden", "true");
     if (changes.length >= 24) {
       graph.createDiv({
         cls: "git-note-history-graph-machine-cap",
-        text: "图中显示前 24 个变化，完整列表见下方"
+        text: tr("图中显示前 24 个变化，完整列表见下方", "The graph shows the first 24 changes; the full list is below")
       });
     }
   }
@@ -428,7 +429,7 @@ export class GitKnowledgeGraphView extends ItemView {
     heading.createEl("strong", { text: title });
     heading.createSpan({ text: String(relations.length) });
     if (!relations.length) {
-      column.createDiv({ text: "无" });
+      column.createDiv({ text: tr("无", "None") });
       return;
     }
     for (const relation of relations.slice(0, 30)) {
@@ -448,7 +449,7 @@ export class GitKnowledgeGraphView extends ItemView {
       }
     }
     if (relations.length > 30) {
-      column.createDiv({ text: `另有 ${relations.length - 30} 个变化` });
+      column.createDiv({ text: tr(`另有 ${relations.length - 30} 个变化`, `${relations.length - 30} more changes`) });
     }
   }
 
@@ -460,8 +461,8 @@ export class GitKnowledgeGraphView extends ItemView {
       cls: "git-note-history-graph-machine-events"
     });
     const heading = section.createDiv();
-    heading.createEl("h3", { text: "关系变化时间轴" });
-    heading.createSpan({ text: "只列出真正发生变化的版本边界" });
+    heading.createEl("h3", { text: tr("关系变化时间轴", "Relation change timeline") });
+    heading.createSpan({ text: tr("只列出真正发生变化的版本边界", "Only version boundaries where something changed are listed") });
     transitions.forEach((transition, index) => {
       const row = section.createEl("button", {
         cls: index === this.selectedIndex ? "is-active" : ""
@@ -486,7 +487,7 @@ export class GitKnowledgeGraphView extends ItemView {
       cls: "git-note-history-graph-machine-warnings"
     });
     warnings.createEl("summary", {
-      text: `${this.timeline.warnings.length} 条读取边界`
+      text: tr(`${this.timeline.warnings.length} 条读取边界`, `${this.timeline.warnings.length} reading limits`)
     });
     for (const warning of this.timeline.warnings) {
       warnings.createDiv({ text: warning });

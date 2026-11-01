@@ -10,6 +10,7 @@ import type {
   RecoveryBasketState,
   RecoveryPatchHunk
 } from "./types";
+import { tr } from "../i18n";
 
 export const MAX_RECOVERY_BASKET_ITEMS = 40;
 export const MAX_RECOVERY_BASKET_BYTES = 2 * 1024 * 1024;
@@ -245,13 +246,13 @@ export function appendRecoveryBasketItem(
   now = new Date().toISOString()
 ): RecoveryBasketState {
   if (basket.filePath !== item.filePath) {
-    throw new Error("恢复篮子首版只允许收集同一篇笔记的内容。");
+    throw new Error(tr("恢复篮子首版只允许收集同一篇笔记的内容。", "For now a recovery basket only collects from one note."));
   }
   if (contentFingerprint(currentContent) !== basket.baselineFingerprint) {
-    throw new Error("笔记已经偏离恢复篮子的冻结基线；请先打开篮子处理过期方案。");
+    throw new Error(tr("笔记已经偏离恢复篮子的冻结基线；请先打开篮子处理过期方案。", "The note has moved on from the recovery basket's frozen baseline; open the basket and deal with the out-of-date plan first."));
   }
   if (basket.items.length >= MAX_RECOVERY_BASKET_ITEMS) {
-    throw new Error(`一个恢复篮子最多保存 ${MAX_RECOVERY_BASKET_ITEMS} 项。`);
+    throw new Error(tr(`一个恢复篮子最多保存 ${MAX_RECOVERY_BASKET_ITEMS} 项。`, `A recovery basket holds at most ${MAX_RECOVERY_BASKET_ITEMS} items.`));
   }
   const next = {
     ...basket,
@@ -260,7 +261,7 @@ export function appendRecoveryBasketItem(
   };
   const bytes = new TextEncoder().encode(JSON.stringify(next)).byteLength;
   if (bytes > MAX_RECOVERY_BASKET_BYTES) {
-    throw new Error("恢复篮子超过 2 MB 本地保存上限；请移除部分项目后再添加。");
+    throw new Error(tr("恢复篮子超过 2 MB 本地保存上限；请移除部分项目后再添加。", "The recovery basket is over the 2 MB local limit; remove some items before adding more."));
   }
   return next;
 }
@@ -276,21 +277,21 @@ export function buildRecoveryBasketPlan(
     issues.push({
       kind: "stale",
       severity: "blocking",
-      message: "当前笔记已偏离恢复篮子的冻结基线；为避免覆盖新内容，不能应用这份方案。"
+      message: tr("当前笔记已偏离恢复篮子的冻结基线；为避免覆盖新内容，不能应用这份方案。", "The note has moved on from the recovery basket's frozen baseline; the plan cannot be applied without overwriting newer content.")
     });
   }
   if (basket.items.length === 0) {
     issues.push({
       kind: "empty",
       severity: "blocking",
-      message: "恢复篮子还是空的。"
+      message: tr("恢复篮子还是空的。", "The recovery basket is empty.")
     });
   }
   if (basket.items.length > MAX_RECOVERY_BASKET_ITEMS) {
     issues.push({
       kind: "item-limit",
       severity: "blocking",
-      message: `恢复篮子超过 ${MAX_RECOVERY_BASKET_ITEMS} 项安全上限。`
+      message: tr(`恢复篮子超过 ${MAX_RECOVERY_BASKET_ITEMS} 项安全上限。`, `The recovery basket is over the safe limit of ${MAX_RECOVERY_BASKET_ITEMS} items.`)
     });
   }
   const basketBytes = new TextEncoder().encode(JSON.stringify(basket)).byteLength;
@@ -298,7 +299,7 @@ export function buildRecoveryBasketPlan(
     issues.push({
       kind: "size-limit",
       severity: "blocking",
-      message: "恢复篮子超过 2 MB 本地保存上限。"
+      message: tr("恢复篮子超过 2 MB 本地保存上限。", "The recovery basket is over the 2 MB local limit.")
     });
   }
 
@@ -314,7 +315,7 @@ export function buildRecoveryBasketPlan(
         kind: "duplicate-item",
         severity: "warning",
         itemIds: [existing, item.id],
-        message: `“${item.label}”与篮子中的另一项完全相同，预演时只应用一次。`
+        message: tr(`“${item.label}”与篮子中的另一项完全相同，预演时只应用一次。`, `"${item.label}" is identical to another item in the basket; it is applied once in the preview.`)
       });
       continue;
     }
@@ -332,7 +333,7 @@ export function buildRecoveryBasketPlan(
           kind: "property-overwrite",
           severity: "blocking",
           itemIds: [left.id, right.id],
-          message: `属性 ${sharedProperties.join("、")} 被多个来源同时覆盖；请只保留一个版本。`
+          message: tr(`属性 ${sharedProperties.join("、")} 被多个来源同时覆盖；请只保留一个版本。`, `Properties ${sharedProperties.join(", ")} are overwritten by more than one source; keep only one version.`)
         });
         continue;
       }
@@ -341,7 +342,7 @@ export function buildRecoveryBasketPlan(
           kind: "overlap",
           severity: "blocking",
           itemIds: [left.id, right.id],
-          message: `“${left.label}”与“${right.label}”修改了重叠位置，不能自动决定应用顺序。`
+          message: tr(`“${left.label}”与“${right.label}”修改了重叠位置，不能自动决定应用顺序。`, `"${left.label}" and "${right.label}" change overlapping places, so the order cannot be decided automatically.`)
         });
       }
     }
@@ -358,7 +359,7 @@ export function buildRecoveryBasketPlan(
         kind: "duplicate-content",
         severity: "warning",
         itemIds: [item.id],
-        message: `“${item.label}”准备加入的内容已经在当前笔记其他位置出现。`
+        message: tr(`“${item.label}”准备加入的内容已经在当前笔记其他位置出现。`, `What "${item.label}" would add already appears elsewhere in the note.`)
       });
     }
   }
@@ -377,7 +378,7 @@ export function buildRecoveryBasketPlan(
         kind: "invalid-patch",
         severity: "blocking",
         itemIds: effectiveItems.map((item) => item.id),
-        message: "至少一个项目无法在冻结基线上精确定位，方案未应用。"
+        message: tr("至少一个项目无法在冻结基线上精确定位，方案未应用。", "At least one item cannot be placed exactly on the frozen baseline, so the plan was not applied.")
       });
     } else {
       targetContent = applied;
@@ -390,7 +391,7 @@ export function buildRecoveryBasketPlan(
     issues.push({
       kind: "link-removal",
       severity: "warning",
-      message: `最终方案会移除 ${impact.removed.length} 个链接、嵌入或标签关系。`
+      message: tr(`最终方案会移除 ${impact.removed.length} 个链接、嵌入或标签关系。`, `The final plan removes ${impact.removed.length} links, embeds or tags.`)
     });
   }
   const stats = changedLineStats(basket.baselineContent, targetContent);

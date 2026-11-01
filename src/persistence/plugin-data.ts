@@ -20,6 +20,7 @@ import { contentFingerprint } from "../history/version-groups";
 import type { HistoricalSandboxRecord } from "../sandbox/types";
 import { normalizeLocalSnapshots } from "../history-sources/local-snapshots";
 import { normalizeReviewAnnotations } from "../annotations/review-annotations";
+import { tr } from "../i18n";
 
 export const CURRENT_DATA_SCHEMA_VERSION = 6;
 export const REVIEW_STATE_KEY_SEPARATOR = "\u001f";
@@ -278,7 +279,7 @@ function checkpointMilestone(
   return {
     id,
     kind: "review-checkpoint",
-    label: "复查点",
+    label: tr("复查点", "Review point"),
     commitHash: checkpoint.commitHash,
     historicalPath: checkpoint.historicalPath,
     commitAuthoredAt: existing?.commitHash === checkpoint.commitHash

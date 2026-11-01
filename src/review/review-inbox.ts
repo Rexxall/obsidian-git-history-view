@@ -4,6 +4,7 @@ import type {
   GitWorkspaceChange,
   ReviewInboxItem
 } from "../models";
+import { tr } from "../i18n";
 
 export type ReviewInboxFilter = "pending" | "committed" | "working" | "snoozed";
 export type ReviewInboxGroupKey = "attention" | "working" | "today" | "recent" | "older";
@@ -35,28 +36,28 @@ const GROUP_PRESENTATION: Record<
   { label: string; description: string; icon: string }
 > = {
   attention: {
-    label: "需要先处理",
-    description: "冲突或删除会影响正常审阅",
+    label: tr("需要先处理", "Deal with these first"),
+    description: tr("冲突或删除会影响正常审阅", "Conflicts or deletions get in the way of a normal review"),
     icon: "triangle-alert"
   },
   working: {
-    label: "尚未提交",
-    description: "当前工作区中的最新变化",
+    label: tr("尚未提交", "Not committed yet"),
+    description: tr("当前工作区中的最新变化", "Latest changes in the working copy"),
     icon: "file-pen-line"
   },
   today: {
-    label: "今天更新",
-    description: "今天进入 Git 历史的变化",
+    label: tr("今天更新", "Updated today"),
+    description: tr("今天进入 Git 历史的变化", "Changes that reached Git history today"),
     icon: "sun"
   },
   recent: {
-    label: "最近更新",
-    description: "过去七天尚未确认的变化",
+    label: tr("最近更新", "Recently updated"),
+    description: tr("过去七天尚未确认的变化", "Unconfirmed changes from the past seven days"),
     icon: "calendar-days"
   },
   older: {
-    label: "较早待复查",
-    description: "积压超过七天的变化",
+    label: tr("较早待复查", "Older, to review"),
+    description: tr("积压超过七天的变化", "Changes waiting more than seven days"),
     icon: "archive"
   }
 };

@@ -12,6 +12,7 @@ import type {
   StructureKnowledgeAssertion,
   TextKnowledgeAssertion
 } from "../knowledge-trace/types";
+import { tr } from "../i18n";
 
 export interface KnowledgeTraceSetupValue {
   filePath: string;
@@ -44,12 +45,12 @@ const ASSERTION_KINDS: ReadonlyArray<{
   label: string;
   icon: string;
 }> = [
-  { kind: "text", label: "文字", icon: "text-cursor-input" },
-  { kind: "property", label: "属性", icon: "braces" },
-  { kind: "relation", label: "关系", icon: "link-2" },
-  { kind: "structure", label: "结构", icon: "blocks" },
-  { kind: "rule", label: "规则", icon: "list-checks" },
-  { kind: "manual", label: "人工", icon: "user-round-check" }
+  { kind: "text", label: tr("文字", "Text"), icon: "text-cursor-input" },
+  { kind: "property", label: tr("属性", "Property"), icon: "braces" },
+  { kind: "relation", label: tr("关系", "Relation"), icon: "link-2" },
+  { kind: "structure", label: tr("结构", "Structure"), icon: "blocks" },
+  { kind: "rule", label: tr("规则", "Rule"), icon: "list-checks" },
+  { kind: "manual", label: tr("人工", "Human"), icon: "user-round-check" }
 ];
 
 function compactPath(path: string): string {
@@ -120,20 +121,20 @@ export class KnowledgeTraceSetupModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ap", "ap-modal", "git-knowledge-trace-setup-modal");
-    this.setTitle("追踪知识变化边界");
+    this.setTitle(tr("追踪知识变化边界", "Trace when knowledge changed"));
 
     const intro = this.contentEl.createDiv({
       cls: "git-knowledge-trace-setup-intro"
     });
-    intro.createEl("strong", { text: "只读追踪" });
+    intro.createEl("strong", { text: tr("只读追踪", "Read-only trace") });
     intro.createSpan({
-      text: "沿 Git 历史判断一项知识何时成立、失效或反复变化，不修改笔记和仓库。"
+      text: tr("沿 Git 历史判断一项知识何时成立、失效或反复变化，不修改笔记和仓库。", "Follows Git history to find when a piece of knowledge started holding, stopped or changed back and forth. The note and repository are not changed.")
     });
 
     const file = this.contentEl.createDiv({
       cls: "git-knowledge-trace-setup-file"
     });
-    file.createSpan({ cls: "git-knowledge-trace-setup-file-label", text: "当前笔记" });
+    file.createSpan({ cls: "git-knowledge-trace-setup-file-label", text: tr("当前笔记", "This note") });
     file.createSpan({
       cls: "git-knowledge-trace-setup-file-path",
       text: compactPath(this.options.filePath),
@@ -142,7 +143,7 @@ export class KnowledgeTraceSetupModal extends Modal {
 
     const kinds = this.contentEl.createDiv({
       cls: "git-knowledge-trace-assertion-kinds",
-      attr: { role: "tablist", "aria-label": "选择判断类型" }
+      attr: { role: "tablist", "aria-label": tr("选择判断类型", "Choose a kind of check") }
     });
     for (const item of ASSERTION_KINDS) {
       const button = kinds.createEl("button", {
@@ -213,8 +214,8 @@ export class KnowledgeTraceSetupModal extends Modal {
     this.renderAssertionControls();
 
     new Setting(this.contentEl)
-      .setName("最多检查版本")
-      .setDesc(`从最旧到最新保留顺序；允许 ${MIN_MAX_VERSIONS}–${MAX_MAX_VERSIONS} 个。`)
+      .setName(tr("最多检查版本", "Most versions to check"))
+      .setDesc(tr(`从最旧到最新保留顺序；允许 ${MIN_MAX_VERSIONS}–${MAX_MAX_VERSIONS} 个。`, `Kept in order from oldest to newest; ${MIN_MAX_VERSIONS}–${MAX_MAX_VERSIONS} allowed.`))
       .addText((text) => {
         const input = text.inputEl;
         this.maxVersionsInput = input;
@@ -243,11 +244,11 @@ export class KnowledgeTraceSetupModal extends Modal {
     const footer = this.contentEl.createDiv({
       cls: "git-knowledge-trace-setup-actions"
     });
-    const cancel = footer.createEl("button", { text: "取消" });
+    const cancel = footer.createEl("button", { text: tr("取消", "Cancel") });
     cancel.addEventListener("click", () => this.close());
     this.submitButton = footer.createEl("button", {
       cls: "mod-cta",
-      text: "开始只读追踪"
+      text: tr("开始只读追踪", "Start read-only trace")
     });
     this.submitButton.addEventListener("click", () => void this.submit());
     this.updateKindSelection();
@@ -342,13 +343,13 @@ export class KnowledgeTraceSetupModal extends Modal {
 
   private renderTextControls(container: HTMLElement): void {
     new Setting(container)
-      .setName("判断方式")
-      .setDesc("每个历史版本都会得到成立、不成立或未知三种结果。")
+      .setName(tr("判断方式", "Check"))
+      .setDesc(tr("每个历史版本都会得到成立、不成立或未知三种结果。", "Each past version comes out as holds, does not hold or unknown."))
       .addDropdown((dropdown) => {
         dropdown
-          .addOption("contains", "包含这段文字")
-          .addOption("not-contains", "不包含这段文字")
-          .addOption("equals", "正文与这段文字完全一致")
+          .addOption("contains", tr("包含这段文字", "Contains this text"))
+          .addOption("not-contains", tr("不包含这段文字", "Does not contain this text"))
+          .addOption("equals", tr("正文与这段文字完全一致", "Text is exactly this"))
           .setValue(this.textOperator)
           .onChange((value) => {
             this.textOperator = value as TextKnowledgeAssertion["operator"];
@@ -356,17 +357,17 @@ export class KnowledgeTraceSetupModal extends Modal {
       });
     this.addTextArea(
       container,
-      "要判断的文字",
-      "精确匹配会保留换行；只有空白的条件不会开始追踪。",
+      tr("要判断的文字", "Text to check"),
+      tr("精确匹配会保留换行；只有空白的条件不会开始追踪。", "Exact match keeps line breaks; a condition of only blank space does not start a trace."),
       this.textExpected,
-      "例如：healthy aging",
+      tr("例如：healthy aging", "For example: healthy aging"),
       (value) => {
         this.textExpected = value;
       }
     );
     new Setting(container)
-      .setName("区分大小写")
-      .setDesc("关闭时，只差大小写的词视为相同。")
+      .setName(tr("区分大小写", "Match case"))
+      .setDesc(tr("关闭时，只差大小写的词视为相同。", "When off, words that differ only in case count as the same."))
       .addToggle((toggle) => {
         toggle
           .setValue(this.textCaseSensitive)
@@ -378,24 +379,24 @@ export class KnowledgeTraceSetupModal extends Modal {
 
   private renderPropertyControls(container: HTMLElement): void {
     new Setting(container)
-      .setName("属性名")
-      .setDesc("读取 YAML frontmatter 的顶层属性。")
+      .setName(tr("属性名", "Property name"))
+      .setDesc(tr("读取 YAML frontmatter 的顶层属性。", "Reads top-level properties in the YAML frontmatter."))
       .addText((text) => text
-        .setPlaceholder("例如：status")
+        .setPlaceholder(tr("例如：status", "For example: status"))
         .setValue(this.propertyName)
         .onChange((value) => {
           this.propertyName = value.trim();
           this.updateSubmitState();
         }));
     new Setting(container)
-      .setName("判断方式")
+      .setName(tr("判断方式", "Check"))
       .addDropdown((dropdown) => {
         dropdown.selectEl.dataset.knowledgeTraceControl = "property-operator";
         dropdown
-          .addOption("exists", "属性存在")
-          .addOption("missing", "属性缺失")
-          .addOption("equals", "属性值等于")
-          .addOption("contains", "属性值包含")
+          .addOption("exists", tr("属性存在", "Property exists"))
+          .addOption("missing", tr("属性缺失", "Property is missing"))
+          .addOption("equals", tr("属性值等于", "Property equals"))
+          .addOption("contains", tr("属性值包含", "Property contains"))
           .setValue(this.propertyOperator)
           .onChange((value) => {
             this.propertyOperator = value as PropertyKnowledgeAssertion["operator"];
@@ -404,16 +405,16 @@ export class KnowledgeTraceSetupModal extends Modal {
       });
     if (this.propertyOperator === "equals" || this.propertyOperator === "contains") {
       new Setting(container)
-        .setName("值类型")
-        .setDesc("避免把数字、布尔值和字符串混为一谈。")
+        .setName(tr("值类型", "Value type"))
+        .setDesc(tr("避免把数字、布尔值和字符串混为一谈。", "Keeps numbers, booleans and strings apart."))
         .addDropdown((dropdown) => {
           dropdown.selectEl.dataset.knowledgeTraceControl = "property-value-type";
           dropdown
-            .addOption("string", "字符串")
-            .addOption("number", "数字")
-            .addOption("boolean", "布尔值")
-            .addOption("null", "空值")
-            .addOption("json", "列表 / 对象（JSON）")
+            .addOption("string", tr("字符串", "String"))
+            .addOption("number", tr("数字", "Number"))
+            .addOption("boolean", tr("布尔值", "Boolean"))
+            .addOption("null", tr("空值", "Null"))
+            .addOption("json", tr("列表 / 对象（JSON）", "List / object (JSON)"))
             .setValue(this.propertyValueType)
             .onChange((value) => {
               this.propertyValueType = value as PropertyValueType;
@@ -423,12 +424,12 @@ export class KnowledgeTraceSetupModal extends Modal {
       if (this.propertyValueType !== "null") {
         this.addTextArea(
           container,
-          "期望值",
+          tr("期望值", "Expected value"),
           this.propertyValueType === "json"
-            ? "输入有效 JSON，例如 [\"draft\", \"sent\"]。"
-            : "按所选类型解析，不自动把字符串改成数字。",
+            ? tr("输入有效 JSON，例如 [\"draft\", \"sent\"]。", "Enter valid JSON, for example [\"draft\", \"sent\"].")
+            : tr("按所选类型解析，不自动把字符串改成数字。", "Parsed as the chosen type; strings are never turned into numbers."),
           this.propertyExpected,
-          this.propertyValueType === "boolean" ? "true 或 false" : "输入属性值",
+          this.propertyValueType === "boolean" ? tr("true 或 false", "true or false") : tr("输入属性值", "Enter the property value"),
           (value) => {
             this.propertyExpected = value;
           },
@@ -440,8 +441,8 @@ export class KnowledgeTraceSetupModal extends Modal {
         && this.propertyValueType === "string"
       ) {
         new Setting(container)
-          .setName("区分大小写")
-          .setDesc("仅影响字符串属性的包含判断。")
+          .setName(tr("区分大小写", "Match case"))
+          .setDesc(tr("仅影响字符串属性的包含判断。", "Affects only the contains check on string properties."))
           .addToggle((toggle) => toggle
             .setValue(this.propertyCaseSensitive)
             .onChange((value) => {
@@ -453,30 +454,30 @@ export class KnowledgeTraceSetupModal extends Modal {
 
   private renderRelationControls(container: HTMLElement): void {
     new Setting(container)
-      .setName("关系类型")
+      .setName(tr("关系类型", "Relation type"))
       .addDropdown((dropdown) => dropdown
         .addOption("wikilink", "Wikilink")
-        .addOption("markdown-link", "Markdown 链接")
-        .addOption("embed", "嵌入")
-        .addOption("tag", "标签")
+        .addOption("markdown-link", tr("Markdown 链接", "Markdown link"))
+        .addOption("embed", tr("嵌入", "Embed"))
+        .addOption("tag", tr("标签", "Tag"))
         .setValue(this.relationKind)
         .onChange((value) => {
           this.relationKind = value as RelationKnowledgeAssertion["relation"];
         }));
     new Setting(container)
-      .setName("判断方式")
+      .setName(tr("判断方式", "Check"))
       .addDropdown((dropdown) => dropdown
-        .addOption("exists", "关系存在")
-        .addOption("missing", "关系不存在")
+        .addOption("exists", tr("关系存在", "Relation exists"))
+        .addOption("missing", tr("关系不存在", "Relation does not exist"))
         .setValue(this.relationOperator)
         .onChange((value) => {
           this.relationOperator = value as RelationKnowledgeAssertion["operator"];
         }));
     new Setting(container)
-      .setName("目标")
-      .setDesc("填写链接目标、嵌入目标或标签；标签可省略开头的 #。")
+      .setName(tr("目标", "Target"))
+      .setDesc(tr("填写链接目标、嵌入目标或标签；标签可省略开头的 #。", "A link target, embed target or tag; the leading # of a tag can be left out."))
       .addText((text) => text
-        .setPlaceholder("例如：项目/健康老龄化")
+        .setPlaceholder(tr("例如：项目/健康老龄化", "For example: projects/healthy-aging"))
         .setValue(this.relationTarget)
         .onChange((value) => {
           this.relationTarget = value.trim();
@@ -486,33 +487,33 @@ export class KnowledgeTraceSetupModal extends Modal {
 
   private renderStructureControls(container: HTMLElement): void {
     new Setting(container)
-      .setName("Markdown 结构")
-      .setDesc("标题仅检查 # ATX 形式；代码块仅检查 ``` / ~~~ 围栏形式，暂不包括 Setext 标题和缩进代码。")
+      .setName(tr("Markdown 结构", "Markdown structure"))
+      .setDesc(tr("标题仅检查 # ATX 形式；代码块仅检查 ``` / ~~~ 围栏形式，暂不包括 Setext 标题和缩进代码。", "Headings are checked only in # ATX form and code blocks only as ``` / ~~~ fences; Setext headings and indented code are not included yet."))
       .addDropdown((dropdown) => dropdown
-        .addOption("heading", "井号标题（#）")
-        .addOption("task", "任务")
-        .addOption("code-block", "围栏代码块（``` / ~~~）")
+        .addOption("heading", tr("井号标题（#）", "Heading (#)"))
+        .addOption("task", tr("任务", "Task"))
+        .addOption("code-block", tr("围栏代码块（``` / ~~~）", "Fenced code block (``` / ~~~)"))
         .addOption("callout", "Callout")
-        .addOption("table", "表格")
-        .addOption("formula", "公式")
+        .addOption("table", tr("表格", "Table"))
+        .addOption("formula", tr("公式", "Math"))
         .setValue(this.structureKind)
         .onChange((value) => {
           this.structureKind = value as StructureKnowledgeAssertion["structure"];
         }));
     new Setting(container)
-      .setName("判断方式")
+      .setName(tr("判断方式", "Check"))
       .addDropdown((dropdown) => dropdown
-        .addOption("exists", "结构存在")
-        .addOption("missing", "结构不存在")
+        .addOption("exists", tr("结构存在", "Structure exists"))
+        .addOption("missing", tr("结构不存在", "Structure does not exist"))
         .setValue(this.structureOperator)
         .onChange((value) => {
           this.structureOperator = value as StructureKnowledgeAssertion["operator"];
         }));
     new Setting(container)
-      .setName("限定内容")
-      .setDesc("可选；例如标题文字、代码语言、标注块类型或任务正文。")
+      .setName(tr("限定内容", "Limit to"))
+      .setDesc(tr("可选；例如标题文字、代码语言、标注块类型或任务正文。", "Optional; for example heading text, code language, callout type or task text."))
       .addText((text) => text
-        .setPlaceholder("留空表示任意一个")
+        .setPlaceholder(tr("留空表示任意一个", "Empty means any one"))
         .setValue(this.structureValue)
         .onChange((value) => {
           this.structureValue = value.trim();
@@ -523,18 +524,18 @@ export class KnowledgeTraceSetupModal extends Modal {
     const intro = container.createDiv({
       cls: "git-knowledge-trace-control-note"
     });
-    intro.createEl("strong", { text: "确定性规则" });
+    intro.createEl("strong", { text: tr("确定性规则", "Deterministic rule") });
     intro.createSpan({
-      text: "规则只检查单个版本的内容；结果页会显示规则身份和失败证据。"
+      text: tr("规则只检查单个版本的内容；结果页会显示规则身份和失败证据。", "Rules look at one version at a time; the result page shows the rule and the evidence when it fails.")
     });
     new Setting(container)
-      .setName("规则 ID")
-      .setDesc("这些规则只读取单个版本，不执行命令。")
+      .setName(tr("规则 ID", "Rule ID"))
+      .setDesc(tr("这些规则只读取单个版本，不执行命令。", "These rules only read one version and never run commands."))
       .addDropdown((dropdown) => {
         dropdown
-          .addOption("no-conflict-markers", "没有 Git 冲突标记")
-          .addOption("valid-frontmatter", "Frontmatter 可解析")
-          .addOption("nonempty-body", "正文不是空白")
+          .addOption("no-conflict-markers", tr("没有 Git 冲突标记", "No Git conflict markers"))
+          .addOption("valid-frontmatter", tr("Frontmatter 可解析", "Frontmatter can be parsed"))
+          .addOption("nonempty-body", tr("正文不是空白", "Text is not blank"))
           .setValue(this.ruleId)
           .onChange((value) => {
             this.ruleId = value as (typeof BUILT_IN_RULE_IDS)[number];
@@ -547,16 +548,16 @@ export class KnowledgeTraceSetupModal extends Modal {
     const note = container.createDiv({
       cls: "git-knowledge-trace-manual-note"
     });
-    note.createEl("strong", { text: "人工判断不会冒充自动规则" });
+    note.createEl("strong", { text: tr("人工判断不会冒充自动规则", "A human judgement never passes as an automatic rule") });
     note.createSpan({
-      text: "追踪后需要你对每个可读版本标记成立、不成立或未知；页面只会给出“人工候选”，不会显示“自动已确认”。"
+      text: tr("追踪后需要你对每个可读版本标记成立、不成立或未知；页面只会给出“人工候选”，不会显示“自动已确认”。", "After tracing, mark each readable version as holds, does not hold or unknown. The page only ever shows a human candidate, never confirmed automatically.")
     });
     this.addTextArea(
       container,
-      "判断问题",
-      "写成每个版本都能独立回答的是 / 否问题。",
+      tr("判断问题", "Question to judge"),
+      tr("写成每个版本都能独立回答的是 / 否问题。", "Write a yes or no question each version can answer on its own."),
       this.manualPrompt,
-      "例如：这一版是否已经明确表达研究问题？",
+      tr("例如：这一版是否已经明确表达研究问题？", "For example: does this version state the research question clearly?"),
       (value) => {
         this.manualPrompt = value;
       },
@@ -597,19 +598,19 @@ export class KnowledgeTraceSetupModal extends Modal {
         return this.propertyExpected;
       case "number": {
         const value = Number(this.propertyExpected);
-        if (!Number.isFinite(value)) throw new Error("属性期望值不是有效数字。");
+        if (!Number.isFinite(value)) throw new Error(tr("属性期望值不是有效数字。", "The expected property value is not a valid number."));
         return value;
       }
       case "boolean":
         if (this.propertyExpected === "true") return true;
         if (this.propertyExpected === "false") return false;
-        throw new Error("布尔值只能填写 true 或 false。");
+        throw new Error(tr("布尔值只能填写 true 或 false。", "A boolean can only be true or false."));
       case "null":
         return null;
       case "json": {
         const value: unknown = JSON.parse(this.propertyExpected);
         if (value === null || typeof value !== "object") {
-          throw new Error("JSON 值必须是列表或对象。");
+          throw new Error(tr("JSON 值必须是列表或对象。", "A JSON value must be a list or an object."));
         }
         return value;
       }
@@ -669,42 +670,42 @@ export class KnowledgeTraceSetupModal extends Modal {
 
   private validationError(): string {
     if (this.maxVersionsInvalid()) {
-      return `最多检查版本必须是 ${MIN_MAX_VERSIONS}–${MAX_MAX_VERSIONS} 之间的整数。`;
+      return tr(`最多检查版本必须是 ${MIN_MAX_VERSIONS}–${MAX_MAX_VERSIONS} 之间的整数。`, `Most versions to check must be a whole number from ${MIN_MAX_VERSIONS} to ${MAX_MAX_VERSIONS}.`);
     }
     try {
       switch (this.assertionKind) {
         case "text":
-          if (!this.textExpected.trim()) return "请填写要判断的文字。";
+          if (!this.textExpected.trim()) return tr("请填写要判断的文字。", "Enter the text to check.");
           break;
         case "property":
-          if (!this.propertyName) return "请填写 YAML 属性名。";
+          if (!this.propertyName) return tr("请填写 YAML 属性名。", "Enter a YAML property name.");
           if (this.propertyOperator === "equals" || this.propertyOperator === "contains") {
             if (
               this.propertyValueType !== "null"
               && this.propertyValueType !== "string"
               && !this.propertyExpected.trim()
             ) {
-              return "请填写属性期望值。";
+              return tr("请填写属性期望值。", "Enter the expected property value.");
             }
             if (
               this.propertyOperator === "contains"
               && this.propertyValueType === "string"
               && this.propertyExpected.length === 0
             ) {
-              return "字符串包含判断不能使用空值。";
+              return tr("字符串包含判断不能使用空值。", "A string contains check cannot use an empty value.");
             }
             this.parsePropertyExpected();
           }
           break;
         case "relation":
-          if (!this.relationTarget) return "请填写关系目标。";
+          if (!this.relationTarget) return tr("请填写关系目标。", "Enter the relation target.");
           break;
         case "structure":
           break;
         case "rule":
           break;
         case "manual":
-          if (!this.manualPrompt.trim()) return "请填写人工判断问题。";
+          if (!this.manualPrompt.trim()) return tr("请填写人工判断问题。", "Enter the question to judge.");
           break;
       }
     } catch (error) {
@@ -756,7 +757,7 @@ export class KnowledgeTraceSetupModal extends Modal {
     }
     this.submitting = true;
     this.updateSubmitState();
-    this.errorEl?.setText("正在打开只读追踪…");
+    this.errorEl?.setText(tr("正在打开只读追踪…", "Opening the read-only trace…"));
     try {
       await this.options.onSubmit({
         filePath: this.options.filePath,

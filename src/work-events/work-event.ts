@@ -10,6 +10,7 @@ import type {
   WorkEventFileKind,
   WorkEventMetrics
 } from "./types";
+import { tr } from "../i18n";
 
 const ATTACHMENT_EXTENSIONS = new Set([
   "avif",
@@ -144,7 +145,7 @@ export function selectInferredSessionCommits(
 ): SessionSelection {
   const anchor = candidatesNewestFirst[0];
   if (!anchor) {
-    return { commits: [], confidence: "exact", reason: "没有可聚合的提交。" };
+    return { commits: [], confidence: "exact", reason: tr("没有可聚合的提交。", "No commits to group.") };
   }
   const selected = [anchor];
   const boundaries = new Set(milestoneHashes);
@@ -157,10 +158,10 @@ export function selectInferredSessionCommits(
       commits: selected,
       confidence: "exact",
       reason: boundaries.has(anchor.hash)
-        ? "命名里程碑作为会话边界。"
+        ? tr("命名里程碑作为会话边界。", "Named milestones are session boundaries.")
         : anchor.parentHashes.length > 1
-          ? "合并提交不推测编辑会话。"
-          : "手动提交保持为单次精确事件。"
+          ? tr("合并提交不推测编辑会话。", "Merge commits are not grouped into sessions.")
+          : tr("手动提交保持为单次精确事件。", "Manual commits stay single, exact events.")
     };
   }
 
@@ -192,8 +193,8 @@ export function selectInferredSessionCommits(
     commits: selected,
     confidence: selected.length > 1 ? "heuristic" : "exact",
     reason: selected.length > 1
-      ? `按第一父链、作者和 ${maxGapMinutes} 分钟间隔推测为同一编辑会话。`
-      : "没有相邻的自动备份提交可安全归入同一会话。"
+      ? tr(`按第一父链、作者和 ${maxGapMinutes} 分钟间隔推测为同一编辑会话。`, `Grouped as one editing session by first-parent chain, author and gaps of up to ${maxGapMinutes} minutes.`)
+      : tr("没有相邻的自动备份提交可安全归入同一会话。", "No neighbouring automatic backup commits can safely join this session.")
   };
 }
 
@@ -351,11 +352,11 @@ export function workEventMetrics(
 }
 
 const GROUP_LABELS: Record<WorkEventFileGroupKey, string> = {
-  current: "当前笔记",
-  attention: "需要留意",
-  notes: "其他笔记",
-  attachments: "附件",
-  technical: "配置与其他文件"
+  current: tr("当前笔记", "This note"),
+  attention: tr("需要留意", "Needs attention"),
+  notes: tr("其他笔记", "Other notes"),
+  attachments: tr("附件", "Attachments"),
+  technical: tr("配置与其他文件", "Settings and other files")
 };
 
 export function groupWorkEventFiles(

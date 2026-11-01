@@ -3,6 +3,7 @@ import {
   createRecoveryBasketItem,
   createRecoveryPatches
 } from "./planner";
+import { tr } from "../i18n";
 
 interface FrontmatterPropertyBlock {
   name: string;
@@ -61,7 +62,7 @@ function joinContent(parsed: ParsedFrontmatter, lines: string[]): string {
 
 function preview(lines: readonly string[]): string {
   const text = lines.join("\n").trim();
-  return text.length > 320 ? `${text.slice(0, 319)}…` : text || "无";
+  return text.length > 320 ? `${text.slice(0, 319)}…` : text || tr("无", "None");
 }
 
 export function createPropertyRecoveryItem(options: {
@@ -78,7 +79,7 @@ export function createPropertyRecoveryItem(options: {
   const historicalBlock = historical.properties.get(options.propertyName);
   const currentBlock = current.properties.get(options.propertyName);
   if (!historicalBlock && !currentBlock) {
-    throw new Error(`两个版本都没有属性“${options.propertyName}”。`);
+    throw new Error(tr(`两个版本都没有属性“${options.propertyName}”。`, `Neither version has the property "${options.propertyName}".`));
   }
 
   let targetLines = [...current.lines];
@@ -99,12 +100,12 @@ export function createPropertyRecoveryItem(options: {
   const targetContent = joinContent(current, targetLines);
   const patches = createRecoveryPatches(options.currentContent, targetContent);
   if (patches.length === 0) {
-    throw new Error(`当前属性“${options.propertyName}”已经与历史版本相同。`);
+    throw new Error(tr(`当前属性“${options.propertyName}”已经与历史版本相同。`, `The property "${options.propertyName}" already matches the past version.`));
   }
   return createRecoveryBasketItem({
     filePath: options.filePath,
     kind: "property",
-    label: `恢复属性 ${options.propertyName}`,
+    label: tr(`恢复属性 ${options.propertyName}`, `Restore property ${options.propertyName}`),
     source: options.source,
     patches,
     previewBefore: preview(currentBlock?.lines ?? []),
