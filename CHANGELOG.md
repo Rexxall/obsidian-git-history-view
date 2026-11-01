@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Compare:** previous and next change now work with blank lines hidden, which is the default; before, the arrows only appeared with blank lines shown. A new button opens the note beside the compare at the current change. The change is found by its text, so it still lands right after later edits; when the text is gone, or the lines were removed, a notice says the place is approximate or where they used to be.
+- **Compare header:** when you scroll, the version cards fold into one line with left and right, their times, whether the right side is uncommitted, and the path.
+
 ## 0.11.2 — 2026-10-30
 
 - **Directory review:** no duplicate CSS properties left; the look is unchanged.

@@ -2084,8 +2084,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     if (leaf.view instanceof GitConflictResolverView) await leaf.view.setFile(file);
   }
 
-  async openFileAtLine(file: TFile, line: number): Promise<void> {
-    const leaf = this.app.workspace.getLeaf(false);
+  async openFileAtLine(file: TFile, line: number, leaf: WorkspaceLeaf = this.app.workspace.getLeaf(false)): Promise<void> {
     await leaf.openFile(file);
     if (leaf.view instanceof MarkdownView) {
       const targetLine = Math.max(0, Math.min(line, leaf.view.editor.lineCount() - 1));

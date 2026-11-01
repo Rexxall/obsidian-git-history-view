@@ -3,6 +3,7 @@ import {
   FuzzySuggestModal,
   ItemView,
   MarkdownRenderer,
+  MarkdownView,
   Menu,
   Notice,
   TFile,
@@ -35,6 +36,7 @@ import {
 } from "../analysis/link-impact";
 import {
   compactLongFrontmatterPair,
+  readChangeLandmark,
   renderSideBySideDiff,
   renderUnifiedDiff,
   type HunkRestoreTarget
@@ -42,7 +44,7 @@ import {
 import { createRecoveryBasketItem } from "../recovery-basket/planner";
 import { createPropertyRecoveryItem } from "../recovery-basket/property-patch";
 import type { RecoveryBasketSource } from "../recovery-basket/types";
-import { buildChangeMap, type ChangeMapItem } from "../diff/change-map";
+import { buildChangeMap, locateLandmarkInNote, type ChangeMapItem } from "../diff/change-map";
 import {
   buildRenderedDiff,
   stripFrontmatter,
@@ -77,6 +79,14 @@ function versionTitle(reference: VersionReference): string {
   return reference.kind === "working"
     ? reference.label
     : reference.commit.subject || tr("无提交说明", "No commit message");
+}
+
+function compactVersionMeta(reference: VersionReference): string {
+  if (reference.kind === "working") return tr("含未提交内容", "uncommitted");
+  const date = new Date(reference.commit.authoredAt);
+  return Number.isNaN(date.getTime())
+    ? reference.commit.authoredAt
+    : new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
 function versionMeta(reference: VersionReference): string {
@@ -226,6 +236,13 @@ export class GitHistoryDetailView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.tabIndex = 0;
     this.registerDomEvent(this.contentEl, "keydown", (event) => this.handleKeyboard(event));
+    this.registerDomEvent(this.contentEl, "scroll", () => {
+      // Fold only when there is enough to scroll, so folding cannot bounce the view back above the threshold.
+      const element = this.contentEl;
+      const room = element.scrollHeight - element.clientHeight;
+      if (element.scrollTop > 80 && room > 320) element.addClass("is-scrolled");
+      else if (element.scrollTop < 8) element.removeClass("is-scrolled");
+    });
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       const request = this.request;
       if (!request) return;
@@ -370,6 +387,7 @@ export class GitHistoryDetailView extends ItemView {
     heading.createEl("h3", { text: basenameFromVaultPath(displayPath) });
     heading.createDiv({ cls: "git-note-history-file-path", text: displayPath });
 
+    this.renderContextSummary(header, displayPath);
     this.renderVersionWorkbench(header);
 
     const controls = header.createDiv({ cls: "git-note-history-detail-controls" });
@@ -381,13 +399,7 @@ export class GitHistoryDetailView extends ItemView {
     this.addModeButton(layout, "side-by-side", tr("双栏", "Side by side"), "columns-2");
     this.addModeButton(layout, "unified", tr("单栏", "Unified"), "rows-3");
     const isRawDiffMode = this.mode === "side-by-side" || this.mode === "unified";
-    if (
-      !this.loading
-      && isRawDiffMode
-      && !this.ignoreFrontmatter
-      && !this.ignoreBlankLines
-      && this.changeMap.length > 0
-    ) {
+    if (!this.loading && isRawDiffMode && this.changeMap.length > 0) {
       this.renderChangeNavigator(controls);
     }
     const actions = controls.createDiv({ cls: "git-note-history-detail-action-group" });
@@ -506,6 +518,23 @@ export class GitHistoryDetailView extends ItemView {
       );
     }
     else this.renderLinkImpact(body, buildLinkImpact(this.baseContent, this.targetContent));
+    this.syncChangeNavigator();
+  }
+
+  // Once the compare is scrolled the version cards fold away and this one line keeps the context.
+  private renderContextSummary(container: HTMLElement, path: string): void {
+    if (!this.request) return;
+    const summary = container.createDiv({ cls: "git-note-history-detail-summary" });
+    const sides = [[tr("左", "Left"), this.request.base], [tr("右", "Right"), this.request.target]] as const;
+    for (const [side, reference] of sides) {
+      const part = summary.createSpan({
+        cls: `git-note-history-detail-summary-side ${reference.kind === "working" ? "is-working" : ""}`
+      });
+      part.createSpan({ cls: "git-note-history-detail-summary-label", text: side });
+      part.createSpan({ cls: "git-note-history-detail-summary-title", text: this.versionDisplayTitle(reference) });
+      part.createSpan({ cls: "git-note-history-detail-summary-meta", text: compactVersionMeta(reference) });
+    }
+    summary.createSpan({ cls: "git-note-history-detail-summary-path", text: path });
   }
 
   private renderVersionWorkbench(container: HTMLElement): void {
@@ -1182,7 +1211,8 @@ export class GitHistoryDetailView extends ItemView {
 
   private renderChangeNavigator(container: HTMLElement): void {
     const nav = container.createDiv({ cls: "git-note-history-change-nav" });
-    if (this.changeMap.length > 1 && !this.narrowLayout) {
+    // The heading map follows the raw diff, so it is offered only when nothing is hidden from the compare.
+    if (this.changeMap.length > 1 && !this.narrowLayout && !this.ignoreBlankLines && !this.ignoreFrontmatter) {
       const mapToggle = nav.createEl("button", {
         cls: this.changeMapExpanded ? "clickable-icon is-active" : "clickable-icon",
         attr: {
@@ -1213,6 +1243,33 @@ export class GitHistoryDetailView extends ItemView {
     });
     setIcon(next, "arrow-down");
     next.addEventListener("click", () => this.moveChange(1));
+    if (this.file) {
+      const reveal = nav.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": tr("在笔记里定位这一处", "Show this change in the note") }
+      });
+      setIcon(reveal, "file-search");
+      reveal.addEventListener("click", () => void this.revealChangeInNote());
+    }
+  }
+
+  // Opens the note beside the compare at this change. The note may have moved on since the right side,
+  // so the text is looked up; when it cannot be found the place is only approximate, and that is said.
+  private async revealChangeInNote(): Promise<void> {
+    const file = this.file;
+    const anchor = this.contentEl.querySelector<HTMLElement>(`[data-change-index="${this.currentChangeIndex + 1}"]`);
+    const landmark = anchor ? readChangeLandmark(anchor) : null;
+    if (!landmark || !file) return;
+    const location = locateLandmarkInNote(landmark, await this.app.vault.read(file));
+    const leaf = this.app.workspace.getLeavesOfType("markdown")
+      .find((candidate) => candidate.view instanceof MarkdownView && candidate.view.file?.path === file.path)
+      ?? this.app.workspace.getLeaf("split");
+    await this.plugin.openFileAtLine(file, location.line - 1, leaf);
+    if (!location.exact) {
+      new Notice(tr("这一处在笔记里已经改过或删掉，光标停在大致位置。", "This change has since been edited or removed in the note; the cursor is at the approximate place."));
+    } else if (location.removed) {
+      new Notice(tr("这几行在右侧版本里删掉了，光标停在它们原来的位置。", "These lines are removed on the right side; the cursor is where they used to be."));
+    }
   }
 
   private renderChangeMap(container: HTMLElement): void {
@@ -1243,22 +1300,39 @@ export class GitHistoryDetailView extends ItemView {
     }
   }
 
+  // Changes as drawn: hiding blank lines or long properties can merge or drop raw diff hunks.
+  private changeCount(): number {
+    return this.contentEl.querySelectorAll("[data-change-index]").length;
+  }
+
+  private syncChangeNavigator(): void {
+    const nav = this.contentEl.querySelector<HTMLElement>(".git-note-history-change-nav");
+    if (!nav) return;
+    const count = this.changeCount();
+    nav.toggleClass("is-hidden", count === 0);
+    this.currentChangeIndex = Math.max(0, Math.min(this.currentChangeIndex, count - 1));
+    nav.querySelector(".git-note-history-change-nav-label")
+      ?.setText(tr(`变化 ${this.currentChangeIndex + 1} / ${count}`, `Change ${this.currentChangeIndex + 1} / ${count}`));
+  }
+
   private moveChange(direction: -1 | 1): void {
-    if (this.changeMap.length === 0) return;
-    const next = (this.currentChangeIndex + direction + this.changeMap.length) % this.changeMap.length;
+    const count = this.changeCount();
+    if (count === 0) return;
+    const next = (this.currentChangeIndex + direction + count) % count;
     this.scrollToChange(next);
   }
 
   private scrollToChange(index: number): void {
-    if (this.changeMap.length === 0) return;
-    this.currentChangeIndex = Math.max(0, Math.min(index, this.changeMap.length - 1));
+    const count = this.changeCount();
+    if (count === 0) return;
+    this.currentChangeIndex = Math.max(0, Math.min(index, count - 1));
     const oneBased = this.currentChangeIndex + 1;
     this.contentEl.querySelectorAll<HTMLElement>(".git-note-history-change-map-item").forEach((item, itemIndex) => {
       item.toggleClass("is-active", itemIndex === this.currentChangeIndex);
       item.setAttribute("aria-current", itemIndex === this.currentChangeIndex ? "true" : "false");
     });
     const label = this.contentEl.querySelector<HTMLElement>(".git-note-history-change-nav-label");
-    label?.setText(tr(`变化 ${oneBased} / ${this.changeMap.length}`, `Change ${oneBased} / ${this.changeMap.length}`));
+    label?.setText(tr(`变化 ${oneBased} / ${count}`, `Change ${oneBased} / ${count}`));
     const anchor = this.contentEl.querySelector<HTMLElement>(`[data-change-index="${oneBased}"]`);
     if (!anchor) return;
     anchor.scrollIntoView({ behavior: "smooth", block: "center" });

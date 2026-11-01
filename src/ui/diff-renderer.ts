@@ -1,6 +1,7 @@
 import { applyPatch, diffArrays, diffLines, diffWordsWithSpace, structuredPatch } from "diff";
 import type { RecoveryPatchHunk } from "../recovery-basket/types";
 import { tr } from "../i18n";
+import type { ChangeLandmark } from "../diff/change-map";
 
 const CONTEXT_LINE_COUNT = 3;
 const COLLAPSE_THRESHOLD = 14;
@@ -204,18 +205,35 @@ function splitDisplayLines(value: string): string[] {
   return withoutFinalNewline === "" ? [""] : withoutFinalNewline.split(/\r?\n/);
 }
 
+// Each change's first element carries its number and a landmark, so the compare can step through
+// changes and find each one in the note, even when blank lines or properties are hidden.
+function markChangeAnchor(element: HTMLElement, changeIndex: number, landmark: ChangeLandmark | undefined): void {
+  element.addClass("git-note-history-change-anchor");
+  element.dataset.changeIndex = String(changeIndex);
+  element.tabIndex = -1;
+  if (!landmark) return;
+  element.dataset.landmarkText = landmark.text;
+  element.dataset.landmarkBefore = landmark.before;
+  element.dataset.landmarkLine = String(landmark.line);
+}
+
+export function readChangeLandmark(element: HTMLElement): ChangeLandmark | null {
+  const line = Number(element.dataset.landmarkLine);
+  if (!Number.isFinite(line)) return null;
+  return { text: element.dataset.landmarkText ?? "", before: element.dataset.landmarkBefore ?? "", line };
+}
+
+const lastNonBlank = (lines: string[]): string | undefined => [...lines].reverse().find((line) => line.trim());
+
 function appendTextBlock(
   container: HTMLElement,
   value: string,
   className: string,
-  changeIndex?: number
+  changeIndex?: number,
+  landmark?: ChangeLandmark
 ): void {
   const block = container.createEl("pre", { cls: `git-note-history-diff-block ${className}` });
-  if (changeIndex !== undefined) {
-    block.addClass("git-note-history-change-anchor");
-    block.dataset.changeIndex = String(changeIndex);
-    block.tabIndex = -1;
-  }
+  if (changeIndex !== undefined) markChangeAnchor(block, changeIndex, landmark);
   block.setText(value);
 }
 
@@ -345,11 +363,29 @@ export function renderUnifiedDiff(
     text: tr("− 左侧版本　＋右侧版本；颜色之外同时保留符号提示", "− left version   + right version; symbols are shown as well as colour")
   });
 
+  const parts = diffLines(historicalDisplay, currentDisplay, { ignoreWhitespace: options.ignoreWhitespace });
+  // Blank lines may be hidden here, so landmarks carry text; the line number is only a rough hint.
+  const landmarks: ChangeLandmark[] = [];
+  let before = "";
+  let rightLine = 1;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]!;
+    const lines = splitDisplayLines(part.value);
+    if (!part.added && !part.removed) {
+      before = lastNonBlank(lines) ?? before;
+      rightLine += lines.length;
+      continue;
+    }
+    const group = [part];
+    while (parts[index + 1]?.added || parts[index + 1]?.removed) group.push(parts[++index]!);
+    const added = group.filter((item) => item.added).flatMap((item) => splitDisplayLines(item.value));
+    landmarks.push({ text: added.find((line) => line.trim()) ?? "", before, line: rightLine });
+    rightLine += added.length;
+  }
+
   let changeIndex = 0;
   let insideChange = false;
-  for (const part of diffLines(historicalDisplay, currentDisplay, {
-    ignoreWhitespace: options.ignoreWhitespace
-  })) {
+  for (const part of parts) {
     if (part.added || part.removed) {
       const firstInChange = !insideChange;
       if (firstInChange) changeIndex += 1;
@@ -358,7 +394,8 @@ export function renderUnifiedDiff(
         container,
         part.value,
         part.added ? "is-added" : "is-removed",
-        firstInChange ? changeIndex : undefined
+        firstInChange ? changeIndex : undefined,
+        firstInChange ? landmarks[changeIndex - 1] : undefined
       );
     } else {
       insideChange = false;
@@ -535,6 +572,23 @@ export function renderSideBySideDiff(
   }
   const grid = container.createDiv({ cls: "git-note-history-side-grid" });
   const renderedAnchors = new Set<number>();
+  const landmarks = new Map<number, ChangeLandmark>();
+  let before = "";
+  let lastRightLine = 0;
+  for (const row of rows) {
+    if (row.changeIndex === undefined) {
+      if (row.newText.trim()) before = row.newText;
+      lastRightLine = row.newLineNumber ?? lastRightLine;
+      continue;
+    }
+    const landmark = landmarks.get(row.changeIndex) ?? { text: "", before, line: lastRightLine + 1 };
+    if (!landmark.text && row.newText.trim()) {
+      landmark.text = row.newText;
+      landmark.line = row.newLineNumber ?? landmark.line;
+    }
+    landmarks.set(row.changeIndex, landmark);
+    lastRightLine = row.newLineNumber ?? lastRightLine;
+  }
 
   const renderRow = (row: SideRow) => {
     grid.createDiv({
@@ -553,9 +607,7 @@ export function renderSideBySideDiff(
     });
     if (row.changeIndex !== undefined && !renderedAnchors.has(row.changeIndex)) {
       renderedAnchors.add(row.changeIndex);
-      oldCell.addClass("git-note-history-change-anchor");
-      oldCell.dataset.changeIndex = String(row.changeIndex);
-      oldCell.tabIndex = -1;
+      markChangeAnchor(oldCell, row.changeIndex, landmarks.get(row.changeIndex));
     }
 
     if (row.kind === "changed") {

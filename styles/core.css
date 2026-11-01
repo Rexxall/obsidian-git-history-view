@@ -2897,3 +2897,63 @@ button.git-note-history-impact-row:hover {
   max-height: 50vh;
   overflow: auto;
 }
+
+/* Scrolled compare: the version cards fold into one line of context. */
+.git-note-history-detail-summary {
+  display: none;
+}
+
+.git-note-history-detail-view.is-scrolled .git-note-history-detail-top,
+.git-note-history-detail-view.is-scrolled .git-note-history-version-workbench {
+  display: none;
+}
+
+.git-note-history-detail-view.is-scrolled .git-note-history-detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--size-4-1) var(--size-4-4);
+  min-width: 0;
+  font-size: var(--font-ui-small);
+}
+
+.git-note-history-detail-summary-side {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--size-4-1);
+  min-width: 0;
+}
+
+.git-note-history-detail-summary-label {
+  color: var(--gnh-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.git-note-history-detail-summary-title {
+  overflow: hidden;
+  max-width: 24ch;
+  color: var(--text-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-note-history-detail-summary-meta,
+.git-note-history-detail-summary-path {
+  color: var(--gnh-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.git-note-history-detail-summary-side.is-working .git-note-history-detail-summary-meta {
+  color: var(--gnh-accent);
+}
+
+.git-note-history-detail-summary-path {
+  overflow: hidden;
+  margin-left: auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-note-history-change-nav.is-hidden {
+  display: none;
+}
