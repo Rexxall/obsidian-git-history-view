@@ -158,6 +158,14 @@ export function compactLongFrontmatterPair(
   };
 }
 
+// Restore works on the raw text whatever the display hides; with blank lines hidden,
+// changes that only add or remove blank lines are left out because they are not shown either.
+export function restorableHunks(historicalText: string, currentText: string, ignoreBlankLines: boolean): HunkRestoreTarget[] {
+  const targets = buildHunkRestoreTargets(historicalText, currentText);
+  if (!ignoreBlankLines) return targets;
+  return targets.filter((target) => withoutBlankLines(target.currentBlock) !== withoutBlankLines(target.historicalBlock));
+}
+
 export function buildHunkRestoreTargets(
   historicalText: string,
   currentText: string
@@ -304,7 +312,7 @@ function renderHunkActions(
     && !options.onAddHunkToBasket
     && !options.onLocateLine
   ) return;
-  const targets = buildHunkRestoreTargets(historicalText, currentText);
+  const targets = restorableHunks(historicalText, currentText, options.ignoreBlankLines === true);
   if (targets.length === 0) return;
 
   const section = container.createDiv({ cls: "git-note-history-hunks" });
@@ -403,9 +411,7 @@ export function renderUnifiedDiff(
     }
   }
 
-  if (!options.ignoreBlankLines) {
-    renderHunkActions(container, historicalText, currentText, options);
-  }
+  renderHunkActions(container, historicalText, currentText, options);
 }
 
 function renderWordLine(

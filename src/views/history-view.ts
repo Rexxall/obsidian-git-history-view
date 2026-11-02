@@ -142,6 +142,10 @@ export class GitNoteHistoryView extends ItemView {
   private error = "";
   private errorProblem: GitProblem | "stopped" = "failed";
   private query = "";
+  /** What is typed in the search box, spaces included; `query` is its trimmed form. */
+  private queryText = "";
+  /** Caret to put back after a re-render rebuilt the focused search box. */
+  private searchCaret: { start: number; end: number } | null = null;
   private followActiveNote: boolean;
   private selectedIndex = 0;
   private readonly compareSelection = new Set<string>();
@@ -245,6 +249,7 @@ export class GitNoteHistoryView extends ItemView {
     this.targetFile = file;
     this.history = null;
     this.query = "";
+    this.queryText = "";
     this.cancelContentSearch();
     this.compareSelection.clear();
     this.commitContents.clear();
@@ -317,6 +322,11 @@ export class GitNoteHistoryView extends ItemView {
 
   private render(): void {
     const container = this.contentEl;
+    // Any re-render, including one from a finished content search, rebuilds the search box; keep its focus.
+    const typing = container.querySelector<HTMLInputElement>(".git-note-history-search input");
+    if (typing && typing === typing.ownerDocument.activeElement && !this.searchCaret) {
+      this.searchCaret = { start: typing.selectionStart ?? typing.value.length, end: typing.selectionEnd ?? typing.value.length };
+    }
     container.empty();
     container.addClass("ap", "ap-view", "git-note-history-view");
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
@@ -401,6 +411,7 @@ export class GitNoteHistoryView extends ItemView {
           tr("清除搜索", "Clear search"),
           () => {
             this.query = "";
+            this.queryText = "";
             this.selectedIndex = 0;
             this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
             this.render();
@@ -1341,13 +1352,20 @@ export class GitNoteHistoryView extends ItemView {
 
     const searchRow = header.createDiv({ cls: "git-note-history-search" });
     const search = new SearchComponent(searchRow);
-    search.setPlaceholder(tr("搜索版本或历史内容", "Search versions or past content")).setValue(this.query).onChange((value) => {
+    search.setPlaceholder(tr("搜索版本或历史内容", "Search versions or past content")).setValue(this.queryText).onChange((value) => {
+      this.queryText = value;
       this.query = value.trim();
       this.selectedIndex = 0;
       this.visibleTimelineCount = DEFAULT_TIMELINE_BATCH_SIZE;
       this.scheduleContentSearch();
       this.render();
     });
+    if (this.searchCaret) {
+      const { start, end } = this.searchCaret;
+      this.searchCaret = null;
+      search.inputEl.focus();
+      search.inputEl.setSelectionRange(start, end);
+    }
     if (this.query) {
       const status = header.createDiv({
         cls: `git-note-history-content-search-status ${this.contentSearchLoading ? "is-loading" : ""}`,

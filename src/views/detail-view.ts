@@ -1353,8 +1353,8 @@ export class GitHistoryDetailView extends ItemView {
     const request = this.request;
     const file = this.file;
     const generation = this.contentGeneration;
+    // Restoring works on the raw text, so hiding blank lines from the display does not get in the way.
     const canPrepareHunk = !this.ignoreFrontmatter
-      && !this.ignoreBlankLines
       && baseContent === this.baseContent
       && targetContent === this.targetContent
       && request?.target.kind === "working"

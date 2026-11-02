@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Search:** the timeline search box keeps focus while you type; before, it lost focus after the first character. Spaces are kept as typed.
+- **Partial restore:** *Restore this change* now shows with blank lines hidden, which is the default; changes that only add or remove blank lines are left out because they are not shown either.
 - **Releases:** built and published by a GitHub workflow when a version tag is pushed, with a build attestation for `main.js`, `manifest.json` and `styles.css` that `gh attestation verify` can check. CI runs lint, tests and a build on every push and pull request.
 
 ## 0.12.0 — 2026-11-02
