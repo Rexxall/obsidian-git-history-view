@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Releases:** built and published by a GitHub workflow when a version tag is pushed, with a build attestation for `main.js`, `manifest.json` and `styles.css` that `gh attestation verify` can check. CI runs lint, tests and a build on every push and pull request.
+
 ## 0.12.0 — 2026-11-02
 
 - **English interface:** the lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, historical sandboxes, history sources, recovery basket) now follow Obsidian's language too, so the whole plugin is in English outside Chinese.

@@ -18,6 +18,8 @@ Browse the Git history of the note you are editing, compare any two versions, an
 
 No Git yet? Run **See an example (no repository needed)**: three pre-written versions of a note, compared and restored in memory, so you can see what the plugin does before setting anything up. If the vault is not in a repository, has no commits, or a note is not tracked or is ignored, the sidebar says which one it is and offers one read-only next step.
 
+From 0.12.1 on, the release files carry a GitHub build attestation; check one with `gh attestation verify main.js -R Rexxall/obsidian-git-history-view`.
+
 ## What it needs and what it costs
 
 - **Needs:** Obsidian 1.13 or later on desktop (macOS, Windows, Linux), Git installed, and a vault inside a Git repository (kept by the Obsidian Git plugin, a backup script or by hand).

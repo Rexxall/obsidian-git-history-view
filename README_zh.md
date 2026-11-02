@@ -18,6 +18,8 @@
 
 还没用过 Git？运行命令“看示例（不读仓库）”：三个预先写好的版本，在内存里比较和恢复，不用任何设置就能看到插件做什么。库不在 Git 仓库里、仓库还没有提交、这篇笔记没被跟踪或被忽略时，侧栏会说清是哪一种，并给一个只读的下一步。
 
+从 0.12.1 起，Release 附件带 GitHub 构建认证，可用 `gh attestation verify main.js -R Rexxall/obsidian-git-history-view` 核验。
+
 ## 需要什么，花多少钱
 
 - **需要：** 桌面版 Obsidian 1.13 或更新（macOS、Windows、Linux）；电脑装了 Git；库在 Git 仓库里（用 Obsidian Git 插件、备份脚本或手动维护都行）。
