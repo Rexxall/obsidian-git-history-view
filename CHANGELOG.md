@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 — 2026-11-03
 
 - **Search:** the timeline search box keeps focus while you type; before, it lost focus after the first character. Spaces are kept as typed.
 - **Partial restore:** *Restore this change* now shows with blank lines hidden, which is the default; changes that only add or remove blank lines are left out because they are not shown either.
