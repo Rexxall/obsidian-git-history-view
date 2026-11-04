@@ -2184,7 +2184,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       try {
         const note = await this.gitClient.loadNoteStatus(file);
         if (generation !== this.noteStatusGeneration || this.isUnloading) return;
-        this.renderNoteStatus(el, note.lastCommit, note.status);
+        this.renderNoteStatus(el, note.lastCommit, note.status, note.workingRename?.originalPath);
       } catch {
         // No repository or Git missing: the status bar simply stays quiet.
         if (generation === this.noteStatusGeneration) el.hide();
@@ -2195,7 +2195,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
   private renderNoteStatus(
     el: HTMLElement,
     lastCommit: GitCommitVersion | null,
-    status: { staged: boolean; unstaged: boolean; untracked: boolean; conflicted: boolean }
+    status: { staged: boolean; unstaged: boolean; untracked: boolean; conflicted: boolean },
+    renamedFrom?: string
   ): void {
     const chinese = isChineseInterface();
     el.empty();
@@ -2207,6 +2208,12 @@ export default class GitNoteHistoryPlugin extends Plugin {
     if (status.conflicted) {
       text = tr("有冲突", "conflict");
       tooltip = tr("这篇笔记有 Git 合并冲突。点击打开时间线。", "This note has a Git merge conflict. Click to open the timeline.");
+    } else if (lastCommit && renamedFrom) {
+      text = formatTimeAgo(lastCommit.authoredAt, Date.now(), chinese);
+      tooltip = tr(
+        `已改名，尚未提交。上次提交在旧路径 ${renamedFrom}：${lastCommit.subject || lastCommit.shortHash}\n点击打开时间线。`,
+        `Renamed, not committed yet. Last commit at the old path ${renamedFrom}: ${lastCommit.subject || lastCommit.shortHash}\nClick to open the timeline.`
+      );
     } else if (!lastCommit || status.untracked) {
       text = tr("未纳入 Git", "not in Git");
       tooltip = tr("这篇笔记还没有提交过。", "This note has not been committed yet.");

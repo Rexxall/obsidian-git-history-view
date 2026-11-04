@@ -100,6 +100,7 @@ function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
 function statusLabel(history: GitFileHistory): string {
   const { status } = history;
   if (status.conflicted) return tr("存在冲突", "Conflict");
+  if (history.workingRename) return tr("已改名", "Renamed");
   if (status.untracked) return tr("尚未跟踪", "Not tracked");
   if (status.staged && status.unstaged) return tr("已暂存 + 未暂存", "Staged + unstaged");
   if (status.staged) return tr("已暂存", "Staged");
@@ -1348,6 +1349,7 @@ export class GitNoteHistoryView extends ItemView {
     more.addEventListener("click", event => this.openMoreMenu(event, this.targetFile));
 
     if (this.targetFile) header.createDiv({ cls: "git-note-history-file-path", text: this.targetFile.path });
+    this.renderWorkingRename(header);
     this.renderPathHistory(header);
 
     const searchRow = header.createDiv({ cls: "git-note-history-search" });
@@ -1452,6 +1454,17 @@ export class GitNoteHistoryView extends ItemView {
     menu.addItem(item => item.setTitle(tr("恢复记录与撤销", "Restore records and undo")).setIcon("history").onClick(() => new RestoreHistoryModal(this.app, this.plugin).open()));
     menu.addItem(item => item.setTitle(tr("插件设置", "Plugin settings")).setIcon("settings").onClick(() => this.openSettings()));
     menu.showAtMouseEvent(event);
+  }
+
+  /** Moved or renamed and not committed yet: say where the history below comes from. */
+  private renderWorkingRename(container: HTMLElement): void {
+    const rename = this.history?.workingRename;
+    if (!rename) return;
+    const notice = container.createDiv({ cls: "git-note-history-rename-notice" });
+    setIcon(notice.createSpan({ cls: "git-note-history-inline-path-icon" }), "folder-input");
+    notice.createSpan({
+      text: tr(`历史来自改名前的路径 ${rename.originalPath}`, `History from the old path ${rename.originalPath}`)
+    });
   }
 
   private renderPathHistory(container: HTMLElement): void {
@@ -2316,7 +2329,8 @@ export class GitNoteHistoryView extends ItemView {
         return;
       case "untracked":
         this.renderState(container, "file-plus", tr("这篇笔记还没被 Git 跟踪", "Git is not tracking this note yet"),
-          tr("它还没有进过任何提交。用你平常的 Git 工具提交后，这里会出现第一个版本。", "It has never been committed. After you commit it with your usual Git tool, the first version appears here."),
+          (history.renameWarning ? `${history.renameWarning} ` : "")
+          + tr("它还没有进过任何提交。用你平常的 Git 工具提交后，这里会出现第一个版本。", "It has never been committed. After you commit it with your usual Git tool, the first version appears here."),
           tr("刷新", "Refresh"), reload);
         return;
       case "ignored":

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.2 — 2026-11-04
+
+- **Moved or renamed notes:** before the move is committed, the timeline, the status bar and *Compare with last commit* now show the history from the old path, marked *Renamed*. Before, the note looked untracked until the next commit. The old path is used only when Git has the rename staged or a deleted note has exactly the same content; if the content was edited after the move, the note still shows as untracked.
+
 ## 0.12.1 — 2026-11-03
 
 - **Search:** the timeline search box keeps focus while you type; before, it lost focus after the first character. Spaces are kept as typed.

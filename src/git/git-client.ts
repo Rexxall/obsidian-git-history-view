@@ -219,39 +219,8 @@ export class GitClient {
     const settings = this.getSettings();
     const maxCommits = normalizeMaxCommits(requestedMaxCommits ?? settings.maxCommits);
 
-    const [logOutput, numStatOutput, statusOutput, branchOutput] = await Promise.all([
-      this.runGit(context.repositoryRoot, [
-        "-c",
-        "core.quotePath=false",
-        "log",
-        "--follow",
-        "--find-renames",
-        `--max-count=${maxCommits + 1}`,
-        `--format=${LOG_FORMAT}`,
-        "--name-status",
-        "--",
-        context.repositoryRelativePath
-      ]).catch((error: unknown) => {
-        if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) {
-          return "";
-        }
-        throw error;
-      }),
-      this.runGit(context.repositoryRoot, [
-        "-c",
-        "core.quotePath=false",
-        "log",
-        "--follow",
-        "--find-renames",
-        `--max-count=${maxCommits + 1}`,
-        "--format=%x1e%H",
-        "--numstat",
-        "--",
-        context.repositoryRelativePath
-      ]).catch((error: unknown) => {
-        if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) return "";
-        throw error;
-      }),
+    const [logs, statusOutput, branchOutput] = await Promise.all([
+      this.readFollowedLog(context, context.repositoryRelativePath, maxCommits),
       this.runGit(context.repositoryRoot, [
         "-c",
         "core.quotePath=false",
@@ -264,9 +233,27 @@ export class GitClient {
       this.getBranch(context.repositoryRoot)
     ]);
 
-    const limitedHistory = limitHistory(parseGitLog(logOutput, context.repositoryRelativePath), maxCommits);
+    let limitedHistory = limitHistory(parseGitLog(logs.log, context.repositoryRelativePath), maxCommits);
+    let stats = parseNumStatLog(logs.numStat);
+    const status = parseGitStatus(statusOutput);
+
+    // A note moved or renamed but not committed yet has no history under its new path.
+    // Find the old path (a staged rename, or an unstaged deletion with identical content)
+    // and read the history from there, without touching the index.
+    let workingRename: GitFileHistory["workingRename"];
+    let renameWarning: string | undefined;
+    if (limitedHistory.items.length === 0) {
+      const anchor = await this.findUncommittedRename(file, context, status);
+      if (anchor?.workingRename) {
+        const renamed = await this.readFollowedLog(context, anchor.historyPath, maxCommits);
+        limitedHistory = limitHistory(parseGitLog(renamed.log, anchor.historyPath), maxCommits);
+        stats = parseNumStatLog(renamed.numStat);
+        workingRename = anchor.workingRename;
+      } else if (anchor?.renameWarning) {
+        renameWarning = anchor.renameWarning;
+      }
+    }
     const commits = limitedHistory.items;
-    const stats = parseNumStatLog(numStatOutput);
     for (const commit of commits) {
       const commitStats = stats.get(commit.hash);
       if (!commitStats) continue;
@@ -274,7 +261,6 @@ export class GitClient {
       commit.deletedLines = commitStats.deletedLines;
     }
 
-    const status = parseGitStatus(statusOutput);
     const workingTreeStats = await this.getWorkingTreeStats(context, status.untracked, file);
     const empty = commits.length === 0 ? await this.explainEmptyHistory(context, status) : null;
 
@@ -286,8 +272,53 @@ export class GitClient {
       hasMoreHistory: limitedHistory.hasMore,
       workingTreeStats,
       ...(empty ? { emptyReason: empty.reason } : {}),
-      ...(empty?.rule ? { ignoreRule: empty.rule } : {})
+      ...(empty?.rule ? { ignoreRule: empty.rule } : {}),
+      ...(workingRename ? { workingRename } : {}),
+      ...(renameWarning ? { renameWarning } : {})
     };
+  }
+
+  /** For a note with no commits under its path: the old path of an uncommitted move or rename, if one can be told for sure. */
+  private async findUncommittedRename(
+    file: TFile,
+    context: GitRepositoryContext,
+    status: GitFileStatus
+  ): Promise<WorkingHistoryAnchor | null> {
+    if (!status.untracked && !status.staged) return null;
+    const state = await this.readOnlyFileState(context);
+    if (!state.headHash) return null;
+    const anchor = await this.resolveWorkingHistoryAnchor(file, context, state);
+    if (anchor.workingRename && anchor.historyPath === context.repositoryRelativePath) return null;
+    return anchor;
+  }
+
+  /** `git log --follow` plus a matching `--numstat` pass for one path in the repository. */
+  private async readFollowedLog(
+    context: GitRepositoryContext,
+    repositoryPath: string,
+    maxCommits: number
+  ): Promise<{ log: string; numStat: string }> {
+    const run = (format: string, detail: string): Promise<string> =>
+      this.runGit(context.repositoryRoot, [
+        "-c",
+        "core.quotePath=false",
+        "log",
+        "--follow",
+        "--find-renames",
+        `--max-count=${maxCommits + 1}`,
+        format,
+        detail,
+        "--",
+        repositoryPath
+      ]).catch((error: unknown) => {
+        if (error instanceof GitCommandError && this.isEmptyRepositoryError(error.stderr)) return "";
+        throw error;
+      });
+    const [log, numStat] = await Promise.all([
+      run(`--format=${LOG_FORMAT}`, "--name-status"),
+      run("--format=%x1e%H", "--numstat")
+    ]);
+    return { log, numStat };
   }
 
   /** Cheap summary for the status bar: the last commit touching the note and whether it has uncommitted edits. */
@@ -318,10 +349,26 @@ export class GitClient {
       ])
     ]);
     const status = parseGitStatus(statusOutput);
+    const lastCommit = parseGitLog(logOutput, context.repositoryRelativePath)[0] ?? null;
+    if (lastCommit) return { context, lastCommit, status };
+    // Moved or renamed and not committed yet: the last commit is the old path's.
+    const anchor = await this.findUncommittedRename(file, context, status);
+    if (!anchor?.workingRename) return { context, lastCommit: null, status };
+    const renamed = await this.runGit(context.repositoryRoot, [
+      "-c",
+      "core.quotePath=false",
+      "log",
+      "--max-count=1",
+      `--format=${LOG_FORMAT}`,
+      "--name-status",
+      "--",
+      anchor.historyPath
+    ]).catch(() => "");
     return {
       context,
-      lastCommit: parseGitLog(logOutput, context.repositoryRelativePath)[0] ?? null,
-      status
+      lastCommit: parseGitLog(renamed, anchor.historyPath)[0] ?? null,
+      status,
+      workingRename: anchor.workingRename
     };
   }
 

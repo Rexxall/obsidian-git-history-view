@@ -1013,6 +1013,18 @@ button.git-note-history-milestone-badge:hover {
   height: 12px;
 }
 
+.git-note-history-rename-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--size-4-1);
+  margin-top: var(--size-4-1);
+  padding: var(--size-4-1) var(--size-4-2);
+  border-left: 2px solid var(--gnh-accent);
+  color: var(--gnh-muted);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
 .git-note-history-inline-path {
   margin-top: var(--size-4-1);
   color: var(--gnh-muted);

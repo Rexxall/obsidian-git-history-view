@@ -45,12 +45,22 @@ export interface GitFileHistory {
   emptyReason?: GitEmptyHistoryReason;
   /** `.gitignore:3:*.md` style location of the rule that excludes the note. */
   ignoreRule?: string;
+  /** The note was moved or renamed and the rename is not committed yet; history comes from `originalPath`. */
+  workingRename?: {
+    kind: "staged" | "exact-unstaged";
+    currentPath: string;
+    originalPath: string;
+  };
+  /** Why an uncommitted rename could not be matched to an old path. */
+  renameWarning?: string;
 }
 
 export interface GitNoteStatus {
   context: GitRepositoryContext;
   lastCommit: GitCommitVersion | null;
   status: GitFileStatus;
+  /** Set when `lastCommit` comes from the old path of an uncommitted move or rename. */
+  workingRename?: GitFileHistory["workingRename"];
 }
 
 export interface GitLineStats {
