@@ -2,7 +2,7 @@
 
 ## 0.12.2 — 2026-11-04
 
-- **Moved or renamed notes:** before the move is committed, the timeline, the status bar and *Compare with last commit* now show the history from the old path, marked *Renamed*. Before, the note looked untracked until the next commit. The old path is used only when Git has the rename staged or a deleted note has exactly the same content; if the content was edited after the move, the note still shows as untracked.
+- **Moved or renamed notes:** before the move is committed, the timeline, the status bar and *Compare with last commit* now show the history from the old path, marked *Renamed*. Before, the note looked untracked until the next commit. The old path is used when Git has the rename staged, when a deleted note has exactly the same content, or when the note was edited after the move and one deleted note is clearly the most alike (at least half the content kept, as Git judges renames); that last case says how alike it is. With two near-identical candidates nothing is guessed. The working-copy line counts now compare with the old path instead of counting the whole note as new.
 
 ## 0.12.1 — 2026-11-03
 

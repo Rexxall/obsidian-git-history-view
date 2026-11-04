@@ -47,9 +47,12 @@ export interface GitFileHistory {
   ignoreRule?: string;
   /** The note was moved or renamed and the rename is not committed yet; history comes from `originalPath`. */
   workingRename?: {
-    kind: "staged" | "exact-unstaged";
+    /** `similar-unstaged`: moved and edited; matched by content as Git would at the next commit. */
+    kind: "staged" | "exact-unstaged" | "similar-unstaged";
     currentPath: string;
     originalPath: string;
+    /** 0–1 share of content kept, for `similar-unstaged`. */
+    similarity?: number;
   };
   /** Why an uncommitted rename could not be matched to an old path. */
   renameWarning?: string;

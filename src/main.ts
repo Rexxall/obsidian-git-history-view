@@ -29,6 +29,7 @@ import type {
   FileReviewState,
   GitCommitVersion,
   GitNoteHistorySettings,
+  GitNoteStatus,
   GitRepositoryContext,
   PersistedPluginData,
   ReviewCommitSummary,
@@ -2184,7 +2185,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
       try {
         const note = await this.gitClient.loadNoteStatus(file);
         if (generation !== this.noteStatusGeneration || this.isUnloading) return;
-        this.renderNoteStatus(el, note.lastCommit, note.status, note.workingRename?.originalPath);
+        this.renderNoteStatus(el, note.lastCommit, note.status, note.workingRename);
       } catch {
         // No repository or Git missing: the status bar simply stays quiet.
         if (generation === this.noteStatusGeneration) el.hide();
@@ -2196,7 +2197,7 @@ export default class GitNoteHistoryPlugin extends Plugin {
     el: HTMLElement,
     lastCommit: GitCommitVersion | null,
     status: { staged: boolean; unstaged: boolean; untracked: boolean; conflicted: boolean },
-    renamedFrom?: string
+    rename?: GitNoteStatus["workingRename"]
   ): void {
     const chinese = isChineseInterface();
     el.empty();
@@ -2208,11 +2209,14 @@ export default class GitNoteHistoryPlugin extends Plugin {
     if (status.conflicted) {
       text = tr("有冲突", "conflict");
       tooltip = tr("这篇笔记有 Git 合并冲突。点击打开时间线。", "This note has a Git merge conflict. Click to open the timeline.");
-    } else if (lastCommit && renamedFrom) {
+    } else if (lastCommit && rename) {
+      const similar = rename.similarity !== undefined && rename.kind === "similar-unstaged"
+        ? tr(`（内容有改动，相似度 ${Math.round(rename.similarity * 100)}%）`, ` (edited since; ${Math.round(rename.similarity * 100)}% alike)`)
+        : "";
       text = formatTimeAgo(lastCommit.authoredAt, Date.now(), chinese);
       tooltip = tr(
-        `已改名，尚未提交。上次提交在旧路径 ${renamedFrom}：${lastCommit.subject || lastCommit.shortHash}\n点击打开时间线。`,
-        `Renamed, not committed yet. Last commit at the old path ${renamedFrom}: ${lastCommit.subject || lastCommit.shortHash}\nClick to open the timeline.`
+        `已改名，尚未提交。上次提交在旧路径 ${rename.originalPath}${similar}：${lastCommit.subject || lastCommit.shortHash}\n点击打开时间线。`,
+        `Renamed, not committed yet. Last commit at the old path ${rename.originalPath}${similar}: ${lastCommit.subject || lastCommit.shortHash}\nClick to open the timeline.`
       );
     } else if (!lastCommit || status.untracked) {
       text = tr("未纳入 Git", "not in Git");

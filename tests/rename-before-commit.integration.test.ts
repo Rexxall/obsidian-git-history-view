@@ -99,6 +99,7 @@ describe("a note moved or renamed before the rename is committed", () => {
     expect(history.emptyReason).toBeUndefined();
     expect(history.commits.map((commit) => commit.subject)).toEqual(["Second", "First"]);
     expect(history.commits.every((commit) => commit.historicalPath === "99 - ToDo/Untitled.md")).toBe(true);
+    expect(history.workingTreeStats).toEqual({ addedLines: 0, deletedLines: 0 });
     expect(history.workingRename).toEqual({
       kind: "exact-unstaged",
       currentPath: newPath,
@@ -147,6 +148,49 @@ describe("a note moved or renamed before the rename is committed", () => {
 
     expect(note.lastCommit).toBeNull();
     expect(note.workingRename).toBeUndefined();
+  });
+
+  it("matches a moved note that was edited afterwards by content, and says so", async () => {
+    const root = repo();
+    const body = Array.from({ length: 12 }, (_, index) => `Point ${index + 1} in the research chain.`).join("\n") + "\n";
+    write(root, "99 - ToDo/Untitled.md", body);
+    write(root, "Other.md", "an unrelated note\n");
+    git(root, ["add", "-A"]);
+    git(root, ["commit", "-q", "-m", "First"]);
+    const newPath = "10 - Projects/research-chain.md";
+    mkdirSync(path.join(root, "10 - Projects"), { recursive: true });
+    renameSync(path.join(root, "99 - ToDo/Untitled.md"), path.join(root, newPath));
+    write(root, newPath, body.replace("Point 2 in the research chain.", "Point 2, edited after the move.") + "One more point.\n");
+
+    const before = git(root, ["status", "--porcelain=v1"]);
+    const client = new GitClient(app(root), () => settings);
+    const history = await client.loadFileHistory(file(root, newPath));
+    const note = await client.loadNoteStatus(file(root, newPath));
+
+    expect(history.commits.map((commit) => commit.subject)).toEqual(["First"]);
+    expect(history.workingRename?.kind).toBe("similar-unstaged");
+    expect(history.workingRename?.originalPath).toBe("99 - ToDo/Untitled.md");
+    expect(history.workingRename?.similarity).toBeGreaterThan(0.8);
+    expect(history.workingTreeStats).toEqual({ addedLines: 2, deletedLines: 1 });
+    expect(note.lastCommit?.historicalPath).toBe("99 - ToDo/Untitled.md");
+    expect(git(root, ["status", "--porcelain=v1"])).toBe(before);
+  });
+
+  it("does not guess between two moved notes made from the same template", async () => {
+    const root = repo();
+    const template = "## Meeting\n\n- Date:\n- People:\n- Notes:\n- Next steps:\n";
+    write(root, "A.md", `${template}- A\n`);
+    write(root, "B.md", `${template}- B\n`);
+    git(root, ["add", "-A"]);
+    git(root, ["commit", "-q", "-m", "First"]);
+    rmSync(path.join(root, "A.md"));
+    rmSync(path.join(root, "B.md"));
+    write(root, "Moved/Meeting.md", `${template}- edited\n`);
+
+    const history = await new GitClient(app(root), () => settings).loadFileHistory(file(root, "Moved/Meeting.md"));
+
+    expect(history.commits).toEqual([]);
+    expect(history.workingRename).toBeUndefined();
   });
 
   it("still reports an untracked note when the moved content was edited", async () => {

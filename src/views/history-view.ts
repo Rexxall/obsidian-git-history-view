@@ -1462,8 +1462,12 @@ export class GitNoteHistoryView extends ItemView {
     if (!rename) return;
     const notice = container.createDiv({ cls: "git-note-history-rename-notice" });
     setIcon(notice.createSpan({ cls: "git-note-history-inline-path-icon" }), "folder-input");
+    // A match by similarity is an inference, so it says how sure it is.
+    const similar = rename.kind === "similar-unstaged" && rename.similarity !== undefined
+      ? tr(`（内容有改动，相似度 ${Math.round(rename.similarity * 100)}%）`, ` (edited since; ${Math.round(rename.similarity * 100)}% alike)`)
+      : "";
     notice.createSpan({
-      text: tr(`历史来自改名前的路径 ${rename.originalPath}`, `History from the old path ${rename.originalPath}`)
+      text: tr(`历史来自改名前的路径 ${rename.originalPath}${similar}`, `History from the old path ${rename.originalPath}${similar}`)
     });
   }
 

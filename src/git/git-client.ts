@@ -32,6 +32,8 @@ import {
   parseWorkspaceStatus
 } from "./parse-log";
 import { limitHistory } from "../history/timeline-window";
+import { pickSimilarRename } from "./rename-similarity";
+import { diffLines } from "diff";
 import {
   isReviewPathExcluded,
   mergeReviewInboxItems
@@ -73,6 +75,8 @@ const MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024;
 export const GIT_COMMAND_TIMEOUT_MS = 120_000;
 const EXACT_UNSTAGED_RENAME_MAX_BYTES = 512 * 1024;
 const EXACT_UNSTAGED_RENAME_MAX_CANDIDATES = 64;
+/** Similar (edited) renames compare whole texts, so they look at fewer, smaller candidates. */
+const SIMILAR_RENAME_MAX_CANDIDATES = 20;
 const WORK_EVENT_ANALYSIS_LIMITS = {
   maxMarkdownFiles: 60,
   maxFileBytes: 256 * 1024,
@@ -261,7 +265,7 @@ export class GitClient {
       commit.deletedLines = commitStats.deletedLines;
     }
 
-    const workingTreeStats = await this.getWorkingTreeStats(context, status.untracked, file);
+    const workingTreeStats = await this.getWorkingTreeStats(context, status.untracked, file, workingRename?.originalPath);
     const empty = commits.length === 0 ? await this.explainEmptyHistory(context, status) : null;
 
     return {
@@ -283,13 +287,60 @@ export class GitClient {
     file: TFile,
     context: GitRepositoryContext,
     status: GitFileStatus
-  ): Promise<WorkingHistoryAnchor | null> {
+  ): Promise<{ historyPath: string; workingRename?: GitFileHistory["workingRename"]; renameWarning?: string } | null> {
     if (!status.untracked && !status.staged) return null;
     const state = await this.readOnlyFileState(context);
     if (!state.headHash) return null;
     const anchor = await this.resolveWorkingHistoryAnchor(file, context, state);
-    if (anchor.workingRename && anchor.historyPath === context.repositoryRelativePath) return null;
+    if (anchor.workingRename) {
+      return anchor.historyPath === context.repositoryRelativePath ? null : anchor;
+    }
+    if (status.untracked) {
+      const similar = await this.findSimilarRename(file, context, state.headHash);
+      if (similar) return similar;
+    }
     return anchor;
+  }
+
+  /**
+   * A moved note that was also edited: the deleted note it most likely came from, judged by
+   * content the way Git will judge it at the next commit. Only an unambiguous match counts.
+   */
+  private async findSimilarRename(
+    file: TFile,
+    context: GitRepositoryContext,
+    headHash: string
+  ): Promise<{ historyPath: string; workingRename: NonNullable<GitFileHistory["workingRename"]> } | null> {
+    const currentPath = context.repositoryRelativePath;
+    const extension = path.posix.extname(currentPath).toLowerCase();
+    const deleted = parseWorkspaceStatus(await this.readTrackedWorkspaceStatus(context.repositoryRoot)).filter((change) =>
+      change.indexStatus === " "
+      && change.workTreeStatus === "D"
+      && path.posix.extname(change.path).toLowerCase() === extension
+      && this.workEventVaultPath(context, change.path) !== null
+    );
+    if (deleted.length === 0 || deleted.length > SIMILAR_RENAME_MAX_CANDIDATES) return null;
+    if (file.stat.size > EXACT_UNSTAGED_RENAME_MAX_BYTES) return null;
+    const current = await this.app.vault.read(file);
+    const candidates: Array<{ path: string; content: string }> = [];
+    for (const change of deleted) {
+      const object = `${headHash}:${change.path}`;
+      const size = Number((await this.runGit(context.repositoryRoot, ["cat-file", "-s", object]).catch(() => "")).trim());
+      if (!Number.isFinite(size) || size <= 0 || size > EXACT_UNSTAGED_RENAME_MAX_BYTES) continue;
+      const content = await this.runGit(context.repositoryRoot, ["cat-file", "blob", object]).catch(() => null);
+      if (content !== null) candidates.push({ path: change.path, content });
+    }
+    const match = pickSimilarRename(current, candidates);
+    if (!match) return null;
+    return {
+      historyPath: match.path,
+      workingRename: {
+        kind: "similar-unstaged",
+        currentPath,
+        originalPath: match.path,
+        similarity: Math.round(match.similarity * 100) / 100
+      }
+    };
   }
 
   /** `git log --follow` plus a matching `--numstat` pass for one path in the repository. */
@@ -2211,8 +2262,21 @@ export class GitClient {
   private async getWorkingTreeStats(
     context: GitRepositoryContext,
     untracked: boolean,
-    file: TFile
+    file: TFile,
+    renamedFrom?: string
   ): Promise<GitLineStats> {
+    // Renamed and not committed: count the edits against the old path, not the whole note as new.
+    if (renamedFrom) {
+      const before = await this.runGit(context.repositoryRoot, ["show", `HEAD:${renamedFrom}`]).catch(() => null);
+      if (before !== null) {
+        const stats = { addedLines: 0, deletedLines: 0 };
+        for (const part of diffLines(before, await this.app.vault.read(file))) {
+          if (part.added) stats.addedLines += part.count ?? 0;
+          if (part.removed) stats.deletedLines += part.count ?? 0;
+        }
+        return stats;
+      }
+    }
     if (untracked) {
       const content = await this.app.vault.read(file);
       return {
