@@ -65,16 +65,18 @@
 
 **联网：** 不联网。每次调用 Git 都带 `GIT_NO_LAZY_FETCH=1` 和 `GIT_OPTIONAL_LOCKS=0`，读历史不会从远端拉取，也不会改写索引。
 
-**库外文件：** Git 仓库可能从库的上层目录开始，插件用 `git` 读它。实验功能“历史沙盒”只在你创建沙盒时，把旧版本的整个库复制到系统的应用数据目录（macOS 为 `~/Library/Application Support/Git Note History`）。除此之外不读写库外文件。
+**库外文件：** Git 仓库可能从库的上层目录开始，插件用 `git` 读它。实验功能“历史沙盒”只在你创建沙盒时，把旧版本的整个库复制到系统的应用数据目录（macOS 为 `~/Library/Application Support/Git Note History`，Windows 为 `%LOCALAPPDATA%\Git Note History`，Linux 为 `~/.local/share/git-note-history`）。除此之外不读写库外文件。
 
-### 数据流向
+### 插件会碰什么
 
-社区目录给本插件标了两条提示。两条都是读取 Git 必需的，也都不联网。
+社区目录的评分卡给本插件列了两条警告和两条其他条目，都不联网。
 
-| 提示 | 为什么要用 | 只在哪里用 |
+| 评分卡条目 | 为什么要用 | 只在哪里用 |
 |---|---|---|
 | **执行外部程序**（`child_process`） | Git 历史在仓库里，不在库里，所以插件要启动你在设置里填的 `git` 程序。它直接把参数列表交给 `git`，不经过 shell，笔记内容和文件名都不会被当成命令执行。 | 读历史（`git log`、`show`、`diff`、`status`、`blame`）；实验功能“历史沙盒”另外用 `git worktree` 取出旧版本。 |
 | **直接访问文件系统**（`fs`） | 仓库可能从库的上层目录开始，库的接口看不到那里。 | 确定仓库目录、确认搬走的仓库是否还在；只在你创建历史沙盒时，在上面说的应用数据目录里写入沙盒副本，删除沙盒时再移除。 |
+| **遍历库文件**（`getMarkdownFiles`） | 恢复旧版本可能删掉别的笔记链接着的标题或段落。为了提前提醒，插件要查 Obsidian 本来就为每篇笔记维护的链接索引。 | 恢复预览里的链接检查，以及“链接影响”视图里的反链数。只从 Obsidian 的缓存里读链接，不读笔记正文。 |
+| **剪贴板** | 复制按钮。插件只往剪贴板写，从不读取。 | 只在你点复制按钮时：版本链接、提交哈希、一段或整个版本的文字、恢复结果、文件路径、审阅包。 |
 
 ## 开始用 Git
 
@@ -101,7 +103,7 @@ npm run check          # 类型检查、构建、官方规则检查、测试
 npm run package:release
 ```
 
-TypeScript + esbuild，用 Vitest 测试，用官方 `eslint-plugin-obsidianmd` 规则检查。发布清单见 [RELEASING.md](RELEASING.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+TypeScript + esbuild，用 Vitest 测试，用官方 `eslint-plugin-obsidianmd` 规则检查。检查命令和提 issue 的方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，发布清单见 [RELEASING.md](RELEASING.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可
 

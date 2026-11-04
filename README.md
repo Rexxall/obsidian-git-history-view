@@ -65,16 +65,18 @@ Colours, radii and spacing come from your theme's variables, and styles only app
 
 **Network:** none. Every Git call runs with `GIT_NO_LAZY_FETCH=1` and `GIT_OPTIONAL_LOCKS=0`, so reading history never fetches from a remote or rewrites the index.
 
-**Files outside the vault:** the repository may start in a folder above your vault; the plugin reads it with `git`. The lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (on macOS `~/Library/Application Support/Git Note History`), only when you create a sandbox. Nothing else outside the vault is read or written.
+**Files outside the vault:** the repository may start in a folder above your vault; the plugin reads it with `git`. The lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (`~/Library/Application Support/Git Note History` on macOS, `%LOCALAPPDATA%\Git Note History` on Windows, `~/.local/share/git-note-history` on Linux), only when you create a sandbox. Nothing else outside the vault is read or written.
 
-### Data flow
+### What the plugin touches
 
-The community directory lists two warnings for this plugin. Both are needed to read Git, and neither touches the network.
+The community directory's scorecard lists two warnings and two other items for this plugin. None of them touches the network.
 
-| Warning | Why it is needed | Where it is used |
+| Scorecard item | Why it is needed | Where it is used |
 |---|---|---|
 | **Shell Execution** (`child_process`) | Git history lives in the repository, not in the vault, so the plugin starts the `git` program you set in the settings. It calls `git` directly with a list of arguments, never through a shell, so nothing in a note or file name can run as a command. | Reading history (`git log`, `show`, `diff`, `status`, `blame`), and the lab tool *historical sandboxes*, which also runs `git worktree` to check out an old state. |
 | **Direct Filesystem Access** (`fs`) | The vault API cannot see folders above the vault, where the repository may start. | Resolving the repository folder and checking that a moved repository still exists; and, only when you create a historical sandbox, writing and later removing its copy in the application data folder named above. |
+| **Vault Enumeration** (`getMarkdownFiles`) | Restoring an old version can remove a heading or block that other notes link to. To warn you, the plugin looks through the link index Obsidian already keeps for every note. | The restore preview's link check, and the backlink counts in the *Link impact* view. Only links are read from Obsidian's cache, not note contents. |
+| **Clipboard Access** | Copy buttons. The plugin only writes to the clipboard and never reads it. | Only when you click a copy button: a version link, a commit hash, a block or a whole version's text, a restore result, a file path, or a review pack. |
 
 ## Starting with Git
 
@@ -101,7 +103,7 @@ npm run check          # type-check, build, official lint, tests
 npm run package:release
 ```
 
-TypeScript + esbuild, tested with Vitest and linted with the official `eslint-plugin-obsidianmd` rules. See [RELEASING.md](RELEASING.md) for the release checklist and [CHANGELOG.md](CHANGELOG.md) for versions.
+TypeScript + esbuild, tested with Vitest and linted with the official `eslint-plugin-obsidianmd` rules. See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and reporting issues, [RELEASING.md](RELEASING.md) for the release checklist and [CHANGELOG.md](CHANGELOG.md) for versions.
 
 ## License
 
