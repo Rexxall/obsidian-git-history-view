@@ -1,41 +1,41 @@
-# Git Note History
+<p align="right"><a href="README.md">English</a></p>
 
-**看清一篇笔记怎么变过来的，只取回需要的那一段。**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-zh-dark.svg">
+  <img src="assets/readme/hero-zh-light.svg" width="100%" alt="Git Note History：删掉的那句话找得回来，看清是哪次提交删的，只取回需要的那一段。">
+</picture>
 
-[English](README.md)
+<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>在 Obsidian 里安装</b></a></p>
 
-在 Obsidian 里查看正在编辑的这篇笔记的 Git 历史，任选两个版本比较，把一段、一处修改或整篇恢复回来；恢复前先预览，恢复后可以撤销。插件只读 Git，不会替你提交。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/demo-dark.gif">
+  <img src="assets/readme/demo-light.gif" width="100%" alt="在笔记的历史侧栏里输入“one afternoon empty”，内容轨迹显示这句话哪天写进去、哪次提交删掉，点开后删掉它的那次提交和当前笔记并排对比，被删的段落标红。">
+</picture>
 
-![侧栏里是笔记的 Git 时间线，左边是旧版本和当前笔记的并排对比](docs/screenshots/hero-zh.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/cards-zh-dark.svg">
+  <img src="assets/readme/cards-zh-light.svg" width="100%" alt="找回过去：删掉的话、哪天删的，一搜就有。任意两版对比：并排看，或按标题逐段看。只取回一段：先预览，随时撤销。">
+</picture>
 
-*右边是当前笔记的时间线，左边是旧版本和当前笔记的对比。*
-
-## 从这里开始
+## 三步上手
 
 1. 在“设置 → 第三方插件 → 浏览”里搜索 **Git Note History**，安装并启用。
-2. 打开一篇 Markdown 笔记，点左侧功能区的时钟图标，或运行命令“打开当前笔记的 Git 历史”。
-3. 选一个版本，点“和当前比较”。要取回内容，切到“单栏”，找到那处修改，点“恢复此块”。
+2. 打开一篇笔记，点左侧功能区的时钟图标。
+3. 选一个版本，点“和当前比较”。
 
-还没用过 Git？运行命令“看示例（不读仓库）”：三个预先写好的版本，在内存里比较和恢复，不用任何设置就能看到插件做什么。库不在 Git 仓库里、仓库还没有提交、这篇笔记没被跟踪或被忽略时，侧栏会说清是哪一种，并给一个只读的下一步。
+还没用过 Git？在命令面板运行“看示例（不读仓库）”。
 
-从 0.12.1 起，Release 附件带 GitHub 构建认证，可用 `gh attestation verify main.js -R Rexxall/obsidian-git-history-view` 核验。
+**需要** 桌面版 Obsidian 1.13 或更新、电脑装了 Git、库在 Git 仓库里。**费用** 不要钱：不用注册，不联网，没有统计上报。插件只读 Git，从不替你提交。
 
-## 需要什么，花多少钱
+## 其余内容
 
-- **需要：** 桌面版 Obsidian 1.13 或更新（macOS、Windows、Linux）；电脑装了 Git；库在 Git 仓库里（用 Obsidian Git 插件、备份脚本或手动维护都行）。
-- **费用：** 不要钱。不用注册，不联网，没有统计上报。
+<details>
+<summary><b>全部功能</b></summary>
 
-## 更多截图
-
-![恢复预览：写回一处修改之前列出所有结构变化](docs/screenshots/restore-preview-zh.png)
-
-*写回之前，恢复预览列出会变的内容、检查链接；确认后才写，写完可以撤销。*
-
-![示例弹窗：三个演示版本和一份合并视图的对比](docs/screenshots/example-zh.png)
-
-*示例不需要仓库，界面上明确标着“演示”。*
-
-## 功能
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/restore-dark.png">
+  <img src="assets/readme/restore-light.png" width="100%" alt="恢复预览：写入之前列出每一处结构变化和会被删掉的链接。">
+</picture>
 
 - **时间线：** 右侧栏显示当前笔记的版本，按日期分组，带增删行数和你自己命名的里程碑（已发送、材料已提交、已确认）。选中一个版本后，用底部的“和当前比较”“恢复这一版”。
 - **比较：** 任意两个版本可以双栏、单栏、按排版后的内容、双预览，或按结构（属性、标题、列表、任务、表格、标注块、代码、双链）比较。窗口窄时自动换成单栏。
@@ -49,13 +49,10 @@
 
 实验功能（复查收件箱、工作事件、知识边界追踪、来源镜头、版本批注、历史健康、知识图谱时间机、历史沙盒、历史来源）默认关闭，在设置里打开“显示实验功能”即可使用。完整功能清单见 [docs/FEATURES_zh.md](docs/FEATURES_zh.md)。
 
-## 语言和主题
+</details>
 
-整个界面（包括实验功能）跟随 Obsidian 的语言：中文，其他语言一律用英文。
-
-颜色、圆角、间距都取自主题变量，样式只作用在插件自己的视图里。在 Default、Minimal、Blue Topaz、AnuPpuccin 四个主题的浅色和深色下测过：窄侧栏、双栏 diff（行号栏、横向空间、长路径）、下拉框。系统的“降低透明度”“减少动态效果”都会照做。
-
-## 安全和隐私
+<details>
+<summary><b>安全、隐私，以及插件会碰什么</b></summary>
 
 | 插件会做的 | 插件不会做的 |
 |---|---|
@@ -67,7 +64,7 @@
 
 **库外文件：** Git 仓库可能从库的上层目录开始，插件用 `git` 读它。实验功能“历史沙盒”只在你创建沙盒时，把旧版本的整个库复制到系统的应用数据目录（macOS 为 `~/Library/Application Support/Git Note History`，Windows 为 `%LOCALAPPDATA%\Git Note History`，Linux 为 `~/.local/share/git-note-history`）。除此之外不读写库外文件。
 
-### 插件会碰什么
+#### 插件会碰什么
 
 社区目录的评分卡给本插件列了两条警告和两条其他条目，都不联网。
 
@@ -78,7 +75,10 @@
 | **遍历库文件**（`getMarkdownFiles`） | 恢复旧版本可能删掉别的笔记链接着的标题或段落。为了提前提醒，插件要查 Obsidian 本来就为每篇笔记维护的链接索引。 | 恢复预览里的链接检查，以及“链接影响”视图里的反链数。只从 Obsidian 的缓存里读链接，不读笔记正文。 |
 | **剪贴板** | 复制按钮。插件只往剪贴板写，从不读取。 | 只在你点复制按钮时：版本链接、提交哈希、一段或整个版本的文字、恢复结果、文件路径、审阅包。 |
 
-## 开始用 Git
+</details>
+
+<details>
+<summary><b>还没用过 Git？从这里开始</b></summary>
 
 Git Note History 只读已有的历史。要开始记录：
 
@@ -88,14 +88,29 @@ Git Note History 只读已有的历史。要开始记录：
 
 这些命令插件一条都不会替你运行。
 
-## 限制
+</details>
+
+<details>
+<summary><b>语言和主题</b></summary>
+
+整个界面（包括实验功能）跟随 Obsidian 的语言：中文，其他语言一律用英文。
+
+颜色、圆角、间距都取自主题变量，样式只作用在插件自己的视图里。在 Default、Minimal、Blue Topaz、AnuPpuccin 四个主题的浅色和深色下测过：窄侧栏、双栏 diff（行号栏、横向空间、长路径）、下拉框。系统的“降低透明度”“减少动态效果”都会照做。
+
+</details>
+
+<details>
+<summary><b>限制</b></summary>
 
 - 只能在桌面版用（要调用 `git`）。
 - 每篇笔记默认读最近 100 次提交，可以在设置里改。
 - 浅克隆、部分克隆、LFS 指针和缺失对象会如实提示，插件不会去修复。
 - 改名用 `git log --follow` 跟踪。
 
-## 开发
+</details>
+
+<details>
+<summary><b>开发与核验发布文件</b></summary>
 
 ```bash
 npm ci
@@ -105,6 +120,8 @@ npm run package:release
 
 TypeScript + esbuild，用 Vitest 测试，用官方 `eslint-plugin-obsidianmd` 规则检查。检查命令和提 issue 的方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，发布清单见 [RELEASING.md](RELEASING.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 许可
+从 0.12.1 起，Release 附件带 GitHub 构建认证，可用 `gh attestation verify main.js -R Rexxall/obsidian-git-history-view` 核验。
 
-MIT
+</details>
+
+MIT 许可

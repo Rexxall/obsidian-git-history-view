@@ -1,41 +1,41 @@
-# Git Note History
+<p align="right"><a href="README_zh.md">中文</a></p>
 
-**See how a note changed, and take back only the part you need.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-dark.svg">
+  <img src="assets/readme/hero-light.svg" width="100%" alt="Git Note History: find the sentence you deleted, see which commit removed it, and take back only that part.">
+</picture>
 
-[中文说明](README_zh.md)
+<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>Install from Obsidian</b></a></p>
 
-Browse the Git history of the note you are editing, compare any two versions, and restore one paragraph, one change or the whole note, with a preview first and undo afterwards. It only reads Git and never commits for you.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/demo-dark.gif">
+  <img src="assets/readme/demo-light.gif" width="100%" alt="Typing “one afternoon empty” into the history sidebar of a note. The content trail shows when the sentence first appeared and which commit deleted it, then that commit opens next to the current note with the removed lines in red.">
+</picture>
 
-![A note's Git timeline in the sidebar and an older version compared side by side with the current note](docs/screenshots/hero.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/cards-dark.svg">
+  <img src="assets/readme/cards-light.svg" width="100%" alt="Search the past: find what you deleted, and when. Compare any two: side by side, or heading by heading. Take back one part: preview first, undo any time.">
+</picture>
 
-*The timeline of the open note on the right; an older version compared with the current note on the left.*
-
-## Start here
+## Start in three steps
 
 1. Install **Git Note History** from *Settings → Community plugins → Browse* and enable it.
-2. Open a Markdown note and click the clock icon in the ribbon (or run **Open Git history of the current note**).
-3. Pick a version and choose *Compare with current*. To bring something back, open *Unified*, find the change and choose *Restore this change*.
+2. Open a note and click the clock icon in the ribbon.
+3. Pick a version and choose *Compare with current*.
 
-No Git yet? Run **See an example (no repository needed)**: three pre-written versions of a note, compared and restored in memory, so you can see what the plugin does before setting anything up. If the vault is not in a repository, has no commits, or a note is not tracked or is ignored, the sidebar says which one it is and offers one read-only next step.
+No Git yet? Run **See an example (no repository needed)** from the command palette.
 
-From 0.12.1 on, the release files carry a GitHub build attestation; check one with `gh attestation verify main.js -R Rexxall/obsidian-git-history-view`.
+**Needs** Obsidian 1.13+ on desktop, Git installed, and a vault inside a Git repository. **Costs** nothing: no account, no network, no telemetry. It only reads Git and never commits for you.
 
-## What it needs and what it costs
+## Everything else
 
-- **Needs:** Obsidian 1.13 or later on desktop (macOS, Windows, Linux), Git installed, and a vault inside a Git repository (kept by the Obsidian Git plugin, a backup script or by hand).
-- **Costs:** nothing. No account, no network, no telemetry.
+<details>
+<summary><b>Every feature</b></summary>
 
-## More pictures
-
-![Restore preview listing the structure changes before a single change is written back](docs/screenshots/restore-preview.png)
-
-*Before anything is written, the restore preview lists what changes and checks links; you confirm, and can undo.*
-
-![The example dialog with three demo versions and a unified diff](docs/screenshots/example.png)
-
-*The example works without a repository and is clearly marked as a demo.*
-
-## Features
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/restore-dark.png">
+  <img src="assets/readme/restore-light.png" width="100%" alt="The restore preview lists every structure change and the links that would be removed before anything is written.">
+</picture>
 
 - **Timeline** of the current note in the right sidebar, grouped by day, with `+/-` counts and milestones you name yourself (*sent*, *submitted*, *confirmed*). Pick a version, then *Compare with current* or *Restore this version* from the bar at the bottom.
 - **Compare** any two versions: side by side, unified diff, rendered Markdown changes, two previews, or a structure view that understands properties, headings, lists, tasks, tables, callouts, code and wiki links. A narrow pane switches to the unified diff by itself.
@@ -49,13 +49,10 @@ From 0.12.1 on, the release files carry a GitHub build attestation; check one wi
 
 Lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, historical sandboxes, history sources) sit behind *Show lab tools* in settings and are off by default. The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.md).
 
-## Language and themes
+</details>
 
-The whole interface, lab tools included, follows Obsidian's language: Chinese, or English for every other language.
-
-Colours, radii and spacing come from your theme's variables, and styles only apply inside the plugin's own views. Checked in light and dark mode with Default, Minimal, Blue Topaz and AnuPpuccin, including a narrow sidebar, the side-by-side diff (line numbers, horizontal space, long paths) and dropdowns. *Reduce transparency* and *Reduce motion* are respected.
-
-## Safety and privacy
+<details>
+<summary><b>Safety, privacy and what the plugin touches</b></summary>
 
 | What the plugin does | What it never does |
 |---|---|
@@ -67,7 +64,7 @@ Colours, radii and spacing come from your theme's variables, and styles only app
 
 **Files outside the vault:** the repository may start in a folder above your vault; the plugin reads it with `git`. The lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (`~/Library/Application Support/Git Note History` on macOS, `%LOCALAPPDATA%\Git Note History` on Windows, `~/.local/share/git-note-history` on Linux), only when you create a sandbox. Nothing else outside the vault is read or written.
 
-### What the plugin touches
+#### What the plugin touches
 
 The community directory's scorecard lists two warnings and two other items for this plugin. None of them touches the network.
 
@@ -78,7 +75,10 @@ The community directory's scorecard lists two warnings and two other items for t
 | **Vault Enumeration** (`getMarkdownFiles`) | Restoring an old version can remove a heading or block that other notes link to. To warn you, the plugin looks through the link index Obsidian already keeps for every note. | The restore preview's link check, and the backlink counts in the *Link impact* view. Only links are read from Obsidian's cache, not note contents. |
 | **Clipboard Access** | Copy buttons. The plugin only writes to the clipboard and never reads it. | Only when you click a copy button: a version link, a commit hash, a block or a whole version's text, a restore result, a file path, or a review pack. |
 
-## Starting with Git
+</details>
+
+<details>
+<summary><b>No Git yet? Start one</b></summary>
 
 Git Note History reads history that already exists. To start one:
 
@@ -88,14 +88,29 @@ Git Note History reads history that already exists. To start one:
 
 The plugin itself never runs any of these commands for you.
 
-## Limits
+</details>
+
+<details>
+<summary><b>Language and themes</b></summary>
+
+The whole interface, lab tools included, follows Obsidian's language: Chinese, or English for every other language.
+
+Colours, radii and spacing come from your theme's variables, and styles only apply inside the plugin's own views. Checked in light and dark mode with Default, Minimal, Blue Topaz and AnuPpuccin, including a narrow sidebar, the side-by-side diff (line numbers, horizontal space, long paths) and dropdowns. *Reduce transparency* and *Reduce motion* are respected.
+
+</details>
+
+<details>
+<summary><b>Limits</b></summary>
 
 - Desktop only (it runs `git`).
 - History reads are bounded (100 commits per note by default, configurable).
 - Shallow or partial clones, LFS pointers and missing objects are reported as such; the plugin does not try to repair them.
 - Renames are followed with `git log --follow`.
 
-## Development
+</details>
+
+<details>
+<summary><b>Development and verifying a release</b></summary>
 
 ```bash
 npm ci
@@ -105,6 +120,8 @@ npm run package:release
 
 TypeScript + esbuild, tested with Vitest and linted with the official `eslint-plugin-obsidianmd` rules. See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and reporting issues, [RELEASING.md](RELEASING.md) for the release checklist and [CHANGELOG.md](CHANGELOG.md) for versions.
 
-## License
+From 0.12.1 on, the release files carry a GitHub build attestation; check one with `gh attestation verify main.js -R Rexxall/obsidian-git-history-view`.
 
-MIT
+</details>
+
+MIT License

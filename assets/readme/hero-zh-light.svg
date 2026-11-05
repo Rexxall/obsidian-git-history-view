@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="t d">
+  <title id="t">Git Note History</title>
+  <desc id="d">（中文版）Find the sentence you deleted, see which commit removed it, and take back only that part. A note's timeline shows that “The best plans leave one afternoon empty.” was added in “Write the rule down” and removed in “Rewrite the middle, drop the slogan”.</desc>
+  <rect width="1200" height="400" rx="28" fill="#F7F6FB"/>
+
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+    <text x="64" y="118" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" letter-spacing="2" fill="#7A5AF0">OBSIDIAN 插件 · 只读 GIT，从不写入</text>
+    <text x="62" y="196" font-size="64" font-weight="700" letter-spacing="-1.5" fill="#1D1B26">Git Note History</text>
+    <text x="64" y="252" font-size="30" fill="#1D1B26">删掉的那句话，找得回来。</text>
+    <text x="64" y="292" font-size="30" fill="#6B6780">只取回需要的那一段。</text>
+    <text x="64" y="346" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#6B6780">免费 · 不要账号 · 不联网</text>
+  </g>
+
+  <g id="project-proof" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+    <rect x="700" y="48" width="436" height="304" rx="20" fill="#FFFFFF" stroke="#E4E1EE"/>
+    <rect x="724" y="72" width="388" height="44" rx="22" fill="#F7F6FB" stroke="#E4E1EE"/>
+    <circle cx="748" cy="92" r="7" fill="none" stroke="#6B6780" stroke-width="2"/>
+    <path d="M753 97 L759 103" stroke="#6B6780" stroke-width="2" stroke-linecap="round"/>
+    <text x="770" y="101" font-size="19" fill="#1D1B26">one afternoon empty</text>
+
+    <path d="M742 150 V258" stroke="#E4E1EE" stroke-width="2"/>
+
+    <circle cx="742" cy="150" r="6" fill="#FFFFFF" stroke="#6B6780" stroke-width="2"/>
+    <text x="764" y="157" font-size="20" fill="#1D1B26">Add ending</text>
+
+    <rect x="724" y="178" width="388" height="48" rx="12" fill="#EEE9FF"/>
+    <circle cx="742" cy="202" r="6" fill="#7A5AF0"/>
+    <text x="764" y="209" font-size="20" font-weight="600" fill="#1D1B26">Rewrite the middle…</text>
+    <rect x="990" y="189" width="108" height="26" rx="13" fill="#FCEBEC"/>
+    <text x="1044" y="207" font-size="17" text-anchor="middle" fill="#C93A40">删掉了它</text>
+
+    <circle cx="742" cy="254" r="6" fill="#FFFFFF" stroke="#6B6780" stroke-width="2"/>
+    <text x="764" y="261" font-size="20" fill="#1D1B26">Write the rule down</text>
+    <rect x="1006" y="241" width="92" height="26" rx="13" fill="#E5F4EC"/>
+    <text x="1052" y="259" font-size="17" text-anchor="middle" fill="#22855A">写进了它</text>
+
+    <rect x="724" y="290" width="388" height="40" rx="10" fill="#FCEBEC"/>
+    <text x="742" y="316" font-size="19" fill="#C93A40" text-decoration="line-through">…leave one afternoon empty.</text>
+  </g>
+</svg>
