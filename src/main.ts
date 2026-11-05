@@ -69,6 +69,7 @@ import {
   CURRENT_DATA_SCHEMA_VERSION,
   migratePluginData,
   migrateReviewStatePath,
+  REVIEW_STATE_KEY_SEPARATOR,
   rehomeMovedRepositoryStates
 } from "./persistence/plugin-data";
 import { BlockAgeModal } from "./ui/block-age-modal";
@@ -191,6 +192,8 @@ function workEventSnapshotLabel(capturedAt: string): string {
 }
 
 const MAX_ACTIVE_HISTORICAL_SANDBOXES = 8;
+/** Startup and note switches settle for this long before the status bar asks Git. */
+const NOTE_STATUS_SETTLE_MS = 200;
 const MAX_TOTAL_HISTORICAL_SANDBOXES = 24;
 
 export default class GitNoteHistoryPlugin extends Plugin {
@@ -2137,21 +2140,31 @@ export default class GitNoteHistoryPlugin extends Plugin {
     this.registerDomEvent(el, "click", () => {
       void this.activateHistoryView(this.app.workspace.getActiveFile());
     });
-    this.registerEvent(this.app.workspace.on("file-open", () => this.refreshNoteStatus()));
+    // Opening a note, focusing the window and finishing startup often arrive together;
+    // they share one check, and nothing runs Git before the layout is ready.
+    this.registerEvent(this.app.workspace.on("file-open", () => this.scheduleNoteStatus(NOTE_STATUS_SETTLE_MS)));
     this.registerEvent(this.app.vault.on("modify", (file) => {
       if (file === this.app.workspace.getActiveFile()) this.scheduleNoteStatus();
     }));
     // Backups usually commit from outside Obsidian; re-check when the window comes back.
-    this.registerDomEvent(window, "focus", () => this.refreshNoteStatus());
+    this.registerDomEvent(window, "focus", () => this.scheduleNoteStatus(NOTE_STATUS_SETTLE_MS));
     this.registerInterval(window.setInterval(() => this.refreshNoteStatus(), 5 * 60_000));
     this.app.workspace.onLayoutReady(() => {
-      this.refreshNoteStatus();
+      this.scheduleNoteStatus(NOTE_STATUS_SETTLE_MS);
       void this.rehomeReviewStates();
     });
   }
 
   /** Review states saved on another computer carry its vault path; move them onto this repository once. */
   private async rehomeReviewStates(): Promise<void> {
+    // Only a vault copied from elsewhere has states under a folder that no longer exists.
+    const roots = new Set(
+      Object.keys(this.fileReviewStates).flatMap((key) => {
+        const separatorIndex = key.indexOf(REVIEW_STATE_KEY_SEPARATOR);
+        return separatorIndex < 0 ? [] : [key.slice(0, separatorIndex)];
+      })
+    );
+    if (![...roots].some((root) => !existsSync(root))) return;
     let repositoryRoot: string;
     try {
       ({ repositoryRoot } = await this.gitClient.resolveRepositoryContext());
@@ -2164,18 +2177,20 @@ export default class GitNoteHistoryPlugin extends Plugin {
     );
   }
 
-  private scheduleNoteStatus(): void {
+  private scheduleNoteStatus(delayMs = 1500): void {
     if (this.noteStatusTimer) window.clearTimeout(this.noteStatusTimer);
     this.noteStatusTimer = window.setTimeout(() => {
       this.noteStatusTimer = null;
       this.refreshNoteStatus();
-    }, 1500);
+    }, delayMs);
   }
 
   refreshNoteStatus(): void {
     const el = this.noteStatusEl;
     if (!el) return;
     const generation = ++this.noteStatusGeneration;
+    // The layout-ready callback asks again; until then startup is left alone.
+    if (!this.app.workspace.layoutReady) return;
     const file = this.app.workspace.getActiveFile();
     if (!this.settings.showStatusBar || !file || file.extension !== "md") {
       el.hide();

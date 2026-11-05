@@ -27,9 +27,16 @@ Every iteration commits the source, documentation, tracked build output, and ver
 
    The local target file is ignored by Git. It must include every active development Vault. The current machine uses Projects, the second test vault, and the inbox vault; do not commit their absolute paths.
 7. Open the plugin in every affected target and complete the feature-specific real Obsidian checks. A successful file copy or hash comparison does not count as UI verification; confirm the installed version, entry points, layout, read-only boundaries, and preservation of local `data.json`.
-8. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add machine-specific paths, credentials, or local Obsidian state.
-9. After explicit publication approval, push `main` and then only the new version tag (`git push origin <version>`, never `--tags`). The tag runs `.github/workflows/release.yml`, which checks the tag against `manifest.json`, `package.json`, `package-lock.json` and `versions.json`, runs `release:check`, attests `main.js`, `manifest.json` and `styles.css`, and creates the GitHub Release with those three files and the version's CHANGELOG section as notes.
-10. Download the published assets, verify that their SHA-256 hashes match the local release files, and check the attestation with `gh attestation verify main.js -R Rexxall/obsidian-git-history-view`.
+8. Check startup in a clean test vault that has only this plugin enabled, opened with `--remote-debugging-port`:
+
+   ```bash
+   npm run measure:startup -- --vault <test vault> --port <port>
+   ```
+
+   It wraps the installed `main.js` with timing code, reloads Obsidian nine times, restores `main.js`, and fails if the median `onload` is over 50 ms or any `git` process starts before the layout is ready. Work that can wait belongs in `onLayoutReady`; the status bar asks Git only after startup settles.
+9. Commit the entire local iteration together. Push, tag, and GitHub Release creation require separate, explicit user approval. Do not add machine-specific paths, credentials, or local Obsidian state.
+10. After explicit publication approval, push `main` and then only the new version tag (`git push origin <version>`, never `--tags`). The tag runs `.github/workflows/release.yml`, which checks the tag against `manifest.json`, `package.json`, `package-lock.json` and `versions.json`, runs `release:check`, attests `main.js`, `manifest.json` and `styles.css`, and creates the GitHub Release with those three files and the version's CHANGELOG section as notes.
+11. Download the published assets, verify that their SHA-256 hashes match the local release files, and check the attestation with `gh attestation verify main.js -R Rexxall/obsidian-git-history-view`.
 
 ## Release contents
 

@@ -209,7 +209,16 @@ interface WorkingHistoryAnchor {
   validationStagedNameStatus?: string;
 }
 
+/** How long a found repository root is reused before `git rev-parse` runs again. */
+const REPOSITORY_ROOT_REUSE_MS = 30_000;
+
 export class GitClient {
+  private repositoryLookup: {
+    key: string;
+    startedAt: number;
+    result: Promise<{ vaultRoot: string; repositoryRoot: string }>;
+  } | null = null;
+
   constructor(
     private readonly app: App,
     private readonly getSettings: () => GitNoteHistorySettings
@@ -2234,14 +2243,32 @@ export class GitClient {
     return this.resolveVaultPathContext(file.path);
   }
 
-  private async resolveRepository(): Promise<{ vaultRoot: string; repositoryRoot: string }> {
+  /** Calls made together, and calls within a short while, share one `git rev-parse`. */
+  private resolveRepository(): Promise<{ vaultRoot: string; repositoryRoot: string }> {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new GitCommandError(tr("当前库不在桌面文件系统上，无法调用本机 Git。", "This vault is not on a desktop file system, so local Git cannot run."), "", "not-desktop");
+      return Promise.reject(new GitCommandError(tr("当前库不在桌面文件系统上，无法调用本机 Git。", "This vault is not on a desktop file system, so local Git cannot run."), "", "not-desktop"));
     }
+    const configuredRoot = this.getSettings().repositoryRoot.trim();
+    const key = `${adapter.getBasePath()}\n${configuredRoot}`;
+    const now = Date.now();
+    const cached = this.repositoryLookup;
+    if (cached && cached.key === key && now - cached.startedAt < REPOSITORY_ROOT_REUSE_MS) return cached.result;
+    const lookup = { key, startedAt: now, result: this.lookUpRepository(adapter, configuredRoot) };
+    this.repositoryLookup = lookup;
+    // A failed lookup (Git missing, no repository yet) is not reused.
+    lookup.result.catch(() => {
+      if (this.repositoryLookup === lookup) this.repositoryLookup = null;
+    });
+    return lookup.result;
+  }
+
+  private async lookUpRepository(
+    adapter: FileSystemAdapter,
+    configuredRoot: string
+  ): Promise<{ vaultRoot: string; repositoryRoot: string }> {
     const unresolvedVaultRoot = path.resolve(adapter.getBasePath());
     const vaultRoot = await this.resolveRealPath(unresolvedVaultRoot);
-    const configuredRoot = this.getSettings().repositoryRoot.trim();
     const unresolvedRepositoryRoot = configuredRoot
       ? path.resolve(configuredRoot)
       : (await this.runGit(unresolvedVaultRoot, ["rev-parse", "--show-toplevel"])).trim();
