@@ -3487,6 +3487,9 @@ button.git-note-history-impact-row:hover {
   color: var(--ap-label);
 }
 
+/* Journal look: the header keeps its glass but drops the hairline at its lower edge. */
+.ap.ap-look-journal .git-note-history-header { box-shadow: none; }
+
 /* ===== styles/lab.css ===== */
 
 /* Lab views: knowledge trace, work events, review inbox, provenance, recovery basket, history health, conflict resolver, sandbox, history sources, graph time machine. Kept from the pre-0.9 stylesheet; migrates to the core tokens view by view. */
@@ -9353,7 +9356,6 @@ button.git-note-history-graph-machine-relation:hover {
   --ap-journal-voice: "Songti SC", "Hiragino Mincho ProN", "Noto Serif SC", "Noto Serif CJK SC", Georgia, serif;
   --ap-journal-label: "Futura", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
   --ap-page: color-mix(in srgb, #fbfaf7 88%, var(--background-primary));
-  --ap-group: transparent;
   --ap-glass: color-mix(in srgb, var(--ap-page) 82%, transparent);
   background-color: var(--ap-page);
 }
@@ -9363,13 +9365,16 @@ button.git-note-history-graph-machine-relation:hover {
 }
 
 .ap.ap-look-journal .ap-title { font-family: var(--ap-journal-voice); font-weight: 700; letter-spacing: 0.02em; }
-.ap-look-journal .ap-card,
-.ap-look-journal .ap-card.is-inset,
-.ap-look-journal .ap-group {
-  background: transparent;
-  border-radius: 0;
-  box-shadow: inset 0 1px 0 var(--ap-sep), inset 0 -1px 0 var(--ap-sep);
+/* Cards lie on the paper as a faint tint: no edge lines, no shadow (Rex: no horizontal rules).
+   .ap.ap-look-journal outranks the plugins' own card states (urgent cards, inset cards). */
+.ap.ap-look-journal .ap-card,
+.ap.ap-look-journal .ap-card.is-inset,
+.ap.ap-look-journal .ap-group {
+  background: color-mix(in srgb, var(--text-normal) 3.5%, transparent);
+  box-shadow: none;
 }
+/* The glass bar keeps its blur but drops the hairline at its lower edge. */
+.ap.ap-look-journal .ap-bar-glass { box-shadow: none; }
 .ap-look-journal .ap-section-title {
   display: flex;
   align-items: center;

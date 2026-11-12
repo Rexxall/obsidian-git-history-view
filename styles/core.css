@@ -2983,3 +2983,6 @@ button.git-note-history-impact-row:hover {
   text-transform: none;
   color: var(--ap-label);
 }
+
+/* Journal look: the header keeps its glass but drops the hairline at its lower edge. */
+.ap.ap-look-journal .git-note-history-header { box-shadow: none; }
