@@ -76,6 +76,7 @@
   --ap-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --ap-ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
   --ap-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --ap-press: 80ms;
   --ap-fast: 120ms;
   --ap-base: 200ms;
   --ap-slow: 340ms;
@@ -139,6 +140,9 @@
 /* The plugin marks a row followed by a heading or a note with .ap-group-end, which CSS cannot see without :has. */
 .ap-settings .setting-item:not(.setting-item-heading):last-child,
 .ap-settings .setting-item.ap-group-end { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
+/* ap-group-first / ap-group-last: marked by utils/settingGroups.ts (rAF-throttled, disconnected when the tab hides) */
+.ap-settings .setting-item.ap-group-first { border-top-left-radius: var(--ap-r-group); border-top-right-radius: var(--ap-r-group); }
+.ap-settings .setting-item.ap-group-last { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
 .ap-settings .setting-item-heading { background: none; padding: var(--ap-s6) var(--ap-s1) var(--ap-s2); min-height: 0; }
 .ap-settings .setting-item-heading .setting-item-name { font: var(--ap-headline); }
 .ap-settings .setting-item-heading .setting-item-description { padding-top: 4px; }
@@ -3467,6 +3471,20 @@ button.git-note-history-impact-row:hover {
 
 .git-note-history-change-nav.is-hidden {
   display: none;
+}
+
+/* Serif numbers: a month label (2026.10) in the timeline, a step up from the small caps around it.
+   Outranks the glass rule that sets the caption font on a date group's first child. */
+.ap.ap-signed .git-note-history-date-group > .ap-sig-num:first-child {
+  padding: 0;
+  font-family: var(--ap-sig-font, "Didot", "Bodoni 72", Georgia, "Times New Roman", serif);
+  font-style: var(--ap-sig-style, italic);
+  font-weight: var(--ap-sig-weight, 700);
+  font-size: 17px;
+  line-height: 20px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ap-label);
 }
 
 /* ===== styles/lab.css ===== */
@@ -9305,4 +9323,84 @@ button.git-note-history-graph-machine-relation:hover {
 @media (prefers-contrast: more) {
   .ap { --ap-label-3: var(--ap-label-2); }
   .ap .git-note-history-search input::placeholder { color: var(--ap-label-2); }
+}
+
+/* ===== styles/ap-signature.css ===== */
+
+/* ==========================================================================
+   Signature layer, shared by the plugins (same file in every repo).
+   1. Serif numbers: one number per panel, in Didot italic. The plugin puts
+      .ap-signed on its root (setting "Serif numbers", on by default) and
+      .ap-sig-num on that one number; the size stays the plugin's own.
+      The font is read from --ap-sig-* with fallbacks only, so a theme or
+      snippet can change or switch it off for every plugin at once on body.
+   2. Journal look: an optional appearance (setting "Look"). The plugin puts
+      .ap-look-journal on its root. Paper, a serif title, small caps labels
+      with two short red strokes, a figure number. The accent stays the
+      user's --interactive-accent; nothing here animates.
+   ========================================================================== */
+
+.ap.ap-signed .ap-sig-num {
+  font-family: var(--ap-sig-font, "Didot", "Bodoni 72", Georgia, "Times New Roman", serif);
+  font-style: var(--ap-sig-style, italic);
+  font-weight: var(--ap-sig-weight, 700);
+  letter-spacing: -0.03em;
+  font-variant-numeric: lining-nums;
+}
+
+.ap.ap-look-journal {
+  --ap-journal-red: #c8291c;
+  --ap-journal-voice: "Songti SC", "Hiragino Mincho ProN", "Noto Serif SC", "Noto Serif CJK SC", Georgia, serif;
+  --ap-journal-label: "Futura", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+  --ap-page: color-mix(in srgb, #fbfaf7 88%, var(--background-primary));
+  --ap-group: transparent;
+  --ap-glass: color-mix(in srgb, var(--ap-page) 82%, transparent);
+  background-color: var(--ap-page);
+}
+.theme-dark .ap.ap-look-journal {
+  --ap-journal-red: #e0483a;
+  --ap-page: color-mix(in srgb, #0c0c0f 55%, var(--background-primary));
+}
+
+.ap.ap-look-journal .ap-title { font-family: var(--ap-journal-voice); font-weight: 700; letter-spacing: 0.02em; }
+.ap-look-journal .ap-card,
+.ap-look-journal .ap-card.is-inset,
+.ap-look-journal .ap-group {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: inset 0 1px 0 var(--ap-sep), inset 0 -1px 0 var(--ap-sep);
+}
+.ap-look-journal .ap-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 10px/14px var(--ap-journal-label);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ap-label-2);
+}
+.ap-look-journal .ap-section-title::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 2px;
+  background: var(--ap-journal-red);
+  box-shadow: 0 4px 0 var(--ap-journal-red);
+  transform: translateY(-2px);
+}
+.ap-look-journal button { border-radius: 6px; }
+.ap-look-journal .ap-item.is-selected,
+.ap-look-journal .ap-item[aria-selected="true"] {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ap-accent) 10%, transparent);
+}
+
+/* Figure number: FIG. PC · 03. Hidden unless the journal look is on. */
+.ap-fig { display: none; }
+.ap-look-journal .ap-fig {
+  display: block;
+  font: 500 9px/1.6 var(--ap-journal-label);
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--ap-label-2);
 }

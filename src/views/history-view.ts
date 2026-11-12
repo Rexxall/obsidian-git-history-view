@@ -85,6 +85,18 @@ function dateGroup(value: string): string {
   return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long" }).format(date);
 }
 
+/** A month group as numbers (2026.10), for the serif signature; null for the word groups (Today, This week). */
+function monthNumbers(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTarget = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  if (Math.round((startToday - startTarget) / 86_400_000) < 7) return null;
+  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()) return null;
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export const GIT_START_GUIDE_URL = "https://github.com/Rexxall/obsidian-git-history-view#starting-with-git";
 
 function errorMessage(error: unknown): string {
@@ -331,6 +343,8 @@ export class GitNoteHistoryView extends ItemView {
     container.empty();
     container.addClass("ap", "ap-view", "git-note-history-view");
     container.toggleClass("is-compact", this.plugin.settings.density === "compact");
+    container.toggleClass("ap-signed", this.plugin.settings.serifNumbers);
+    container.toggleClass("ap-look-journal", this.plugin.settings.look === "journal");
     this.renderHeader(container);
 
     if (!this.targetFile) {
@@ -431,7 +445,7 @@ export class GitNoteHistoryView extends ItemView {
       window.items.forEach((commit, index) => {
         const group = dateGroup(commit.authoredAt);
         if (group !== previousGroup) {
-          timeline.createDiv({ cls: "git-note-history-date-group", text: group });
+          this.renderDateGroup(timeline, group, commit.authoredAt);
           previousGroup = group;
         }
         this.renderCommitRow(timeline, commit, index, state);
@@ -452,13 +466,21 @@ export class GitNoteHistoryView extends ItemView {
     window.items.forEach((group, index) => {
       const date = dateGroup(group.representative.authoredAt);
       if (date !== previousGroup) {
-        timeline.createDiv({ cls: "git-note-history-date-group", text: date });
+        this.renderDateGroup(timeline, date, group.representative.authoredAt);
         previousGroup = date;
       }
       this.renderEffectiveGroupRow(timeline, group, index, groups, state);
     });
     this.renderTimelineFooter(timeline, window.visible, window.total);
     this.renderActionBar(container);
+  }
+
+  /** A date heading in the timeline. With serif numbers on, a month reads 2026.10 in Didot; words stay as they are. */
+  private renderDateGroup(timeline: HTMLElement, label: string, authoredAt: string): void {
+    const heading = timeline.createDiv({ cls: "git-note-history-date-group" });
+    const numbers = this.plugin.settings.serifNumbers ? monthNumbers(authoredAt) : null;
+    if (numbers) heading.createSpan({ cls: "ap-sig-num", text: numbers });
+    else heading.setText(label);
   }
 
   /** The glass bar under the list: both actions work on the selected version. */
@@ -1315,10 +1337,11 @@ export class GitNoteHistoryView extends ItemView {
 
   private renderHeader(container: HTMLElement): void {
     const header = container.createDiv({ cls: "git-note-history-header" });
+    header.createDiv({ cls: "ap-fig", text: `FIG. GNH · ${String(this.history?.commits.length ?? 0).padStart(2, "0")}` });
     const title = header.createDiv({ cls: "git-note-history-title-row" });
     const brand = title.createDiv({ cls: "git-note-history-brand" });
     setIcon(brand.createSpan(), "git-commit-horizontal");
-    brand.createEl("h4", { text: tr("版本历史", "Version history") });
+    brand.createEl("h4", { cls: "ap-title", text: tr("版本历史", "Version history") });
 
     const controls = title.createDiv({ cls: "git-note-history-header-actions" });
     if (this.targetFile && this.history) {

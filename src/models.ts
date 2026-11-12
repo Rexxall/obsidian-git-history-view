@@ -213,6 +213,10 @@ export interface GitNoteHistorySettings {
   useBlameIgnoreRevs: boolean;
   showLabTools: boolean;
   showStatusBar: boolean;
+  /** Month labels in the timeline in Didot italic: the plugin's one signature detail. */
+  serifNumbers: boolean;
+  /** Look of the panel: the standard one, or the journal look (paper, serif title, figure number). */
+  look: "standard" | "journal";
 }
 
 export interface UndoSnapshot {

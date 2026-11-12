@@ -3106,7 +3106,8 @@ export default class GitNoteHistoryPlugin extends Plugin {
         : DEFAULT_SETTINGS.historyIgnoredProperties,
       historyGeneratedProperties: Array.isArray(loadedSettings.historyGeneratedProperties)
         ? loadedSettings.historyGeneratedProperties
-        : DEFAULT_SETTINGS.historyGeneratedProperties
+        : DEFAULT_SETTINGS.historyGeneratedProperties,
+      look: loadedSettings.look === "journal" ? "journal" : "standard"
     };
     this.undoStack = (data?.undoStack ?? []).map((snapshot, index) => ({
       ...snapshot,

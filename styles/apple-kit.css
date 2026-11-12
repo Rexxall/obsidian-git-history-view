@@ -72,6 +72,7 @@
   --ap-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --ap-ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
   --ap-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --ap-press: 80ms;
   --ap-fast: 120ms;
   --ap-base: 200ms;
   --ap-slow: 340ms;
@@ -135,6 +136,9 @@
 /* The plugin marks a row followed by a heading or a note with .ap-group-end, which CSS cannot see without :has. */
 .ap-settings .setting-item:not(.setting-item-heading):last-child,
 .ap-settings .setting-item.ap-group-end { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
+/* ap-group-first / ap-group-last: marked by utils/settingGroups.ts (rAF-throttled, disconnected when the tab hides) */
+.ap-settings .setting-item.ap-group-first { border-top-left-radius: var(--ap-r-group); border-top-right-radius: var(--ap-r-group); }
+.ap-settings .setting-item.ap-group-last { border-bottom-left-radius: var(--ap-r-group); border-bottom-right-radius: var(--ap-r-group); }
 .ap-settings .setting-item-heading { background: none; padding: var(--ap-s6) var(--ap-s1) var(--ap-s2); min-height: 0; }
 .ap-settings .setting-item-heading .setting-item-name { font: var(--ap-headline); }
 .ap-settings .setting-item-heading .setting-item-description { padding-top: 4px; }

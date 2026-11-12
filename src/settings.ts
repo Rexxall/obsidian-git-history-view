@@ -29,7 +29,9 @@ export const DEFAULT_SETTINGS: GitNoteHistorySettings = {
   ],
   useBlameIgnoreRevs: true,
   showLabTools: false,
-  showStatusBar: true
+  showStatusBar: true,
+  serifNumbers: true,
+  look: "standard"
 };
 
 export class GitNoteHistorySettingTab extends PluginSettingTab {
@@ -134,6 +136,18 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
                 await this.save(true);
               }))
           },
+          this.toggle("serifNumbers", tr("数字用衬线", "Serif numbers"), tr("时间线里的月份用 Didot 斜体；没装 Didot 的系统用 Georgia。", "Month labels in the timeline in Didot italic; Georgia where Didot is not installed.")),
+          {
+            name: tr("外观", "Look"),
+            render: (setting) => void setting.addDropdown((dropdown) => dropdown
+              .addOption("standard", tr("标准", "Standard"))
+              .addOption("journal", tr("手账", "Journal"))
+              .setValue(settings.look)
+              .onChange(async (value) => {
+                settings.look = value === "journal" ? "journal" : "standard";
+                await this.save(true);
+              }))
+          },
           this.toggle("showCommitStats", tr("显示增删行统计", "Show line counts"), tr("在工作区卡片和每个版本旁显示 +/− 行数。", "Show +/− line counts next to the working copy and each version.")),
           this.toggle("showAuthorEmail", tr("显示作者邮箱", "Show author email"), tr("在版本详情中显示 Git 作者邮箱。", "Show the Git author email in version details.")),
           this.toggle("ignoreWhitespace", tr("默认忽略空格变化", "Ignore whitespace by default"), tr("对比默认不突出仅由空格产生的变化，可在对比页临时切换。", "Do not highlight changes that are only whitespace. You can switch this in the compare view."))
@@ -183,7 +197,7 @@ export class GitNoteHistorySettingTab extends PluginSettingTab {
   }
 
   private toggle(
-    key: "showCommitStats" | "showAuthorEmail" | "ignoreWhitespace" | "showLabTools" | "useBlameIgnoreRevs",
+    key: "showCommitStats" | "showAuthorEmail" | "ignoreWhitespace" | "showLabTools" | "useBlameIgnoreRevs" | "serifNumbers",
     name: string,
     desc: string
   ): SettingDefinition {

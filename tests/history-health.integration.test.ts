@@ -43,6 +43,8 @@ const settings: GitNoteHistorySettings = {
   useBlameIgnoreRevs: true,
   showLabTools: false,
   showStatusBar: false,
+  serifNumbers: true,
+  look: "standard",
 };
 
 function git(root: string, args: string[]): string {

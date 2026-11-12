@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Serif numbers** (on by default): month headings in the timeline read 2026.10 in Didot italic, Georgia where Didot is missing; *Today*, *This week* and *This month* stay as words. Turn it off in settings.
+- **Look** in settings: *Standard* or *Journal*. Journal sets the panel on paper with a serif title and a figure number; buttons keep your theme's accent colour.
 - Startup: nothing runs Git until Obsidian has finished loading. Opening the last note, focusing the window and finishing startup now share one status check, and checks made together find the repository once, so a normal start runs 3 Git commands instead of 7.
 
 ## 0.12.2 — 2026-11-04

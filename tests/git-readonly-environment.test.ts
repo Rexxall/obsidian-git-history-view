@@ -42,6 +42,8 @@ const settings: GitNoteHistorySettings = {
   useBlameIgnoreRevs: true,
   showLabTools: false,
   showStatusBar: false,
+  serifNumbers: true,
+  look: "standard",
 };
 
 describe("GitClient read-only environment", () => {
