@@ -1,5 +1,7 @@
 <p align="right"><a href="README.md">English</a></p>
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-dark.svg"><img src="assets/readme/icon-light.svg" width="96" height="96" alt="Git Note History icon"></picture></p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-zh-dark.svg">
   <img src="assets/readme/hero-zh-light.svg" width="100%" alt="Git Note History：删掉的那句话找得回来，看清是哪次提交删的，只取回需要的那一段。">

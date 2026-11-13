@@ -1,5 +1,7 @@
 <p align="right"><a href="README_zh.md">中文</a></p>
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-dark.svg"><img src="assets/readme/icon-light.svg" width="96" height="96" alt="Git Note History icon"></picture></p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-dark.svg">
   <img src="assets/readme/hero-light.svg" width="100%" alt="Git Note History: find the sentence you deleted, see which commit removed it, and take back only that part.">
