@@ -201,6 +201,18 @@
   box-shadow: inset 0 1px 0 var(--ap-glint), 0 0 0 0.5px color-mix(in srgb, var(--text-normal) 10%, transparent), 0 2px 6px rgb(0 0 0 / 0.10);
 }
 .ap-seg button:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 1px; }
+/* Segmented control: the theme's button ring stays off (the doubled class outranks a theme's
+   button:not(.clickable-icon)), the chosen segment reads at a glance in both themes: its label in
+   full colour, the others muted; in dark the thumb is lighter than the track, as on macOS. */
+.ap-seg.ap-seg button { box-shadow: none; color: var(--ap-label-2); }
+.ap-seg.ap-seg button[aria-pressed="true"], .ap-seg.ap-seg button.is-active {
+  color: var(--ap-label);
+  box-shadow: inset 0 1px 0 var(--ap-glint), 0 0 0 0.5px color-mix(in srgb, var(--text-normal) 10%, transparent), 0 2px 6px rgb(0 0 0 / 0.10);
+}
+.theme-dark .ap-seg.ap-seg button[aria-pressed="true"], .theme-dark .ap-seg.ap-seg button.is-active,
+.ap.is-dark .ap-seg.ap-seg button[aria-pressed="true"], .ap.is-dark .ap-seg.ap-seg button.is-active {
+  background: color-mix(in srgb, var(--text-normal) 24%, var(--background-primary));
+}
 
 /* ---------- Buttons: capsules ---------- */
 .ap-btn {
