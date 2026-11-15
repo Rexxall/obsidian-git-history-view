@@ -1,4 +1,4 @@
-<p align="right"><a href="README_zh.md">中文</a></p>
+<p align="right"><a href="README_zh.md">中文</a> · <a href="README.ja.md">日本語</a></p>
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-dark.svg"><img src="assets/readme/icon-light.svg" width="96" height="96" alt="Git Note History icon"></picture></p>
 
@@ -27,7 +27,9 @@
 
 No Git yet? Run **See an example (no repository needed)** from the command palette.
 
-**Needs** Obsidian 1.13+ on desktop, Git installed, and a vault inside a Git repository. **Costs** nothing: no account, no network, no telemetry. It only reads Git and never commits for you.
+**Needs** Obsidian 1.13+ on desktop, Git installed, and a vault inside a Git repository. **Costs** nothing: no account, no network, no telemetry. Browsing history only reads Git; the plugin never commits for you.
+
+Something not working? [Copy a fix-it prompt](docs/troubleshooting.md) for your AI assistant.
 
 ## Everything else
 
@@ -41,13 +43,13 @@ No Git yet? Run **See an example (no repository needed)** from the command palet
 
 - **Timeline** of the current note in the right sidebar, grouped by day, with `+/-` counts and milestones you name yourself (*sent*, *submitted*, *confirmed*). Pick a version, then *Compare with current* or *Restore this version* from the bar at the bottom.
 - **Compare** any two versions: side by side, unified diff, rendered Markdown changes, two previews, or a structure view that understands properties, headings, lists, tasks, tables, callouts, code and wiki links. A narrow pane switches to the unified diff by itself.
-- **Restore just a part.** Bring back a paragraph, a change block, or several blocks collected from different versions, after a preview that shows the merged result and any links that would break.
+- **Restore one part.** Bring back a paragraph, a change block, or several blocks collected from different versions, after a preview that shows the merged result and any links that would break.
 - **Safe writes.** Right before writing, the note is compared with what you saw; if it changed in between, the restore stops. Every restore can be undone (12 steps), and undo also stops if you have edited since.
 - **Conflict resolver** for Git merge conflicts in a note, three panes, writes only the working file.
 - **Paragraph history** for the paragraph under the cursor, including versions where it was later deleted.
-- **Search old content**: find a sentence that used to exist, see when it appeared and when it was removed. A long search shows its progress and can be stopped.
-- **Status bar**: how long ago the active note was last committed, with a dot when it has uncommitted edits.
-- **Version links**: *Copy version link* in a version's menu; clicking the link later opens that version against the current note.
+- **Search old content** : find a sentence that used to exist, see when it appeared and when it was removed. A long search shows its progress and can be stopped.
+- **Status bar** : how long ago the active note was last committed, with a dot when it has uncommitted edits.
+- **Version links** : *Copy version link* in a version's menu; clicking the link later opens that version against the current note.
 
 Lab tools (review inbox, work events, knowledge tracing, provenance lens, annotations, history health, knowledge-graph playback, historical sandboxes, history sources) sit behind *Show lab tools* in settings and are off by default. The full feature list, in Chinese, is in [docs/FEATURES_zh.md](docs/FEATURES_zh.md).
 
@@ -58,17 +60,17 @@ Lab tools (review inbox, work events, knowledge tracing, provenance lens, annota
 
 | What the plugin does | What it never does |
 |---|---|
-| Runs `git log`, `git show`, `git diff`, `git status` and similar read-only commands | Commit, push, pull, fetch, checkout, reset, revert, stage, initialise a repository, or move HEAD |
+| Runs `git log`, `git show`, `git diff`, `git status` and similar read-only commands | Commit, push, pull, fetch, reset, revert, stage, initialise a repository, or switch the active vault’s branch |
 | Writes to the working file only when you confirm a restore, after re-checking the file | Write anything to the repository on its own |
 | Stores milestones, snapshots, undo history and settings in this vault's plugin data | Send anything over the network |
 
-**Network:** none. Every Git call runs with `GIT_NO_LAZY_FETCH=1` and `GIT_OPTIONAL_LOCKS=0`, so reading history never fetches from a remote or rewrites the index.
+**Network:** no network requests from the plugin. History-reading Git calls run with `GIT_NO_LAZY_FETCH=1` and `GIT_OPTIONAL_LOCKS=0`, so reading history never fetches from a remote or rewrites the index.
 
-**Files outside the vault:** the repository may start in a folder above your vault; the plugin reads it with `git`. The lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (`~/Library/Application Support/Git Note History` on macOS, `%LOCALAPPDATA%\Git Note History` on Windows, `~/.local/share/git-note-history` on Linux), only when you create a sandbox. Nothing else outside the vault is read or written.
+**Files outside the vault:** the repository may start in a folder above your vault; the plugin reads it with `git`. The lab tool *historical sandboxes* writes copies of an old vault state to a per-user application data folder (the user’s Application Support folder on macOS, local application data on Windows, or local data directory on Linux), only when you create a sandbox. Creating or removing a sandbox also updates Git worktree metadata in the repository. It does not switch the active vault’s branch.
 
 #### What the plugin touches
 
-The community directory's scorecard lists two warnings and two other items for this plugin. None of them touches the network.
+The [community directory](https://community.obsidian.md/plugins/git-note-history) scorecard lists two warnings and two other items for this plugin. None of them touches the network.
 
 | Scorecard item | Why it is needed | Where it is used |
 |---|---|---|

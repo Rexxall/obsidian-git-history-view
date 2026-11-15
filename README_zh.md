@@ -1,6 +1,6 @@
-<p align="right"><a href="README.md">English</a></p>
+<p align="right"><a href="README.md">English</a> · <a href="README.ja.md">日本語</a></p>
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-dark.svg"><img src="assets/readme/icon-light.svg" width="96" height="96" alt="Git Note History icon"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-dark.svg"><img src="assets/readme/icon-light.svg" width="96" height="96" alt="Git Note History 图标"></picture></p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-zh-dark.svg">
@@ -21,13 +21,15 @@
 
 ## 三步上手
 
-1. 在“设置 → 第三方插件 → 浏览”里搜索 **Git Note History**，安装并启用。
+1. 在“设置 → 第三方插件 → 浏览”里搜索 **Git Note History** ，安装并启用。
 2. 打开一篇笔记，点左侧功能区的时钟图标。
 3. 选一个版本，点“和当前比较”。
 
 还没用过 Git？在命令面板运行“看示例（不读仓库）”。
 
-**需要** 桌面版 Obsidian 1.13 或更新、电脑装了 Git、库在 Git 仓库里。**费用** 不要钱：不用注册，不联网，没有统计上报。插件只读 Git，从不替你提交。
+**需要** 桌面版 Obsidian 1.13 或更新、电脑装了 Git、库在 Git 仓库里。**费用** 不要钱：不用注册，不联网，没有统计上报。浏览历史时只读 Git，插件从不替你提交。
+
+遇到问题？[复制一段排查提示词](docs/troubleshooting.zh-CN.md) 给你的 AI 助手。
 
 ## 其余内容
 
@@ -58,23 +60,23 @@
 
 | 插件会做的 | 插件不会做的 |
 |---|---|
-| 运行 `git log`、`git show`、`git diff`、`git status` 这类只读命令 | 提交、推送、拉取、获取、切换、重置、还原、暂存、初始化仓库、移动 HEAD |
+| 运行 `git log`、`git show`、`git diff`、`git status` 这类只读命令 | 提交、推送、拉取、获取、重置、还原、暂存、初始化仓库、切换当前库的分支 |
 | 只在你确认恢复后写当前文件，写前再核对一次 | 自己往仓库里写任何东西 |
 | 把里程碑、快照、撤销记录和设置存在这个库的插件数据里 | 联网发送任何内容 |
 
-**联网：** 不联网。每次调用 Git 都带 `GIT_NO_LAZY_FETCH=1` 和 `GIT_OPTIONAL_LOCKS=0`，读历史不会从远端拉取，也不会改写索引。
+**联网：** 插件不发起网络请求。读取历史的 Git 调用都带 `GIT_NO_LAZY_FETCH=1` 和 `GIT_OPTIONAL_LOCKS=0`，读历史不会从远端拉取，也不会改写索引。
 
-**库外文件：** Git 仓库可能从库的上层目录开始，插件用 `git` 读它。实验功能“历史沙盒”只在你创建沙盒时，把旧版本的整个库复制到系统的应用数据目录（macOS 为 `~/Library/Application Support/Git Note History`，Windows 为 `%LOCALAPPDATA%\Git Note History`，Linux 为 `~/.local/share/git-note-history`）。除此之外不读写库外文件。
+**库外文件：** Git 仓库可能从库的上层目录开始，插件用 `git` 读它。实验功能“历史沙盒”只在你创建沙盒时，把旧版本的整个库复制到系统的应用数据目录（macOS 的用户 Application Support、Windows 的本地应用数据、Linux 的本地数据目录）。创建或删除沙盒还会更新仓库中的 Git worktree 元数据，不切换当前库的分支。
 
 #### 插件会碰什么
 
-社区目录的评分卡给本插件列了两条警告和两条其他条目，都不联网。
+[社区目录](https://community.obsidian.md/plugins/git-note-history)的评分卡给本插件列了两条警告和两条其他条目，都不联网。
 
 | 评分卡条目 | 为什么要用 | 只在哪里用 |
 |---|---|---|
-| **执行外部程序**（`child_process`） | Git 历史在仓库里，不在库里，所以插件要启动你在设置里填的 `git` 程序。它直接把参数列表交给 `git`，不经过 shell，笔记内容和文件名都不会被当成命令执行。 | 读历史（`git log`、`show`、`diff`、`status`、`blame`）；实验功能“历史沙盒”另外用 `git worktree` 取出旧版本。 |
-| **直接访问文件系统**（`fs`） | 仓库可能从库的上层目录开始，库的接口看不到那里。 | 确定仓库目录、确认搬走的仓库是否还在；只在你创建历史沙盒时，在上面说的应用数据目录里写入沙盒副本，删除沙盒时再移除。 |
-| **遍历库文件**（`getMarkdownFiles`） | 恢复旧版本可能删掉别的笔记链接着的标题或段落。为了提前提醒，插件要查 Obsidian 本来就为每篇笔记维护的链接索引。 | 恢复预览里的链接检查，以及“链接影响”视图里的反链数。只从 Obsidian 的缓存里读链接，不读笔记正文。 |
+| **执行外部程序** （`child_process`） | Git 历史在仓库里，不在库里，所以插件要启动你在设置里填的 `git` 程序。它直接把参数列表交给 `git`，不经过 shell，笔记内容和文件名都不会被当成命令执行。 | 读历史（`git log`、`show`、`diff`、`status`、`blame`）；实验功能“历史沙盒”另外用 `git worktree` 取出旧版本。 |
+| **直接访问文件系统** （`fs`） | 仓库可能从库的上层目录开始，库的接口看不到那里。 | 确定仓库目录、确认搬走的仓库是否还在；只在你创建历史沙盒时，在上面说的应用数据目录里写入沙盒副本，删除沙盒时再移除。 |
+| **遍历库文件** （`getMarkdownFiles`） | 恢复旧版本可能删掉别的笔记链接着的标题或段落。为了提前提醒，插件要查 Obsidian 本来就为每篇笔记维护的链接索引。 | 恢复预览里的链接检查，以及“链接影响”视图里的反链数。只从 Obsidian 的缓存里读链接，不读笔记正文。 |
 | **剪贴板** | 复制按钮。插件只往剪贴板写，从不读取。 | 只在你点复制按钮时：版本链接、提交哈希、一段或整个版本的文字、恢复结果、文件路径、审阅包。 |
 
 </details>

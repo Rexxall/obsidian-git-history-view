@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a problem with Git Note History. 报告问题 / 不具合の報告
+body:
+  - type: textarea
+    id: stuck-step
+    attributes:
+      label: Which step are you stuck on?
+      description: Describe what you did and what happened. 卡在哪一步？ / どの操作で止まりましたか？
+    validations:
+      required: true
+  - type: input
+    id: system-version
+    attributes:
+      label: System and Obsidian version
+      description: Include your operating system and Obsidian versions. 系统和 Obsidian 版本 / OS と Obsidian のバージョン
+      placeholder: macOS 15.4 · Obsidian 1.12.3
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Find the version in Community plugins. 查看插件版本 / プラグインのバージョンを確認
+      placeholder: Settings → Community plugins → Git Note History
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Drag an image in. 拖入截图 / 画像をドラッグしてください
+    validations:
+      required: true

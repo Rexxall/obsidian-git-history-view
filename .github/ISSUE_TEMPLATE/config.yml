@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting prompts
+    url: https://github.com/Rexxall/obsidian-git-history-view/blob/main/docs/troubleshooting.md
+    about: Copy a prompt for your AI coding assistant. 复制排查提示词 / 問題に合うプロンプトをコピー
