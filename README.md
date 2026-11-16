@@ -27,7 +27,7 @@
 
 No Git yet? Run **See an example (no repository needed)** from the command palette.
 
-**Needs** Obsidian 1.13+ on desktop, Git installed, and a vault inside a Git repository. **Costs** nothing: no account, no network, no telemetry. Browsing history only reads Git; the plugin never commits for you.
+**Needs** Obsidian <!-- DOCS-SYNC:START min -->1.13<!-- DOCS-SYNC:END -->+ on desktop, Git installed, and a vault inside a Git repository. **Costs** nothing: no account, no network, no telemetry. Browsing history only reads Git; the plugin never commits for you.
 
 Something not working? [Copy a fix-it prompt](docs/troubleshooting.md) for your AI assistant.
 

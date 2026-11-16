@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stop a push when the README facts no longer match manifest.json. Enable once per clone:
+#   git config core.hooksPath .githooks
+exec node "$(git rev-parse --show-toplevel)/scripts/docs-sync.mjs" --check
