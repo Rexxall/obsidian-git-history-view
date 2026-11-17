@@ -7,7 +7,7 @@
   <img src="assets/readme/hero-light.svg" width="100%" alt="Git Note History: find the sentence you deleted, see which commit removed it, and take back only that part.">
 </picture>
 
-<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>Install from Obsidian</b></a></p>
+<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>Install from Obsidian</b></a> · <a href="https://rexxall.github.io/git-note-history/">See how it works</a></p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/demo-dark.gif">

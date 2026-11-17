@@ -7,7 +7,7 @@
   <img src="assets/readme/hero-light.svg" width="100%" alt="Git Note History：削除した一文を探し、どのコミットで消えたかを確認して、必要な部分だけを戻します。">
 </picture>
 
-<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>Obsidian からインストール</b></a></p>
+<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>Obsidian からインストール</b></a> · <a href="https://rexxall.github.io/git-note-history/">使い方を見る</a></p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/demo-dark.gif">

@@ -7,7 +7,7 @@
   <img src="assets/readme/hero-zh-light.svg" width="100%" alt="Git Note History：删掉的那句话找得回来，看清是哪次提交删的，只取回需要的那一段。">
 </picture>
 
-<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>在 Obsidian 里安装</b></a></p>
+<p align="center"><a href="https://community.obsidian.md/plugins/git-note-history"><b>在 Obsidian 里安装</b></a> · <a href="https://rexxall.github.io/git-note-history/">看它怎么用</a></p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/demo-dark.gif">
