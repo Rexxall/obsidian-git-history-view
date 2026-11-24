@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 — 2026-11-24
 
 - **Serif numbers** (on by default): month headings in the timeline read 2026.10 in Didot italic, Georgia where Didot is missing; *Today*, *This week* and *This month* stay as words. Turn it off in settings.
 - **Look** in settings: *Standard* or *Journal*. Journal sets the panel on paper with a serif title and a figure number; buttons keep your theme's accent colour.
